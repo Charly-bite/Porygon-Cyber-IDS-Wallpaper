@@ -1,0 +1,8 @@
+bin/
+obj/
+*.exe
+*.pdb
+*.user
+.vs/
+Thumbs.db
+.DS_Store
