@@ -10,7 +10,14 @@ New-Item -ItemType Directory -Path "$installDir\Models" -Force | Out-Null
 
 Stop-Process -Name "HackerWallpaper" -Force -ErrorAction SilentlyContinue
 Stop-Process -Name "TrayAutoHide" -Force -ErrorAction SilentlyContinue
+Stop-Process -Name "TranslucentTB" -Force -ErrorAction SilentlyContinue
 Start-Sleep -Milliseconds 400
+
+# Clean up legacy Startup shortcuts that pointed to old TrayAutoHide or TranslucentTB
+$startupDir = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup"
+Remove-Item "$startupDir\TranslucentTB.lnk" -Force -ErrorAction SilentlyContinue
+Remove-Item "$startupDir\TrayAutoHide.lnk" -Force -ErrorAction SilentlyContinue
+Remove-Item "$startupDir\HackerWallpaper.lnk" -Force -ErrorAction SilentlyContinue
 
 Copy-Item "$repoRoot\bin\HackerWallpaper.exe" "$installDir\HackerWallpaper.exe" -Force
 Copy-Item "$repoRoot\bin\HackerLockScreen.exe" "$installDir\HackerLockScreen.exe" -Force
@@ -21,6 +28,7 @@ Copy-Item "$repoRoot\Models\*.glb" "$installDir\Models\" -Force
 $runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
 Set-ItemProperty -Path $runKey -Name "HackerWallpaper" -Value "`"$installDir\HackerWallpaper.exe`""
 Set-ItemProperty -Path $runKey -Name "TrayAutoHide" -Value "`"$installDir\TrayAutoHide.exe`""
+Remove-ItemProperty -Path $runKey -Name "TranslucentTB" -ErrorAction SilentlyContinue
 
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
 $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Limited

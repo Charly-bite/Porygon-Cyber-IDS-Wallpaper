@@ -1,6 +1,8 @@
 using System;
+using System.Diagnostics;
 using System.Drawing;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading;
 using System.Windows.Forms;
 using Microsoft.Win32;
@@ -19,6 +21,10 @@ public class TrayAutoHideContext : ApplicationContext {
     [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
     [DllImport("user32.dll")] private static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
     [DllImport("user32.dll")] private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+    [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] private static extern IntPtr WindowFromPoint(Point Point);
+    [DllImport("user32.dll")] private static extern bool IsChild(IntPtr hWndParent, IntPtr hWnd);
+    [DllImport("user32.dll", CharSet = CharSet.Auto)] private static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
     [DllImport("user32.dll", CharSet = CharSet.Auto)]
     private static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, IntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out IntPtr lpdwResult);
 
@@ -56,6 +62,7 @@ public class TrayAutoHideContext : ApplicationContext {
     private int tickCount = 0;
 
     public TrayAutoHideContext() {
+        StopConflictingTaskbarTools();
         ConfigureTaskbarRegistrySettings();
         EnforceSingleMonitorTaskbars();
         lastTaskbarWinSig = ComputeTaskbarWindowSignature();
@@ -65,6 +72,23 @@ public class TrayAutoHideContext : ApplicationContext {
         pollTimer.Interval = 45; // 22 Hz responsive hover & window-change detection
         pollTimer.Tick += OnPollTick;
         pollTimer.Start();
+    }
+
+    private static void StopConflictingTaskbarTools() {
+        try {
+            // Stop TranslucentTB if running so its maximized_window_appearance (e.g. #B8070913 red bar) never overrides Shell_TrayWnd
+            Process[] ttb = Process.GetProcessesByName("TranslucentTB");
+            for (int i = 0; i < ttb.Length; i++) {
+                try { ttb[i].Kill(); } catch { }
+            }
+            int selfId = Process.GetCurrentProcess().Id;
+            Process[] tah = Process.GetProcessesByName("TrayAutoHide");
+            for (int i = 0; i < tah.Length; i++) {
+                if (tah[i].Id != selfId) {
+                    try { tah[i].Kill(); } catch { }
+                }
+            }
+        } catch { }
     }
 
     private static void ConfigureTaskbarRegistrySettings() {
@@ -79,9 +103,10 @@ public class TrayAutoHideContext : ApplicationContext {
                     advKey.SetValue("TaskbarDa", 0, RegistryValueKind.DWord);
                 }
             }
-            // 2. Ensure uniform dark background RGB(28,28,28) on Shell_TrayWnd so icon silhouette extraction is 100% crisp
+            // 2. Ensure uniform dark background RGB(28,28,28) on Shell_TrayWnd (no accent color / transparency) so icon silhouette extraction is 100% crisp
             using (RegistryKey persKey = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", true)) {
                 if (persKey != null) {
+                    persKey.SetValue("ColorPrevalence", 0, RegistryValueKind.DWord);
                     persKey.SetValue("EnableTransparency", 0, RegistryValueKind.DWord);
                     persKey.SetValue("SystemUsesLightTheme", 0, RegistryValueKind.DWord);
                 }
@@ -144,8 +169,32 @@ public class TrayAutoHideContext : ApplicationContext {
         }
     }
 
-    private bool IsStartButtonSentinelValid(int trayTop) {
+    private bool IsTaskbarOccludedByWindow(IntPtr tray, int trayW, int trayTop) {
+        IntPtr fg = GetForegroundWindow();
+        if (fg == IntPtr.Zero || fg == tray || IsChild(tray, fg)) return false;
+
+        StringBuilder sb = new StringBuilder(64);
+        GetClassName(fg, sb, sb.Capacity);
+        string cls = sb.ToString();
+        if (cls == "Progman" || cls == "WorkerW" || cls == "Shell_TrayWnd" || cls == "Shell_SecondaryTrayWnd") {
+            return false;
+        }
+
+        RECT r;
+        if (GetWindowRect(fg, out r)) {
+            // Normal maximized windows stop at trayTop (e.g. r.Bottom <= trayTop + 2).
+            // Fullscreen apps or windows overlapping the taskbar have r.Bottom > trayTop + 8.
+            if (r.Bottom > trayTop + 8 && r.Right > 260 && r.Left < trayW - 260) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private bool IsStartButtonSentinelValid(IntPtr tray, int trayW, int trayTop) {
         if (startSentinelX <= 0) return true;
+        if (IsTaskbarOccludedByWindow(tray, trayW, trayTop)) return true;
+
         IntPtr hdc = GetDC(IntPtr.Zero);
         if (hdc == IntPtr.Zero) return true;
         try {
@@ -154,7 +203,7 @@ public class TrayAutoHideContext : ApplicationContext {
             int r = (int)(px & 0xFF);
             int g = (int)((px >> 8) & 0xFF);
             int b = (int)((px >> 16) & 0xFF);
-            // Windows 11 Start button top-left square is bright cyan-blue (B > 180, G > 110, R < 95)
+            // Windows 11 Start button top-left square is bright cyan-blue (B > 175, G > 105, R < 100)
             return (b > 175 && g > 105 && r < 100);
         } finally {
             ReleaseDC(IntPtr.Zero, hdc);
@@ -168,6 +217,12 @@ public class TrayAutoHideContext : ApplicationContext {
             GetTrayGeometry(out tray, out trayW, out trayH, out trayTop, out notifyLeft);
             if (tray == IntPtr.Zero || trayW <= 0 || trayH <= 0) return;
 
+            if (cachedIconMask != null && IsTaskbarOccludedByWindow(tray, trayW, trayTop)) {
+                pendingMaskRefresh = true;
+                pendingRefreshTime = DateTime.UtcNow.AddMilliseconds(600);
+                return;
+            }
+
             int scanLeft = 260;
             int scanRight = Math.Min(trayW - 40, notifyLeft - 14);
             if (scanRight <= scanLeft + 60) scanRight = trayW - 230;
@@ -177,6 +232,15 @@ public class TrayAutoHideContext : ApplicationContext {
             SetWindowRgn(tray, stripRgn, true);
             Thread.Sleep(70);
 
+            // Verify that Shell_TrayWnd is actually visible at the center of the strip (not covered by a fullscreen app or flyout)
+            IntPtr hMid = WindowFromPoint(new Point(trayW / 2, trayTop + 20));
+            if (cachedIconMask != null && hMid != IntPtr.Zero && hMid != tray && !IsChild(tray, hMid)) {
+                ApplyCurrentRegion(tray, wasHoveringClock, notifyLeft, trayW, trayH);
+                pendingMaskRefresh = true;
+                pendingRefreshTime = DateTime.UtcNow.AddMilliseconds(600);
+                return;
+            }
+
             using (Bitmap bmp = new Bitmap(trayW, trayH)) {
                 using (Graphics g = Graphics.FromImage(bmp)) {
                     g.CopyFromScreen(0, trayTop, 0, 0, new Size(trayW, trayH));
@@ -184,13 +248,17 @@ public class TrayAutoHideContext : ApplicationContext {
 
                 // Sample uniform taskbar background color inside the strip (or fallback to dark RGB 28,28,28)
                 Color bg = Color.FromArgb(28, 28, 28);
-                Color sample = bmp.GetPixel(Math.Min(trayW - 1, scanLeft + 4), Math.Min(trayH - 1, 8));
-                if (sample.R >= 18 && sample.R <= 42 && Math.Abs(sample.R - sample.G) <= 6 && Math.Abs(sample.G - sample.B) <= 6) {
-                    bg = sample;
+                Color sampleL = bmp.GetPixel(Math.Min(trayW - 1, scanLeft + 4), Math.Min(trayH - 1, 8));
+                Color sampleR = bmp.GetPixel(Math.Max(0, scanRight - 6), Math.Min(trayH - 1, 8));
+                bool validBgL = (sampleL.R >= 14 && sampleL.R <= 46 && Math.Abs(sampleL.R - sampleL.G) <= 8 && Math.Abs(sampleL.G - sampleL.B) <= 8);
+                bool validBgR = (sampleR.R >= 14 && sampleR.R <= 46 && Math.Abs(sampleR.R - sampleR.G) <= 8 && Math.Abs(sampleR.G - sampleR.B) <= 8);
+                if (validBgL) {
+                    bg = sampleL;
                 }
 
                 bool[,] raw = new bool[trayW, trayH];
                 int foundStartX = -1;
+                int activeIconPixels = 0;
 
                 // 1. Scan icon body band (y = 12 .. 35), excluding active-button highlight box borders
                 int iconYMin = 12;
@@ -213,11 +281,22 @@ public class TrayAutoHideContext : ApplicationContext {
                         int thresh = isNeutralGray ? 74 : 48;
                         if (diff > thresh) {
                             raw[x, y] = true;
+                            activeIconPixels++;
                             if (foundStartX == -1 && y >= 16 && y <= 20 && c.B > 205 && c.G > 130 && c.R < 75) {
                                 foundStartX = x + 3;
                             }
                         }
                     }
+                }
+
+                int totalBandPixels = Math.Max(1, (scanRight - scanLeft) * (iconYMax - iconYMin));
+                bool validCapture = validBgL && validBgR && (foundStartX != -1) && (activeIconPixels < (totalBandPixels * 38 / 100));
+                if (!validCapture && cachedIconMask != null) {
+                    // Reject contaminated capture (e.g. fullscreen overlay or accent flash) so a solid bar is never created
+                    ApplyCurrentRegion(tray, wasHoveringClock, notifyLeft, trayW, trayH);
+                    pendingMaskRefresh = true;
+                    pendingRefreshTime = DateTime.UtcNow.AddMilliseconds(600);
+                    return;
                 }
 
                 // 2. Scan bottom running-app indicator pills (y = 40 .. 44)
@@ -330,8 +409,9 @@ public class TrayAutoHideContext : ApplicationContext {
         GetTrayGeometry(out tray, out trayW, out trayH, out trayTop, out notifyLeft);
         if (tray == IntPtr.Zero) return;
 
+        bool occluded = IsTaskbarOccludedByWindow(tray, trayW, trayTop);
         Point cursor = Cursor.Position;
-        bool mouseInTaskbarBand = (cursor.Y >= trayTop - 6 && cursor.Y <= trayTop + trayH + 8 && cursor.X >= 0 && cursor.X <= trayW);
+        bool mouseInTaskbarBand = !occluded && (cursor.Y >= trayTop - 6 && cursor.Y <= trayTop + trayH + 8 && cursor.X >= 0 && cursor.X <= trayW);
 
         // 1. Detect clicks on taskbar icons so we refresh the icon silhouette once the cursor moves away
         if (mouseInTaskbarBand && (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0) {
@@ -348,15 +428,15 @@ public class TrayAutoHideContext : ApplicationContext {
                 pendingMaskRefresh = true;
                 // Wait 320ms for Windows 11 centered taskbar slide animation to finish
                 pendingRefreshTime = DateTime.UtcNow.AddMilliseconds(320);
-            } else if (!pendingMaskRefresh && (DateTime.UtcNow - lastRebuildTime).TotalMilliseconds > 900) {
-                if (!IsStartButtonSentinelValid(trayTop)) {
+            } else if (!occluded && !pendingMaskRefresh && (DateTime.UtcNow - lastRebuildTime).TotalMilliseconds > 900) {
+                if (!IsStartButtonSentinelValid(tray, trayW, trayTop)) {
                     pendingMaskRefresh = true;
                     pendingRefreshTime = DateTime.UtcNow.AddMilliseconds(220);
                 }
             }
         }
 
-        if (pendingMaskRefresh && DateTime.UtcNow >= pendingRefreshTime) {
+        if (!occluded && pendingMaskRefresh && DateTime.UtcNow >= pendingRefreshTime) {
             pendingMaskRefresh = false;
             RebuildIconSilhouetteMask();
             return;
@@ -364,7 +444,7 @@ public class TrayAutoHideContext : ApplicationContext {
 
         // 3. Hover over bottom-right clock & system tray zone reveals the clock
         int clockHoverLeft = Math.Max(1650, notifyLeft - 14);
-        bool hoverClock = (cursor.X >= clockHoverLeft && cursor.X <= trayW + 4 && cursor.Y >= trayTop - 8 && cursor.Y <= trayTop + trayH + 8);
+        bool hoverClock = !occluded && (cursor.X >= clockHoverLeft && cursor.X <= trayW + 4 && cursor.Y >= trayTop - 8 && cursor.Y >= 0 && cursor.Y <= trayTop + trayH + 8);
 
         if (hoverClock != wasHoveringClock) {
             wasHoveringClock = hoverClock;
