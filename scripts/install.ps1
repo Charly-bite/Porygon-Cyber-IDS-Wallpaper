@@ -10,12 +10,10 @@ New-Item -ItemType Directory -Path "$installDir\Models" -Force | Out-Null
 
 Stop-Process -Name "HackerWallpaper" -Force -ErrorAction SilentlyContinue
 Stop-Process -Name "TrayAutoHide" -Force -ErrorAction SilentlyContinue
-Stop-Process -Name "TranslucentTB" -Force -ErrorAction SilentlyContinue
 Start-Sleep -Milliseconds 400
 
-# Clean up legacy Startup shortcuts that pointed to old TrayAutoHide or TranslucentTB
+# Clean up legacy Startup shortcuts that pointed to old TrayAutoHide
 $startupDir = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup"
-Remove-Item "$startupDir\TranslucentTB.lnk" -Force -ErrorAction SilentlyContinue
 Remove-Item "$startupDir\TrayAutoHide.lnk" -Force -ErrorAction SilentlyContinue
 Remove-Item "$startupDir\HackerWallpaper.lnk" -Force -ErrorAction SilentlyContinue
 

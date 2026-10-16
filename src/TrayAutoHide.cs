@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.Drawing;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -15,26 +16,11 @@ public class TrayAutoHideContext : ApplicationContext {
     [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hWnd);
     [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
     [DllImport("user32.dll")] private static extern int SetWindowRgn(IntPtr hWnd, IntPtr hRgn, bool bRedraw);
-    [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int vKey);
-    [DllImport("user32.dll")] private static extern IntPtr GetDC(IntPtr hWnd);
-    [DllImport("user32.dll")] private static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
-    [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
-    [DllImport("user32.dll")] private static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
-    [DllImport("user32.dll")] private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
-    [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
-    [DllImport("user32.dll")] private static extern IntPtr WindowFromPoint(Point Point);
-    [DllImport("user32.dll")] private static extern bool IsChild(IntPtr hWndParent, IntPtr hWnd);
-    [DllImport("user32.dll", CharSet = CharSet.Auto)] private static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
     [DllImport("user32.dll", CharSet = CharSet.Auto)]
     private static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, IntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out IntPtr lpdwResult);
 
     [DllImport("gdi32.dll")] private static extern IntPtr CreateRectRgn(int x1, int y1, int x2, int y2);
-    [DllImport("gdi32.dll")] private static extern IntPtr CreateRoundRectRgn(int x1, int y1, int x2, int y2, int cx, int cy);
-    [DllImport("gdi32.dll")] private static extern int CombineRgn(IntPtr hrgnDest, IntPtr hrgnSrc1, IntPtr hrgnSrc2, int fnCombineMode);
     [DllImport("gdi32.dll")] private static extern bool DeleteObject(IntPtr hObject);
-    [DllImport("gdi32.dll")] private static extern uint GetPixel(IntPtr hdc, int nXPos, int nYPos);
-
-    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
     [StructLayout(LayoutKind.Sequential)]
     public struct RECT {
@@ -42,45 +28,35 @@ public class TrayAutoHideContext : ApplicationContext {
     }
 
     private const int SW_HIDE = 0;
-    private const int RGN_OR = 2;
-    private const int VK_LBUTTON = 0x01;
-    private const int GWL_EXSTYLE = -20;
-    private const int WS_EX_TOOLWINDOW = 0x00000080;
-    private const uint GW_OWNER = 4;
 
     private System.Windows.Forms.Timer pollTimer;
-    private bool[,] cachedIconMask = null;
-    private int cachedMaskW = 1920;
-    private int cachedMaskH = 48;
-    private int startSentinelX = -1;
-    private int startSentinelY = 18;
-    private int lastTaskbarWinSig = -1;
     private bool wasHoveringClock = false;
-    private bool pendingMaskRefresh = false;
-    private DateTime pendingRefreshTime = DateTime.MinValue;
-    private DateTime lastRebuildTime = DateTime.MinValue;
+    private int lastNotifyLeft = -1;
+    private int lastTrayW = -1;
+    private int lastTrayH = -1;
     private int tickCount = 0;
 
     public TrayAutoHideContext() {
-        StopConflictingTaskbarTools();
+        StopOtherTrayAutoHideInstances();
         ConfigureTaskbarRegistrySettings();
+        EnsureTranslucentTaskbarClear();
         EnforceSingleMonitorTaskbars();
-        lastTaskbarWinSig = ComputeTaskbarWindowSignature();
-        RebuildIconSilhouetteMask();
+
+        IntPtr tray;
+        int trayW, trayH, trayTop, notifyLeft;
+        GetTrayGeometry(out tray, out trayW, out trayH, out trayTop, out notifyLeft);
+        if (tray != IntPtr.Zero) {
+            ApplyClockAutoHideRegion(tray, false, notifyLeft, trayW, trayH);
+        }
 
         pollTimer = new System.Windows.Forms.Timer();
-        pollTimer.Interval = 45; // 22 Hz responsive hover & window-change detection
+        pollTimer.Interval = 45; // 22 Hz responsive clock-hover detection
         pollTimer.Tick += OnPollTick;
         pollTimer.Start();
     }
 
-    private static void StopConflictingTaskbarTools() {
+    private static void StopOtherTrayAutoHideInstances() {
         try {
-            // Stop TranslucentTB if running so its maximized_window_appearance (e.g. #B8070913 red bar) never overrides Shell_TrayWnd
-            Process[] ttb = Process.GetProcessesByName("TranslucentTB");
-            for (int i = 0; i < ttb.Length; i++) {
-                try { ttb[i].Kill(); } catch { }
-            }
             int selfId = Process.GetCurrentProcess().Id;
             Process[] tah = Process.GetProcessesByName("TrayAutoHide");
             for (int i = 0; i < tah.Length; i++) {
@@ -91,9 +67,113 @@ public class TrayAutoHideContext : ApplicationContext {
         } catch { }
     }
 
+    private static void EnsureTranslucentTaskbarClear() {
+        try {
+            string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            string ttbDir = Path.Combine(localAppData, "Programs", "TranslucentTB");
+            string settingsPath = Path.Combine(ttbDir, "settings.json");
+            string ttbExe = Path.Combine(ttbDir, "TranslucentTB.exe");
+
+            if (Directory.Exists(ttbDir)) {
+                string cleanJson = @"{
+  ""$schema"": ""https://TranslucentTB.github.io/settings.schema.json"",
+  ""desktop_appearance"": {
+    ""accent"": ""clear"",
+    ""color"": ""#00000000"",
+    ""show_peek"": false,
+    ""show_line"": false,
+    ""blur_radius"": 9.0
+  },
+  ""visible_window_appearance"": {
+    ""enabled"": false,
+    ""accent"": ""clear"",
+    ""color"": ""#00000000"",
+    ""show_peek"": false,
+    ""show_line"": false,
+    ""blur_radius"": 9.0,
+    ""rules"": { ""window_class"": {}, ""window_title"": {}, ""process_name"": {} }
+  },
+  ""maximized_window_appearance"": {
+    ""enabled"": false,
+    ""accent"": ""clear"",
+    ""color"": ""#00000000"",
+    ""show_peek"": false,
+    ""show_line"": false,
+    ""blur_radius"": 9.0,
+    ""rules"": { ""window_class"": {}, ""window_title"": {}, ""process_name"": {} }
+  },
+  ""start_opened_appearance"": {
+    ""enabled"": false,
+    ""accent"": ""clear"",
+    ""color"": ""#00000000"",
+    ""show_peek"": false,
+    ""show_line"": false,
+    ""blur_radius"": 9.0
+  },
+  ""search_opened_appearance"": {
+    ""enabled"": false,
+    ""accent"": ""clear"",
+    ""color"": ""#00000000"",
+    ""show_peek"": false,
+    ""show_line"": false,
+    ""blur_radius"": 9.0
+  },
+  ""task_view_opened_appearance"": {
+    ""enabled"": false,
+    ""accent"": ""clear"",
+    ""color"": ""#00000000"",
+    ""show_peek"": false,
+    ""show_line"": false,
+    ""blur_radius"": 9.0
+  },
+  ""battery_saver_appearance"": {
+    ""enabled"": false,
+    ""accent"": ""clear"",
+    ""color"": ""#00000000"",
+    ""show_peek"": false,
+    ""show_line"": false,
+    ""blur_radius"": 9.0
+  },
+  ""ignored_windows"": { ""window_class"": [], ""window_title"": [], ""process_name"": [] },
+  ""hide_tray"": true,
+  ""disable_saving"": false,
+  ""verbosity"": ""warn""
+}";
+                bool needsRestart = false;
+                if (File.Exists(settingsPath)) {
+                    string existing = File.ReadAllText(settingsPath, Encoding.UTF8);
+                    if (existing.IndexOf("#B8070913", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        existing.IndexOf("\"acrylic\"", StringComparison.OrdinalIgnoreCase) >= 0) {
+                        File.WriteAllText(settingsPath, cleanJson, Encoding.UTF8);
+                        needsRestart = true;
+                    }
+                } else {
+                    File.WriteAllText(settingsPath, cleanJson, Encoding.UTF8);
+                    needsRestart = true;
+                }
+
+                if (File.Exists(ttbExe)) {
+                    Process[] running = Process.GetProcessesByName("TranslucentTB");
+                    if (needsRestart && running.Length > 0) {
+                        for (int i = 0; i < running.Length; i++) {
+                            try { running[i].Kill(); } catch { }
+                        }
+                        Thread.Sleep(200);
+                        running = new Process[0];
+                    }
+                    if (running.Length == 0) {
+                        ProcessStartInfo psi = new ProcessStartInfo(ttbExe);
+                        psi.WorkingDirectory = ttbDir;
+                        psi.UseShellExecute = true;
+                        Process.Start(psi);
+                    }
+                }
+            }
+        } catch { }
+    }
+
     private static void ConfigureTaskbarRegistrySettings() {
         try {
-            // 1. Keep taskbar ONLY on Primary Monitor (disable multi-monitor taskbars)
             using (RegistryKey advKey = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", true)) {
                 if (advKey != null) {
                     object mmVal = advKey.GetValue("MMTaskbarEnabled");
@@ -103,17 +183,14 @@ public class TrayAutoHideContext : ApplicationContext {
                     advKey.SetValue("TaskbarDa", 0, RegistryValueKind.DWord);
                 }
             }
-            // 2. Ensure uniform dark background RGB(28,28,28) on Shell_TrayWnd (no accent color / transparency) so icon silhouette extraction is 100% crisp
             using (RegistryKey persKey = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", true)) {
                 if (persKey != null) {
                     persKey.SetValue("ColorPrevalence", 0, RegistryValueKind.DWord);
-                    persKey.SetValue("EnableTransparency", 0, RegistryValueKind.DWord);
                     persKey.SetValue("SystemUsesLightTheme", 0, RegistryValueKind.DWord);
                 }
             }
             IntPtr res;
             SendMessageTimeout(new IntPtr(0xFFFF), 0x001A, IntPtr.Zero, "TraySettings", 0x0002, 500, out res);
-            SendMessageTimeout(new IntPtr(0xFFFF), 0x001A, IntPtr.Zero, "ImmersiveColorSet", 0x0002, 500, out res);
         } catch { }
     }
 
@@ -124,24 +201,6 @@ public class TrayAutoHideContext : ApplicationContext {
                 ShowWindow(secTray, SW_HIDE);
             }
         }
-    }
-
-    private static int ComputeTaskbarWindowSignature() {
-        int count = 0;
-        int xorHash = 0;
-        EnumWindows((hWnd, lParam) => {
-            if (IsWindowVisible(hWnd)) {
-                if (GetWindow(hWnd, GW_OWNER) == IntPtr.Zero) {
-                    int ex = GetWindowLong(hWnd, GWL_EXSTYLE);
-                    if ((ex & WS_EX_TOOLWINDOW) == 0) {
-                        count++;
-                        xorHash ^= (hWnd.ToInt32() * 31);
-                    }
-                }
-            }
-            return true;
-        }, IntPtr.Zero);
-        return (count << 20) ^ (xorHash & 0xFFFFF);
     }
 
     private void GetTrayGeometry(out IntPtr tray, out int trayW, out int trayH, out int trayTop, out int notifyLeft) {
@@ -169,232 +228,24 @@ public class TrayAutoHideContext : ApplicationContext {
         }
     }
 
-    private bool IsTaskbarOccludedByWindow(IntPtr tray, int trayW, int trayTop) {
-        IntPtr fg = GetForegroundWindow();
-        if (fg == IntPtr.Zero || fg == tray || IsChild(tray, fg)) return false;
+    private void ApplyClockAutoHideRegion(IntPtr tray, bool includeClock, int notifyLeft, int trayW, int trayH) {
+        if (tray == IntPtr.Zero) return;
 
-        StringBuilder sb = new StringBuilder(64);
-        GetClassName(fg, sb, sb.Capacity);
-        string cls = sb.ToString();
-        if (cls == "Progman" || cls == "WorkerW" || cls == "Shell_TrayWnd" || cls == "Shell_SecondaryTrayWnd") {
-            return false;
-        }
-
-        RECT r;
-        if (GetWindowRect(fg, out r)) {
-            // Normal maximized windows stop at trayTop (e.g. r.Bottom <= trayTop + 2).
-            // Fullscreen apps or windows overlapping the taskbar have r.Bottom > trayTop + 8.
-            if (r.Bottom > trayTop + 8 && r.Right > 260 && r.Left < trayW - 260) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private bool IsStartButtonSentinelValid(IntPtr tray, int trayW, int trayTop) {
-        if (startSentinelX <= 0) return true;
-        if (IsTaskbarOccludedByWindow(tray, trayW, trayTop)) return true;
-
-        IntPtr hdc = GetDC(IntPtr.Zero);
-        if (hdc == IntPtr.Zero) return true;
-        try {
-            uint px = GetPixel(hdc, startSentinelX, trayTop + startSentinelY);
-            if (px == 0xFFFFFFFF) return true;
-            int r = (int)(px & 0xFF);
-            int g = (int)((px >> 8) & 0xFF);
-            int b = (int)((px >> 16) & 0xFF);
-            // Windows 11 Start button top-left square is bright cyan-blue (B > 175, G > 105, R < 100)
-            return (b > 175 && g > 105 && r < 100);
-        } finally {
-            ReleaseDC(IntPtr.Zero, hdc);
-        }
-    }
-
-    private void RebuildIconSilhouetteMask() {
-        try {
-            IntPtr tray;
-            int trayW, trayH, trayTop, notifyLeft;
-            GetTrayGeometry(out tray, out trayW, out trayH, out trayTop, out notifyLeft);
-            if (tray == IntPtr.Zero || trayW <= 0 || trayH <= 0) return;
-
-            if (cachedIconMask != null && IsTaskbarOccludedByWindow(tray, trayW, trayTop)) {
-                pendingMaskRefresh = true;
-                pendingRefreshTime = DateTime.UtcNow.AddMilliseconds(600);
-                return;
-            }
-
-            int scanLeft = 260;
-            int scanRight = Math.Min(trayW - 40, notifyLeft - 14);
-            if (scanRight <= scanLeft + 60) scanRight = trayW - 230;
-
-            // Temporarily set region to the centered icon strip so Windows renders fresh unclipped icon pixels
-            IntPtr stripRgn = CreateRectRgn(scanLeft, 1, scanRight, trayH);
-            SetWindowRgn(tray, stripRgn, true);
-            Thread.Sleep(70);
-
-            // Verify that Shell_TrayWnd is actually visible at the center of the strip (not covered by a fullscreen app or flyout)
-            IntPtr hMid = WindowFromPoint(new Point(trayW / 2, trayTop + 20));
-            if (cachedIconMask != null && hMid != IntPtr.Zero && hMid != tray && !IsChild(tray, hMid)) {
-                ApplyCurrentRegion(tray, wasHoveringClock, notifyLeft, trayW, trayH);
-                pendingMaskRefresh = true;
-                pendingRefreshTime = DateTime.UtcNow.AddMilliseconds(600);
-                return;
-            }
-
-            using (Bitmap bmp = new Bitmap(trayW, trayH)) {
-                using (Graphics g = Graphics.FromImage(bmp)) {
-                    g.CopyFromScreen(0, trayTop, 0, 0, new Size(trayW, trayH));
-                }
-
-                // Sample uniform taskbar background color inside the strip (or fallback to dark RGB 28,28,28)
-                Color bg = Color.FromArgb(28, 28, 28);
-                Color sampleL = bmp.GetPixel(Math.Min(trayW - 1, scanLeft + 4), Math.Min(trayH - 1, 8));
-                Color sampleR = bmp.GetPixel(Math.Max(0, scanRight - 6), Math.Min(trayH - 1, 8));
-                bool validBgL = (sampleL.R >= 14 && sampleL.R <= 46 && Math.Abs(sampleL.R - sampleL.G) <= 8 && Math.Abs(sampleL.G - sampleL.B) <= 8);
-                bool validBgR = (sampleR.R >= 14 && sampleR.R <= 46 && Math.Abs(sampleR.R - sampleR.G) <= 8 && Math.Abs(sampleR.G - sampleR.B) <= 8);
-                if (validBgL) {
-                    bg = sampleL;
-                }
-
-                bool[,] raw = new bool[trayW, trayH];
-                int foundStartX = -1;
-                int activeIconPixels = 0;
-
-                // 1. Scan icon body band (y = 12 .. 35), excluding active-button highlight box borders
-                int iconYMin = 12;
-                int iconYMax = Math.Min(trayH - 8, 36);
-                for (int x = scanLeft; x < scanRight; x++) {
-                    // Check if this column is a vertical border of an active-app highlight box (present at y=9)
-                    Color topCheck = bmp.GetPixel(x, 9);
-                    int topDiff = Math.Abs(topCheck.R - bg.R) + Math.Abs(topCheck.G - bg.G) + Math.Abs(topCheck.B - bg.B);
-                    bool isHighlightBoxBorderCol = (topDiff > 24 && topCheck.R < 88 && Math.Abs(topCheck.R - topCheck.G) <= 6 && Math.Abs(topCheck.G - topCheck.B) <= 6);
-
-                    for (int y = iconYMin; y < iconYMax; y++) {
-                        Color c = bmp.GetPixel(x, y);
-                        int diff = Math.Abs(c.R - bg.R) + Math.Abs(c.G - bg.G) + Math.Abs(c.B - bg.B);
-                        bool isNeutralGray = (Math.Abs(c.R - c.G) <= 5 && Math.Abs(c.G - c.B) <= 5);
-
-                        if (isHighlightBoxBorderCol && isNeutralGray && c.R < 90) {
-                            continue;
-                        }
-                        // Colored icon pixels need diff > 48; neutral gray pixels need diff > 74 (to skip RGB 45,45,45 active button fill)
-                        int thresh = isNeutralGray ? 74 : 48;
-                        if (diff > thresh) {
-                            raw[x, y] = true;
-                            activeIconPixels++;
-                            if (foundStartX == -1 && y >= 16 && y <= 20 && c.B > 205 && c.G > 130 && c.R < 75) {
-                                foundStartX = x + 3;
-                            }
-                        }
-                    }
-                }
-
-                int totalBandPixels = Math.Max(1, (scanRight - scanLeft) * (iconYMax - iconYMin));
-                bool validCapture = validBgL && validBgR && (foundStartX != -1) && (activeIconPixels < (totalBandPixels * 38 / 100));
-                if (!validCapture && cachedIconMask != null) {
-                    // Reject contaminated capture (e.g. fullscreen overlay or accent flash) so a solid bar is never created
-                    ApplyCurrentRegion(tray, wasHoveringClock, notifyLeft, trayW, trayH);
-                    pendingMaskRefresh = true;
-                    pendingRefreshTime = DateTime.UtcNow.AddMilliseconds(600);
-                    return;
-                }
-
-                // 2. Scan bottom running-app indicator pills (y = 40 .. 44)
-                int pillYMin = Math.Min(trayH - 4, 40);
-                int pillYMax = Math.Min(trayH - 1, 45);
-                for (int y = pillYMin; y < pillYMax; y++) {
-                    for (int x = scanLeft; x < scanRight; x++) {
-                        Color c = bmp.GetPixel(x, y);
-                        int diff = Math.Abs(c.R - bg.R) + Math.Abs(c.G - bg.G) + Math.Abs(c.B - bg.B);
-                        if (diff > 85) {
-                            raw[x, y] = true;
-                        }
-                    }
-                }
-
-                // 3. 1px dilation for crisp anti-aliased icon borders (only inside icon/pill bands)
-                bool[,] dilated = new bool[trayW, trayH];
-                for (int y = iconYMin; y < pillYMax; y++) {
-                    for (int x = scanLeft; x < scanRight; x++) {
-                        if (raw[x, y]) {
-                            for (int dy = -1; dy <= 1; dy++) {
-                                for (int dx = -1; dx <= 1; dx++) {
-                                    int nx = x + dx, ny = y + dy;
-                                    if (nx >= scanLeft && nx < scanRight && ny >= 11 && ny < trayH - 1) {
-                                        dilated[nx, ny] = true;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // 4. Bridge narrow internal gaps inside icons ONLY if the pixel is not dark background RGB(28,28,28)
-                for (int x = scanLeft; x < scanRight; x++) {
-                    int yFirst = -1, yLast = -1;
-                    for (int y = iconYMin; y < iconYMax; y++) {
-                        if (dilated[x, y]) {
-                            if (yFirst == -1) yFirst = y;
-                            yLast = y;
-                        }
-                    }
-                    if (yFirst != -1 && yLast > yFirst && (yLast - yFirst) <= 23) {
-                        for (int y = yFirst; y <= yLast; y++) {
-                            Color c = bmp.GetPixel(x, y);
-                            int diff = Math.Abs(c.R - bg.R) + Math.Abs(c.G - bg.G) + Math.Abs(c.B - bg.B);
-                            // Keep interior of Windows Terminal (RGB ~51,51,51, diff ~69) and Search lens (RGB ~68,68,68, diff ~120),
-                            // but never fill pure RGB(28,28,28) gaps!
-                            if (diff > 32) {
-                                dilated[x, y] = true;
-                            }
-                        }
-                    }
-                }
-
-                if (foundStartX != -1) {
-                    startSentinelX = foundStartX;
-                    startSentinelY = 18;
-                }
-
-                cachedIconMask = dilated;
-                cachedMaskW = trayW;
-                cachedMaskH = trayH;
-                lastRebuildTime = DateTime.UtcNow;
-            }
-
-            ApplyCurrentRegion(tray, wasHoveringClock, notifyLeft, trayW, trayH);
-        } catch { }
-    }
-
-    private void ApplyCurrentRegion(IntPtr tray, bool includeClock, int notifyLeft, int trayW, int trayH) {
-        if (tray == IntPtr.Zero || cachedIconMask == null) return;
-
-        IntPtr masterRgn = CreateRectRgn(0, 0, 0, 0);
-        int w = cachedMaskW;
-        int h = cachedMaskH;
-
-        for (int y = 10; y < h - 1; y++) {
-            int x = 0;
-            while (x < w) {
-                while (x < w && !cachedIconMask[x, y]) x++;
-                if (x >= w) break;
-                int xStart = x;
-                while (x < w && cachedIconMask[x, y]) x++;
-                IntPtr span = CreateRectRgn(xStart, y, x, y + 1);
-                CombineRgn(masterRgn, masterRgn, span, RGN_OR);
-                DeleteObject(span);
-            }
-        }
+        lastNotifyLeft = notifyLeft;
+        lastTrayW = trayW;
+        lastTrayH = trayH;
 
         if (includeClock) {
-            int pillLeft = Math.Max(1500, notifyLeft - 8);
-            IntPtr clockPill = CreateRoundRectRgn(pillLeft, 4, trayW - 4, trayH - 4, 12, 12);
-            CombineRgn(masterRgn, masterRgn, clockPill, RGN_OR);
-            DeleteObject(clockPill);
-        }
-
-        if (SetWindowRgn(tray, masterRgn, true) == 0) {
-            DeleteObject(masterRgn);
+            // Unclip entire taskbar when hovering bottom-right so clock and system tray icons render natively
+            SetWindowRgn(tray, IntPtr.Zero, true);
+        } else {
+            // Keep 0 .. notifyLeft-8 completely unclipped from y=0..trayH+4 so centered taskbar icons NEVER get clipped,
+            // while cleanly cutting out the right-hand system tray & clock zone until hovered
+            int clipRight = Math.Max(400, notifyLeft - 8);
+            IntPtr rgn = CreateRectRgn(0, 0, clipRight, trayH + 4);
+            if (SetWindowRgn(tray, rgn, true) == 0) {
+                DeleteObject(rgn);
+            }
         }
     }
 
@@ -403,52 +254,22 @@ public class TrayAutoHideContext : ApplicationContext {
         if (tickCount % 30 == 0) {
             EnforceSingleMonitorTaskbars();
         }
+        if (tickCount % 200 == 0) {
+            EnsureTranslucentTaskbarClear();
+        }
 
         IntPtr tray;
         int trayW, trayH, trayTop, notifyLeft;
         GetTrayGeometry(out tray, out trayW, out trayH, out trayTop, out notifyLeft);
         if (tray == IntPtr.Zero) return;
 
-        bool occluded = IsTaskbarOccludedByWindow(tray, trayW, trayTop);
         Point cursor = Cursor.Position;
-        bool mouseInTaskbarBand = !occluded && (cursor.Y >= trayTop - 6 && cursor.Y <= trayTop + trayH + 8 && cursor.X >= 0 && cursor.X <= trayW);
-
-        // 1. Detect clicks on taskbar icons so we refresh the icon silhouette once the cursor moves away
-        if (mouseInTaskbarBand && (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0) {
-            pendingMaskRefresh = true;
-            pendingRefreshTime = DateTime.UtcNow.AddMilliseconds(450);
-        }
-
-        // 2. Every ~225ms, check if any top-level taskbar window opened/closed (e.g. Snipping Tool, browser, dialog)
-        //    OR if the Windows Start button sentinel pixel shifted horizontally due to icon re-centering!
-        if (tickCount % 5 == 0) {
-            int sig = ComputeTaskbarWindowSignature();
-            if (sig != lastTaskbarWinSig) {
-                lastTaskbarWinSig = sig;
-                pendingMaskRefresh = true;
-                // Wait 320ms for Windows 11 centered taskbar slide animation to finish
-                pendingRefreshTime = DateTime.UtcNow.AddMilliseconds(320);
-            } else if (!occluded && !pendingMaskRefresh && (DateTime.UtcNow - lastRebuildTime).TotalMilliseconds > 900) {
-                if (!IsStartButtonSentinelValid(tray, trayW, trayTop)) {
-                    pendingMaskRefresh = true;
-                    pendingRefreshTime = DateTime.UtcNow.AddMilliseconds(220);
-                }
-            }
-        }
-
-        if (!occluded && pendingMaskRefresh && DateTime.UtcNow >= pendingRefreshTime) {
-            pendingMaskRefresh = false;
-            RebuildIconSilhouetteMask();
-            return;
-        }
-
-        // 3. Hover over bottom-right clock & system tray zone reveals the clock
         int clockHoverLeft = Math.Max(1650, notifyLeft - 14);
-        bool hoverClock = !occluded && (cursor.X >= clockHoverLeft && cursor.X <= trayW + 4 && cursor.Y >= trayTop - 8 && cursor.Y >= 0 && cursor.Y <= trayTop + trayH + 8);
+        bool hoverClock = (cursor.X >= clockHoverLeft && cursor.X <= trayW + 4 && cursor.Y >= trayTop - 8 && cursor.Y <= trayTop + trayH + 8);
 
-        if (hoverClock != wasHoveringClock) {
+        if (hoverClock != wasHoveringClock || notifyLeft != lastNotifyLeft || trayW != lastTrayW || trayH != lastTrayH) {
             wasHoveringClock = hoverClock;
-            ApplyCurrentRegion(tray, wasHoveringClock, notifyLeft, trayW, trayH);
+            ApplyClockAutoHideRegion(tray, wasHoveringClock, notifyLeft, trayW, trayH);
         }
     }
 
