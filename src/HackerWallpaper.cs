@@ -12,11 +12,13 @@ using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 using System.Windows.Forms;
 
 public class WallpaperConfig {
-    public int ThemeIndex = 0;       // 0=Cyberpunk Neon, 1=Matrix Green, 2=Red Team, 3=Ice Stealth
+    public int ThemeIndex = 0;       // 0=Matte Bio-Forest & Amber, 1=Matte Matrix, 2=Matte Red Team, 3=Matte Ice Stealth
+    public int BgSceneMode = 0;      // 0=Selva Low-Poly + Oscilador 3D, 1=Terreno Oscilador + Delaunay, 2=Bosque Micelial Poligonal
     public int RainSpeed = 100;      // 0..200
     public int RainDensity = 72;     // 20..110
     public int PorygonScale = 88;    // 50..160%
@@ -26,6 +28,13 @@ public class WallpaperConfig {
     public bool FollowMouse = false; // Strictly FALSE by default!
     public bool TrainingMode = false;// Intensive AI training waves
     public bool AutoPauseMaximized = true;
+
+    // Persistent Single-Click Collapsible HUD Card States
+    public bool RadarCollapsed = false;
+    public bool TelemetryCollapsed = false;
+    public bool ConnectomeCollapsed = false;
+    public bool Brain3DCollapsed = false;
+    public bool SecondaryBarsCollapsed = false;
 
     private static string ConfigPath {
         get {
@@ -37,14 +46,20 @@ public class WallpaperConfig {
     public void Save() {
         try {
             string json = string.Format(
-                "{{\r\n  \"ThemeIndex\": {0},\r\n  \"RainSpeed\": {1},\r\n  \"RainDensity\": {2},\r\n  \"PorygonScale\": {3},\r\n  \"ShowTelemetry\": {4},\r\n  \"ShowRadar\": {5},\r\n  \"ShowPorygon\": {6},\r\n  \"FollowMouse\": {7},\r\n  \"TrainingMode\": {8},\r\n  \"AutoPauseMaximized\": {9}\r\n}}",
+                "{{\r\n  \"ThemeIndex\": {0},\r\n  \"BgSceneMode\": {15},\r\n  \"RainSpeed\": {1},\r\n  \"RainDensity\": {2},\r\n  \"PorygonScale\": {3},\r\n  \"ShowTelemetry\": {4},\r\n  \"ShowRadar\": {5},\r\n  \"ShowPorygon\": {6},\r\n  \"FollowMouse\": {7},\r\n  \"TrainingMode\": {8},\r\n  \"AutoPauseMaximized\": {9},\r\n  \"RadarCollapsed\": {10},\r\n  \"TelemetryCollapsed\": {11},\r\n  \"ConnectomeCollapsed\": {12},\r\n  \"Brain3DCollapsed\": {13},\r\n  \"SecondaryBarsCollapsed\": {14}\r\n}}",
                 ThemeIndex, RainSpeed, RainDensity, PorygonScale,
                 ShowTelemetry.ToString().ToLower(),
                 ShowRadar.ToString().ToLower(),
                 ShowPorygon.ToString().ToLower(),
                 FollowMouse.ToString().ToLower(),
                 TrainingMode.ToString().ToLower(),
-                AutoPauseMaximized.ToString().ToLower()
+                AutoPauseMaximized.ToString().ToLower(),
+                RadarCollapsed.ToString().ToLower(),
+                TelemetryCollapsed.ToString().ToLower(),
+                ConnectomeCollapsed.ToString().ToLower(),
+                Brain3DCollapsed.ToString().ToLower(),
+                SecondaryBarsCollapsed.ToString().ToLower(),
+                BgSceneMode
             );
             File.WriteAllText(ConfigPath, json, Encoding.UTF8);
         } catch { }
@@ -56,6 +71,7 @@ public class WallpaperConfig {
             if (File.Exists(ConfigPath)) {
                 string txt = File.ReadAllText(ConfigPath, Encoding.UTF8);
                 cfg.ThemeIndex = ParseInt(txt, "ThemeIndex", 0);
+                cfg.BgSceneMode = Math.Max(0, Math.Min(2, ParseInt(txt, "BgSceneMode", 0)));
                 cfg.RainSpeed = ParseInt(txt, "RainSpeed", 100);
                 cfg.RainDensity = ParseInt(txt, "RainDensity", 72);
                 cfg.PorygonScale = ParseInt(txt, "PorygonScale", 88);
@@ -65,6 +81,11 @@ public class WallpaperConfig {
                 cfg.FollowMouse = ParseBool(txt, "FollowMouse", false);
                 cfg.TrainingMode = ParseBool(txt, "TrainingMode", false);
                 cfg.AutoPauseMaximized = ParseBool(txt, "AutoPauseMaximized", true);
+                cfg.RadarCollapsed = ParseBool(txt, "RadarCollapsed", false);
+                cfg.TelemetryCollapsed = ParseBool(txt, "TelemetryCollapsed", false);
+                cfg.ConnectomeCollapsed = ParseBool(txt, "ConnectomeCollapsed", false);
+                cfg.Brain3DCollapsed = ParseBool(txt, "Brain3DCollapsed", false);
+                cfg.SecondaryBarsCollapsed = ParseBool(txt, "SecondaryBarsCollapsed", false);
             }
         } catch { }
         return cfg;
@@ -95,7 +116,275 @@ public class WallpaperConfig {
 }
 
 // ============================================================================
-// FLYWIRE / FLYBRAIN SPIKING CONNECTOME WITH HEBBIAN SYNAPTIC PLASTICITY & RL
+// HARDWARE GPU OPENGL 4.6 ACCELERATION ENGINE (AMD RADEON RX 9060 XT)
+// ============================================================================
+public static class GpuGl {
+    public const uint GL_COLOR_BUFFER_BIT = 0x00004000;
+    public const uint GL_DEPTH_BUFFER_BIT = 0x00000100;
+    public const uint GL_POINTS           = 0x0000;
+    public const uint GL_LINES            = 0x0001;
+    public const uint GL_LINE_LOOP        = 0x0002;
+    public const uint GL_LINE_STRIP       = 0x0003;
+    public const uint GL_TRIANGLES        = 0x0004;
+    public const uint GL_TRIANGLE_FAN     = 0x0006;
+    public const uint GL_QUADS            = 0x0007;
+    public const uint GL_DEPTH_TEST       = 0x0B71;
+    public const uint GL_BLEND            = 0x0BE2;
+    public const uint GL_LINE_SMOOTH      = 0x0B20;
+    public const uint GL_TEXTURE_2D       = 0x0DE1;
+    public const uint GL_SRC_ALPHA        = 0x0302;
+    public const uint GL_ONE_MINUS_SRC_ALPHA = 0x0303;
+    public const uint GL_LEQUAL           = 0x0203;
+    public const uint GL_RGBA             = 0x1908;
+    public const uint GL_BGRA_EXT         = 0x80E1;
+    public const uint GL_UNSIGNED_BYTE    = 0x1401;
+    public const uint GL_TEXTURE_MIN_FILTER = 0x2801;
+    public const uint GL_TEXTURE_MAG_FILTER = 0x2800;
+    public const uint GL_LINEAR           = 0x2601;
+    public const uint GL_PROJECTION       = 0x1701;
+    public const uint GL_MODELVIEW        = 0x1700;
+    public const uint GL_RENDERER         = 0x1F01;
+    public const uint GL_VERSION          = 0x1F02;
+
+    public const uint FONT_LIST_RAIN_FG   = 1000;
+    public const uint FONT_LIST_RAIN_BG   = 1300;
+    public const uint FONT_LIST_HUD_SMALL = 1600;
+
+    public static int CanvasW = 6154;
+    public static int CanvasH = 2167;
+    private static byte[] textBuf = new byte[128];
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct PIXELFORMATDESCRIPTOR {
+        public ushort nSize;
+        public ushort nVersion;
+        public uint dwFlags;
+        public byte iPixelType;
+        public byte cColorBits;
+        public byte cRedBits;
+        public byte cRedShift;
+        public byte cGreenBits;
+        public byte cGreenShift;
+        public byte cBlueBits;
+        public byte cBlueShift;
+        public byte cAlphaBits;
+        public byte cAlphaShift;
+        public byte cAccumBits;
+        public byte cAccumRedBits;
+        public byte cAccumGreenBits;
+        public byte cAccumBlueBits;
+        public byte cAccumAlphaBits;
+        public byte cDepthBits;
+        public byte cStencilBits;
+        public byte cAuxBuffers;
+        public byte iLayerType;
+        public byte bReserved;
+        public uint dwLayerMask;
+        public uint dwVisibleMask;
+        public uint dwDamageMask;
+    }
+
+    [DllImport("user32.dll")] public static extern IntPtr GetDC(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
+    [DllImport("gdi32.dll")]  public static extern int ChoosePixelFormat(IntPtr hdc, ref PIXELFORMATDESCRIPTOR ppfd);
+    [DllImport("gdi32.dll")]  public static extern bool SetPixelFormat(IntPtr hdc, int iPixelFormat, ref PIXELFORMATDESCRIPTOR ppfd);
+    [DllImport("gdi32.dll")]  public static extern bool SwapBuffers(IntPtr hdc);
+    [DllImport("gdi32.dll")]  public static extern IntPtr SelectObject(IntPtr hdc, IntPtr hgdiobj);
+    [DllImport("gdi32.dll")]  public static extern bool DeleteObject(IntPtr hObject);
+
+    [DllImport("opengl32.dll")] public static extern IntPtr wglCreateContext(IntPtr hdc);
+    [DllImport("opengl32.dll")] public static extern bool wglMakeCurrent(IntPtr hdc, IntPtr hglrc);
+    [DllImport("opengl32.dll")] public static extern bool wglDeleteContext(IntPtr hglrc);
+    [DllImport("opengl32.dll", CharSet = CharSet.Ansi)] public static extern bool wglUseFontBitmapsA(IntPtr hdc, uint first, uint count, uint listBase);
+    [DllImport("opengl32.dll")] public static extern IntPtr glGetString(uint name);
+    [DllImport("opengl32.dll")] public static extern void glViewport(int x, int y, int width, int height);
+    [DllImport("opengl32.dll")] public static extern void glMatrixMode(uint mode);
+    [DllImport("opengl32.dll")] public static extern void glLoadIdentity();
+    [DllImport("opengl32.dll")] public static extern void glOrtho(double left, double right, double bottom, double top, double zNear, double zFar);
+    [DllImport("opengl32.dll")] public static extern void glClearColor(float r, float g, float b, float a);
+    [DllImport("opengl32.dll")] public static extern void glClear(uint mask);
+    [DllImport("opengl32.dll")] public static extern void glEnable(uint cap);
+    [DllImport("opengl32.dll")] public static extern void glDisable(uint cap);
+    [DllImport("opengl32.dll")] public static extern void glBlendFunc(uint sfactor, uint dfactor);
+    [DllImport("opengl32.dll")] public static extern void glDepthFunc(uint func);
+    [DllImport("opengl32.dll")] public static extern void glLineWidth(float width);
+    [DllImport("opengl32.dll")] public static extern void glBegin(uint mode);
+    [DllImport("opengl32.dll")] public static extern void glEnd();
+    [DllImport("opengl32.dll")] public static extern void glColor4ub(byte r, byte g, byte b, byte a);
+    [DllImport("opengl32.dll")] public static extern void glColor4f(float r, float g, float b, float a);
+    [DllImport("opengl32.dll")] public static extern void glTexCoord2f(float s, float t);
+    [DllImport("opengl32.dll")] public static extern void glVertex2f(float x, float y);
+    [DllImport("opengl32.dll")] public static extern void glVertex3f(float x, float y, float z);
+    [DllImport("opengl32.dll")] public static extern void glGenTextures(int n, out uint textures);
+    [DllImport("opengl32.dll")] public static extern void glBindTexture(uint target, uint texture);
+    [DllImport("opengl32.dll")] public static extern void glTexParameteri(uint target, uint pname, int param);
+    [DllImport("opengl32.dll")] public static extern void glTexImage2D(uint target, int level, int internalformat, int width, int height, int border, uint format, uint type, IntPtr pixels);
+    [DllImport("opengl32.dll")] public static extern void glTexSubImage2D(uint target, int level, int xoffset, int yoffset, int width, int height, uint format, uint type, IntPtr pixels);
+    [DllImport("opengl32.dll")] public static extern void glRasterPos2f(float x, float y);
+    [DllImport("opengl32.dll")] public static extern void glListBase(uint b);
+    [DllImport("opengl32.dll")] public static extern void glCallLists(int n, uint type, byte[] lists);
+
+    public static void SetColor(Color c) {
+        glColor4ub(c.R, c.G, c.B, c.A);
+    }
+
+    public static void SetColor(Color c, int alpha) {
+        int a = alpha < 0 ? 0 : (alpha > 255 ? 255 : alpha);
+        glColor4ub(c.R, c.G, c.B, (byte)a);
+    }
+
+    public static void DrawLine(float x1, float y1, float x2, float y2, Color c, float width) {
+        glLineWidth(width);
+        SetColor(c);
+        glBegin(GL_LINES);
+        glVertex2f(x1, y1);
+        glVertex2f(x2, y2);
+        glEnd();
+    }
+
+    public static void FillRect(float x, float y, float w, float h, Color c) {
+        SetColor(c);
+        glBegin(GL_QUADS);
+        glVertex2f(x, y);
+        glVertex2f(x + w, y);
+        glVertex2f(x + w, y + h);
+        glVertex2f(x, y + h);
+        glEnd();
+    }
+
+    public static void DrawRect(float x, float y, float w, float h, Color c, float width) {
+        glLineWidth(width);
+        SetColor(c);
+        glBegin(GL_LINE_LOOP);
+        glVertex2f(x, y);
+        glVertex2f(x + w, y);
+        glVertex2f(x + w, y + h);
+        glVertex2f(x, y + h);
+        glEnd();
+    }
+
+    public static void FillTriangle(float x1, float y1, float x2, float y2, float x3, float y3, Color c) {
+        SetColor(c);
+        glBegin(GL_TRIANGLES);
+        glVertex2f(x1, y1);
+        glVertex2f(x2, y2);
+        glVertex2f(x3, y3);
+        glEnd();
+    }
+
+    public static void DrawTriangle(float x1, float y1, float x2, float y2, float x3, float y3, Color c, float width) {
+        glLineWidth(width);
+        SetColor(c);
+        glBegin(GL_LINE_LOOP);
+        glVertex2f(x1, y1);
+        glVertex2f(x2, y2);
+        glVertex2f(x3, y3);
+        glEnd();
+    }
+
+    public static void DrawEllipse(float cx, float cy, float rx, float ry, Color c, float width, int segs) {
+        glLineWidth(width);
+        SetColor(c);
+        glBegin(GL_LINE_LOOP);
+        double step = 2.0 * Math.PI / segs;
+        for (int i = 0; i < segs; i++) {
+            double a = i * step;
+            glVertex2f(cx + (float)Math.Cos(a) * rx, cy + (float)Math.Sin(a) * ry);
+        }
+        glEnd();
+    }
+
+    public static void FillEllipse(float cx, float cy, float rx, float ry, Color c, int segs) {
+        SetColor(c);
+        glBegin(GL_TRIANGLE_FAN);
+        glVertex2f(cx, cy);
+        double step = 2.0 * Math.PI / segs;
+        for (int i = 0; i <= segs; i++) {
+            double a = i * step;
+            glVertex2f(cx + (float)Math.Cos(a) * rx, cy + (float)Math.Sin(a) * ry);
+        }
+        glEnd();
+    }
+
+    public static void DrawChar(char ch, float x, float y, Color c, uint fontListBase) {
+        float ry = y + 11f;
+        if (x < 2f || x >= CanvasW - 4f || ry < 2f || ry >= CanvasH - 2f) return;
+        SetColor(c);
+        glRasterPos2f(x, ry);
+        glListBase(fontListBase);
+        textBuf[0] = (byte)(ch < 256 ? ch : '?');
+        glCallLists(1, GL_UNSIGNED_BYTE, textBuf);
+    }
+
+    public static void DrawText(string s, float x, float y, Color c, uint fontListBase) {
+        if (string.IsNullOrEmpty(s)) return;
+        float ry = y + 11f;
+        if (x < 2f || x >= CanvasW - 4f || ry < 2f || ry >= CanvasH - 2f) return;
+        SetColor(c);
+        glRasterPos2f(x, ry);
+        glListBase(fontListBase);
+        int len = Math.Min(s.Length, textBuf.Length);
+        for (int i = 0; i < len; i++) {
+            char ch = s[i];
+            textBuf[i] = (byte)(ch < 256 ? ch : '*');
+        }
+        glCallLists(len, GL_UNSIGNED_BYTE, textBuf);
+    }
+
+    public static void UploadBitmapToTexture(Bitmap bmp, ref uint texId, ref int texW, ref int texH) {
+        if (bmp == null) return;
+        if (texId == 0) {
+            glGenTextures(1, out texId);
+        }
+        glBindTexture(GL_TEXTURE_2D, texId);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, (int)GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, (int)GL_LINEAR);
+
+        BitmapData bd = bmp.LockBits(new Rectangle(0, 0, bmp.Width, bmp.Height), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+        try {
+            if (texW != bmp.Width || texH != bmp.Height) {
+                glTexImage2D(GL_TEXTURE_2D, 0, (int)GL_RGBA, bmp.Width, bmp.Height, 0, GL_BGRA_EXT, GL_UNSIGNED_BYTE, bd.Scan0);
+                texW = bmp.Width;
+                texH = bmp.Height;
+            } else {
+                glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, bmp.Width, bmp.Height, GL_BGRA_EXT, GL_UNSIGNED_BYTE, bd.Scan0);
+            }
+        } finally {
+            bmp.UnlockBits(bd);
+        }
+    }
+
+    public static void DrawTexturedQuad(uint texId, float x, float y, float w, float h) {
+        if (texId == 0) return;
+        glEnable(GL_TEXTURE_2D);
+        glBindTexture(GL_TEXTURE_2D, texId);
+        glColor4ub(255, 255, 255, 255);
+        glBegin(GL_QUADS);
+        glTexCoord2f(0f, 0f); glVertex2f(x, y);
+        glTexCoord2f(1f, 0f); glVertex2f(x + w, y);
+        glTexCoord2f(1f, 1f); glVertex2f(x + w, y + h);
+        glTexCoord2f(0f, 1f); glVertex2f(x, y + h);
+        glEnd();
+        glDisable(GL_TEXTURE_2D);
+    }
+
+    public static void DrawTexturedQuadUV(uint texId, float x, float y, float w, float h, float u0, float v0, float u1, float v1) {
+        if (texId == 0) return;
+        glEnable(GL_TEXTURE_2D);
+        glBindTexture(GL_TEXTURE_2D, texId);
+        glColor4ub(255, 255, 255, 255);
+        glBegin(GL_QUADS);
+        glTexCoord2f(u0, v0); glVertex2f(x, y);
+        glTexCoord2f(u1, v0); glVertex2f(x + w, y);
+        glTexCoord2f(u1, v1); glVertex2f(x + w, y + h);
+        glTexCoord2f(u0, v1); glVertex2f(x, y + h);
+        glEnd();
+        glDisable(GL_TEXTURE_2D);
+    }
+}
+
+// ============================================================================
+// FLYWIRE / FLYBRAIN SPIKING CONNECTOME + EVOLUTIONARY ALGORITHM & LIFE CYCLE
 // ============================================================================
 public class FlyBrainConnectome {
     public const int N = 64;
@@ -103,6 +392,267 @@ public class FlyBrainConnectome {
     public float[] SpikeGlow = new float[N];     // Visual spike decay for HUD
     public float[,] W = new float[N, N];         // Synaptic weight matrix
     public float[,] Eligibility = new float[N, N]; // STDP / Hebbian eligibility trace
+
+    // 3D Drosophila Brain Anatomical Coordinates & Dendritic Arborization Trees for each of the 64 Spiking Neurons
+    public float[] NeuronX = new float[N];
+    public float[] NeuronY = new float[N];
+    public float[] NeuronZ = new float[N];
+    public int[] NeuronRegion = new int[N];      // 0=Optic/VT Sensory, 1=Mushroom Body, 2=Central Complex, 3=Motor/Attack
+
+    public struct BrainTri3D {
+        public int I0, I1, I2;
+        public int PartKind; // 0=Central Cortical Shell, 1=Left/Right Optic Lobe Shell, 2=Ventral SEZ Shell, 3=Blue Mushroom Body
+    }
+
+    public struct DendriteSeg3D {
+        public float X0, Y0, Z0;
+        public float X1, Y1, Z1;
+        public int NeuronIdx;
+        public byte R, G, B;
+        public float Thickness;
+        public bool IsTip;
+    }
+
+    // Precomputed FlyWire 3D Drosophila Cortical Wireframe Mesh + Cobalt-Blue Mushroom Body Mesh
+    public static List<PointF[]> StaticDummy = null;
+    public static float[] ShellVX;
+    public static float[] ShellVY;
+    public static float[] ShellVZ;
+    public static List<BrainTri3D> ShellTris = new List<BrainTri3D>();
+    public static object ShellInitLock = new object();
+    public static bool ShellInitialized = false;
+
+    public List<DendriteSeg3D> DendriteBranches = new List<DendriteSeg3D>();
+
+    private static void ConfinePointInsideBrain(int region, float side, ref float x, ref float y, ref float z) {
+        if (region == 0) {
+            // Superior Lateral Protocerebrum (|x| < 48) OR Optic Lobe (|x| >= 48)
+            if (Math.Abs(x) < 48f) {
+                if (x * side < 0f && Math.Abs(x) > 6f) x = side * Math.Abs(x);
+                x = Math.Max(-45f, Math.Min(45f, x));
+                float maxDorsalY = 33f - (Math.Abs(x) > 28f ? (Math.Abs(x) - 28f) * 0.45f : 0f);
+                float cleftDip = 6.5f * (float)Math.Exp(-(x * x) / 140.0);
+                maxDorsalY -= cleftDip;
+                y = Math.Max(-18f, Math.Min(maxDorsalY, y));
+                z = Math.Max(-18f, Math.Min(18f, z));
+            } else {
+                // Inside Kidney-Shaped Optic Lobe centered at (side * 75, -10, -2) with radii (31, 31, 18)
+                float cx = side * 75f, cy = -10f, cz = -2f;
+                float dx = (x - cx) / 31f;
+                float dy = (y - cy) / 31f;
+                float dz = (z - cz) / 18f;
+                float d2 = dx * dx + dy * dy + dz * dz;
+                if (d2 > 0.86f) {
+                    float s = (float)(Math.Sqrt(0.86 / d2));
+                    x = cx + (x - cx) * s;
+                    y = cy + (y - cy) * s;
+                    z = cz + (z - cz) * s;
+                }
+            }
+        } else if (region == 1) {
+            // Kenyon Cell & Mushroom Body Calyx Cloud: strictly inside dorsal central protocerebrum beside MB stalks
+            x = side * Math.Max(9f, Math.Min(34f, Math.Abs(x)));
+            y = Math.Max(4f, Math.Min(28f, y));
+            z = Math.Max(-14f, Math.Min(12f, z));
+        } else if (region == 2) {
+            // Central Complex & Medial Mushroom Body Lobes: strictly inside central core
+            x = Math.Max(-28f, Math.Min(28f, x));
+            y = Math.Max(-16f, Math.Min(12f, y));
+            z = Math.Max(-13f, Math.Min(14f, z));
+        } else {
+            // Region 3: Ventrolateral Neuropil, SEZ & Inner Optic Peduncle
+            if (Math.Abs(x) <= 46f) {
+                float maxDepthY = -4f;
+                float minDepthY = (Math.Abs(x) < 22f) ? -38f : -28f;
+                y = Math.Max(minDepthY, Math.Min(maxDepthY, y));
+                z = Math.Max(-16f, Math.Min(14f, z));
+            } else {
+                float cx = side * 72f, cy = -12f, cz = -2f;
+                float dx = (x - cx) / 29f;
+                float dy = (y - cy) / 29f;
+                float dz = (z - cz) / 16f;
+                float d2 = dx * dx + dy * dy + dz * dz;
+                if (d2 > 0.82f) {
+                    float s = (float)(Math.Sqrt(0.82 / d2));
+                    x = cx + (x - cx) * s;
+                    y = cy + (y - cy) * s;
+                    z = cz + (z - cz) * s;
+                }
+            }
+        }
+    }
+
+    private static void EnsureFlyWire3DShellInitialized() {
+        lock (ShellInitLock) {
+            if (ShellInitialized) return;
+            List<float> vx = new List<float>();
+            List<float> vy = new List<float>();
+            List<float> vz = new List<float>();
+            ShellTris.Clear();
+
+            // 1. Central Bilobed Protocerebrum + Ventral Subesophageal Zone (SEZ) High-Detail 3D Mesh (PartKind 0 & 2)
+            int uStepsC = 14, vStepsC = 24;
+            int baseC = vx.Count;
+            for (int u = 0; u <= uStepsC; u++) {
+                double theta = (u / (double)uStepsC) * Math.PI; // 0 = dorsal top, PI = ventral bottom
+                float sinT = (float)Math.Sin(theta);
+                float cosT = (float)Math.Cos(theta);
+                for (int v = 0; v < vStepsC; v++) {
+                    double phi = (v / (double)vStepsC) * Math.PI * 2.0;
+                    float cosP = (float)Math.Cos(phi);
+                    float sinP = (float)Math.Sin(phi);
+
+                    float rx = 53f, ry = 42f, rz = 30f;
+                    // Swell upper-lateral SLP domes (gives the distinct bilobed heart/butterfly upper contour in FlyWire)
+                    if (cosT > 0.10f) {
+                        rx += 5.5f * (float)Math.Sin(theta * 1.35);
+                    }
+                    // Ventral Subesophageal Zone (SEZ) tapers in X and forms the rounded lower-middle ganglion lobe
+                    if (cosT < -0.22f) {
+                        float ventFactor = (-cosT - 0.22f) / 0.78f;
+                        rx *= (1.0f - 0.38f * ventFactor);
+                        ry += 5.0f * ventFactor;
+                    }
+                    float x = rx * sinT * cosP;
+                    float y = ry * cosT;
+                    float z = rz * sinT * sinP;
+
+                    // Pronounced dorsal inter-hemispheric cleft at X = 0
+                    if (y > 12f) {
+                        float cleft = (float)Math.Exp(-(x * x) / 210.0);
+                        y -= 8.5f * cleft * ((y - 12f) / 30f);
+                    }
+                    vx.Add(x); vy.Add(y); vz.Add(z);
+                }
+            }
+            for (int u = 0; u < uStepsC; u++) {
+                for (int v = 0; v < vStepsC; v++) {
+                    int nv = (v + 1) % vStepsC;
+                    int i00 = baseC + u * vStepsC + v;
+                    int i01 = baseC + u * vStepsC + nv;
+                    int i10 = baseC + (u + 1) * vStepsC + v;
+                    int i11 = baseC + (u + 1) * vStepsC + nv;
+                    int kind = (u >= uStepsC - 3) ? 2 : 0;
+                    ShellTris.Add(new BrainTri3D { I0 = i00, I1 = i10, I2 = i11, PartKind = kind });
+                    ShellTris.Add(new BrainTri3D { I0 = i00, I1 = i11, I2 = i01, PartKind = kind });
+                }
+            }
+
+            // 2. Bilateral Left & Right Optic Lobes (Medulla + Lobula Kidney-Cup Hemispheres, PartKind = 1)
+            for (int sideIdx = 0; sideIdx < 2; sideIdx++) {
+                float side = (sideIdx == 0) ? -1.0f : 1.0f;
+                int uStepsO = 12, vStepsO = 18;
+                int baseO = vx.Count;
+                for (int u = 0; u <= uStepsO; u++) {
+                    double theta = (u / (double)uStepsO) * Math.PI;
+                    float sinT = (float)Math.Sin(theta);
+                    float cosT = (float)Math.Cos(theta);
+                    for (int v = 0; v < vStepsO; v++) {
+                        double phi = (v / (double)vStepsO) * Math.PI * 2.0;
+                        float cosP = (float)Math.Cos(phi);
+                        float sinP = (float)Math.Sin(phi);
+
+                        float lx = 38f * sinT * cosP;
+                        float ly = 39f * cosT;
+                        float lz = 24f * sinT * sinP;
+
+                        // Anatomical kidney-cup shaping positioned lower-lateral (Y centered at -10, seamlessly bridged at |X|=46)
+                        float worldX = side * 76f + lx;
+                        float distOut = Math.Max(0f, (Math.Abs(worldX) - 54f) / 58f);
+                        ly *= (0.85f + 0.28f * distOut);
+                        float worldY = -9f + ly - 5.5f * distOut;
+                        float worldZ = -2f + lz - 8.5f * distOut * distOut;
+
+                        vx.Add(worldX); vy.Add(worldY); vz.Add(worldZ);
+                    }
+                }
+                for (int u = 0; u < uStepsO; u++) {
+                    for (int v = 0; v < vStepsO; v++) {
+                        int nv = (v + 1) % vStepsO;
+                        int i00 = baseO + u * vStepsO + v;
+                        int i01 = baseO + u * vStepsO + nv;
+                        int i10 = baseO + (u + 1) * vStepsO + v;
+                        int i11 = baseO + (u + 1) * vStepsO + nv;
+                        ShellTris.Add(new BrainTri3D { I0 = i00, I1 = i10, I2 = i11, PartKind = 1 });
+                        ShellTris.Add(new BrainTri3D { I0 = i00, I1 = i11, I2 = i01, PartKind = 1 });
+                    }
+                }
+            }
+
+            // 3. Bilateral Inner Antennal / Ventrolateral Neuropil Lobes (Golden-Amber Inner Wireframe Spheres, PartKind = 4)
+            for (int sideIdx = 0; sideIdx < 2; sideIdx++) {
+                float side = (sideIdx == 0) ? -1.0f : 1.0f;
+                int uStepsA = 7, vStepsA = 12;
+                int baseA = vx.Count;
+                for (int u = 0; u <= uStepsA; u++) {
+                    double theta = (u / (double)uStepsA) * Math.PI;
+                    float sinT = (float)Math.Sin(theta);
+                    float cosT = (float)Math.Cos(theta);
+                    for (int v = 0; v < vStepsA; v++) {
+                        double phi = (v / (double)vStepsA) * Math.PI * 2.0;
+                        float x = side * 18.5f + 16.5f * sinT * (float)Math.Cos(phi);
+                        float y = -14.5f + 15.5f * cosT;
+                        float z = 3.0f + 14.0f * sinT * (float)Math.Sin(phi);
+                        vx.Add(x); vy.Add(y); vz.Add(z);
+                    }
+                }
+                for (int u = 0; u < uStepsA; u++) {
+                    for (int v = 0; v < vStepsA; v++) {
+                        int nv = (v + 1) % vStepsA;
+                        int i00 = baseA + u * vStepsA + v;
+                        int i01 = baseA + u * vStepsA + nv;
+                        int i10 = baseA + (u + 1) * vStepsA + v;
+                        int i11 = baseA + (u + 1) * vStepsA + nv;
+                        ShellTris.Add(new BrainTri3D { I0 = i00, I1 = i10, I2 = i11, PartKind = 4 });
+                        ShellTris.Add(new BrainTri3D { I0 = i00, I1 = i11, I2 = i01, PartKind = 4 });
+                    }
+                }
+            }
+
+            // 4. Bilateral 3D Cobalt-Blue Mushroom Bodies (Bulbous Dorsal Alpha Cap + Vertical Stalk + Horizontal Beta/Gamma Lobes, PartKind = 3)
+            for (int sideIdx = 0; sideIdx < 2; sideIdx++) {
+                float side = (sideIdx == 0) ? -1.0f : 1.0f;
+                float[,] spine = new float[,] {
+                    { side * 26f,  33f, -3f, 4.2f },
+                    { side * 26f,  29f, -2f, 9.2f },
+                    { side * 24f,  20f,  0f, 6.8f },
+                    { side * 22f,  10f,  3f, 6.2f },
+                    { side * 21f,   0f,  7f, 7.4f },
+                    { side * 14f,  -2f,  9f, 7.8f },
+                    { side *  3f,  -2f, 10f, 6.8f }
+                };
+                int rings = spine.GetLength(0);
+                int segs = 10;
+                int baseM = vx.Count;
+                for (int r = 0; r < rings; r++) {
+                    float sx = spine[r, 0], sy = spine[r, 1], sz = spine[r, 2], rad = spine[r, 3];
+                    for (int s = 0; s < segs; s++) {
+                        double ang = (s / (double)segs) * Math.PI * 2.0;
+                        float ox = (float)Math.Cos(ang) * rad * 0.88f;
+                        float oy = (float)Math.Sin(ang) * rad * 0.72f;
+                        float oz = (float)Math.Sin(ang) * rad * 0.90f;
+                        vx.Add(sx + ox); vy.Add(sy + oy); vz.Add(sz + oz);
+                    }
+                }
+                for (int r = 0; r < rings - 1; r++) {
+                    for (int s = 0; s < segs; s++) {
+                        int ns = (s + 1) % segs;
+                        int i00 = baseM + r * segs + s;
+                        int i01 = baseM + r * segs + ns;
+                        int i10 = baseM + (r + 1) * segs + s;
+                        int i11 = baseM + (r + 1) * segs + ns;
+                        ShellTris.Add(new BrainTri3D { I0 = i00, I1 = i10, I2 = i11, PartKind = 3 });
+                        ShellTris.Add(new BrainTri3D { I0 = i00, I1 = i11, I2 = i01, PartKind = 3 });
+                    }
+                }
+            }
+
+            ShellVX = vx.ToArray();
+            ShellVY = vy.ToArray();
+            ShellVZ = vz.ToArray();
+            ShellInitialized = true;
+        }
+    }
 
     // Persistent Training & Evolution Metrics
     public int Level = 1;
@@ -112,6 +662,36 @@ public class FlyBrainConnectome {
     public int NeuralSyncs = 0;
     public float SynapticGain = 1.0f;            // Increases via Hebbian learning (1.0 .. 2.8)
     public float LastPlasticityDelta = 0.0f;
+
+    // Evolutionary Algorithm (μ + λ Neuro-Evolution), Natural Selection & Biological Life Cycle State
+    public int Generation = 1;
+    public float LifeAge = 0.0f;                 // 0.0% .. 100.0% life cycle progression
+    public int LifeStage = 0;                    // 0 = S1:SEED (Porygon), 1 = S2:MATURE (Porygon2), 2 = S3:APEX (Porygon-Z)
+    public float FitnessScore = 76.0f;           // Evolutionary IDS Fitness (0..100, penalizes FN 3.5x)
+    public float DetectionAccuracy = 84.5f;      // Anomaly Detection Accuracy (50..99.9%)
+    public float RecallRate = 88.0f;             // True Positive Rate (100% - False Negative Rate)
+    public float F2Score {
+        get {
+            float denom = 5f * TruePositives + 4f * FalseNegatives + FalsePositives;
+            return denom > 0f ? (500f * TruePositives / denom) : RecallRate;
+        }
+    }
+    public int TruePositives = 32;
+    public int TrueNegatives = 68;
+    public int FalsePositives = 5;
+    public int FalseNegatives = 2;
+    public int GenTruePositives = 0;
+    public int GenFalseNegatives = 0;
+    public int PrunedTraitsCount = 0;
+    public string LastPrunedTrait = "NONE (GENOME_CLEAN)";
+    public string LastCrossSummary = "G1:SEED_ORIGIN";
+    public float MutationSigma = 0.08f;
+
+    // Genome: [0]=dlZ, [1]=ulZ, [2]=pingZ, [3]=portAndVtRisk, [4]=synRatio, [5]=entropy, [6]=thresholdBias, [7]=exploreGain
+    public float[] AnomalyGenome = new float[8];
+    public float[] EliteGenome = new float[8];
+    public float[] ReservedForFuture = null;
+    public float EliteFitness = 76.0f;
 
     public float DriveCuriosity = 0.65f;
     public float DriveHunger = 0.55f;
@@ -125,8 +705,170 @@ public class FlyBrainConnectome {
         get { return 80 + (Level - 1) * 60; }
     }
 
+    public int CpuStepsCompleted = 0;
+
+    public string GetLifeStageTag() {
+        if (LifeStage <= 0) return "S1:SEED";
+        if (LifeStage == 1) return "S2:MATURE";
+        return "S3:APEX";
+    }
+
+    public string GetLifeStageLabel() {
+        return GetLifeStageTag();
+    }
+
     public FlyBrainConnectome(int seed) {
         rng = new Random(seed);
+        EnsureFlyWire3DShellInitialized();
+
+        // Initialize 3D Anatomical Drosophila Connectome Coordinates (100% Confined Inside FlyWire Neuropil Compartments)
+        for (int i = 0; i < N; i++) {
+            if (i < 16) {
+                // Region 0: Pars Intercerebralis + Superior Lateral Protocerebrum (Golden) & Lateral Horn / Optic Tracts (Crimson-Pink)
+                NeuronRegion[i] = 0;
+                float side = (i < 8) ? -1.0f : 1.0f;
+                int localIdx = i % 8;
+                if (i == 0 || i == 8) {
+                    // Dorsal Midline Pars Intercerebralis (PI) Golden Tuft at top-center cleft (as in FlyWire reference)
+                    NeuronX[i] = side * 2.2f;
+                    NeuronY[i] = (i == 0) ? 26.5f : 30.5f;
+                    NeuronZ[i] = (i == 0) ? -1.5f : 2.0f;
+                } else if (localIdx < 4) {
+                    // Superior Lateral Protocerebrum (SLP) Golden-Yellow Arbors tucked inside upper-left & upper-right domes
+                    float t = (localIdx - 1) / 2.0f; // 0..1
+                    NeuronX[i] = side * (32f + t * 10f);
+                    NeuronY[i] = 24f - t * 6f;
+                    NeuronZ[i] = (localIdx % 2 == 0) ? 5f : -5f;
+                } else {
+                    // Anterior Optic Tubercle & Lateral Horn Crimson-Magenta Projection Neurons flanking the Mushroom Bodies
+                    int oIdx = localIdx - 4; // 0..3
+                    float t = oIdx / 3.0f;
+                    NeuronX[i] = side * (35f + t * 18f);
+                    NeuronY[i] = 14f - t * 16f;
+                    NeuronZ[i] = ((oIdx % 2 == 0) ? 6f : -4f);
+                }
+                ConfinePointInsideBrain(0, side, ref NeuronX[i], ref NeuronY[i], ref NeuronZ[i]);
+            } else if (i < 36) {
+                // Region 1: Mint-Green / Cyan Kenyon Cell & Calyx Clouds nestled tightly inside the Mushroom Body stalks
+                NeuronRegion[i] = 1;
+                int mIdx = i - 16;
+                float side = (mIdx < 10) ? -1.0f : 1.0f;
+                int k = mIdx % 10;
+                double ang = (k / 10.0) * Math.PI * 2.0;
+                float rHoriz = 4.5f + (k % 3) * 2.2f;
+                float rVert = 5.5f + (k % 4) * 2.0f;
+                NeuronX[i] = side * (16.5f + (float)Math.Cos(ang) * rHoriz);
+                NeuronY[i] = 15.5f + (float)Math.Sin(ang) * rVert;
+                NeuronZ[i] = (float)Math.Sin(ang * 1.7) * 5.5f;
+                ConfinePointInsideBrain(1, side, ref NeuronX[i], ref NeuronY[i], ref NeuronZ[i]);
+            } else if (i < 48) {
+                // Region 2: Central Complex & Horizontal Mushroom Body Beta/Gamma Lobes
+                NeuronRegion[i] = 2;
+                int cIdx = i - 36;
+                float side = (cIdx % 2 == 0) ? -1.0f : 1.0f;
+                float t = (cIdx / 2) / 5.0f; // 0..1
+                NeuronX[i] = side * (3.5f + t * 16.5f);
+                NeuronY[i] = -2.0f + (float)Math.Sin(cIdx * 1.1) * 4.5f;
+                NeuronZ[i] = 6.5f + (float)Math.Cos(cIdx * 0.9) * 4.0f;
+                ConfinePointInsideBrain(2, side, ref NeuronX[i], ref NeuronY[i], ref NeuronZ[i]);
+            } else {
+                // Region 3: Ventrolateral Neuropil, SEZ & Inner Optic Lobula Motor/Attack Pathways (Emerald-Green & Violet)
+                NeuronRegion[i] = 3;
+                int gIdx = i - 48; // 0..15
+                float side = (gIdx < 4) ? -1.0f : 1.0f; // Denser green motor arbor on the right hemisphere as in FlyWire reference
+                int k = (gIdx < 4) ? gIdx : (gIdx - 4);
+                float span = (gIdx < 4) ? 3.0f : 11.0f;
+                float t = k / span; // 0 (ventral SEZ) .. 1 (lateral optic peduncle / lobula)
+                NeuronX[i] = side * (6f + t * 52f);
+                NeuronY[i] = -27f + (float)Math.Sin(t * Math.PI) * 16f + (k % 3 - 1) * 3.0f;
+                NeuronZ[i] = (k % 2 == 0 ? 4f : -4f) * (1.0f - 0.3f * t);
+                ConfinePointInsideBrain(3, side, ref NeuronX[i], ref NeuronY[i], ref NeuronZ[i]);
+            }
+        }
+
+        // Build Fine-Grained Organic 3D Dendritic Arborizations & Curved Axonal Tracts (Strictly Confined Inside Shell!)
+        DendriteBranches.Clear();
+        Random arborRng = new Random(seed ^ 0x5F3759DF);
+        for (int i = 0; i < N; i++) {
+            byte cr, cg, cb;
+            float side = (NeuronX[i] < 0f) ? -1.0f : 1.0f;
+            int reg = NeuronRegion[i];
+
+            if (i == 0 || i == 8 || i == 11 || (i < 16 && (i % 8) < 4)) {
+                // Golden-Yellow Pars Intercerebralis & Superior Lateral Protocerebrum Arbors
+                cr = 252; cg = 214; cb = 32;
+            } else if (i < 16) {
+                // Crimson-Pink Lateral Horn & Optic Projection Tracts
+                cr = 248; cg = 48; cb = 118;
+            } else if (i < 36) {
+                // Mint-Green & Aqua Kenyon Cell Calyx Clouds
+                if (i % 2 == 0) { cr = 36; cg = 246; cb = 168; }
+                else { cr = 52; cg = 228; cb = 205; }
+            } else if (i < 48) {
+                // Cobalt-Blue & Deep Amber Central Complex / Antennal Lobes
+                if (i % 2 == 0) { cr = 46; cg = 148; cb = 250; }
+                else { cr = 218; cg = 165; cb = 38; }
+            } else {
+                // Bright Emerald-Green & Violet Ventrolateral / Optic-Lobula Motor Tracts
+                if (i >= 52 && (i % 3 == 0)) { cr = 162; cg = 88; cb = 248; }
+                else { cr = 42; cg = 248; cb = 78; }
+            }
+
+            float sx = NeuronX[i], sy = NeuronY[i], sz = NeuronZ[i];
+            int primaryCount = (reg == 1) ? 4 : 3;
+            for (int p = 0; p < primaryCount; p++) {
+                double a1 = arborRng.NextDouble() * Math.PI * 2.0;
+                double a2 = (arborRng.NextDouble() - 0.5) * Math.PI * 0.85;
+                float len1 = (reg == 1) ? (3.4f + (float)arborRng.NextDouble() * 2.8f) : (4.2f + (float)arborRng.NextDouble() * 3.6f);
+                float p1x = sx + (float)(Math.Cos(a1) * Math.Cos(a2)) * len1;
+                float p1y = sy + (float)Math.Sin(a2) * len1;
+                float p1z = sz + (float)(Math.Sin(a1) * Math.Cos(a2)) * len1 * 0.70f;
+                ConfinePointInsideBrain(reg, side, ref p1x, ref p1y, ref p1z);
+
+                DendriteBranches.Add(new DendriteSeg3D {
+                    X0 = sx, Y0 = sy, Z0 = sz,
+                    X1 = p1x, Y1 = p1y, Z1 = p1z,
+                    NeuronIdx = i, R = cr, G = cg, B = cb, Thickness = 1.25f, IsTip = false
+                });
+
+                for (int b = 0; b < 2; b++) {
+                    double b1 = a1 + (b == 0 ? 0.58 : -0.58) + (arborRng.NextDouble() - 0.5) * 0.30;
+                    double b2 = a2 + (arborRng.NextDouble() - 0.5) * 0.55;
+                    float len2 = len1 * (0.58f + (float)arborRng.NextDouble() * 0.22f);
+                    float p2x = p1x + (float)(Math.Cos(b1) * Math.Cos(b2)) * len2;
+                    float p2y = p1y + (float)Math.Sin(b2) * len2;
+                    float p2z = p1z + (float)(Math.Sin(b1) * Math.Cos(b2)) * len2 * 0.70f;
+                    ConfinePointInsideBrain(reg, side, ref p2x, ref p2y, ref p2z);
+
+                    DendriteBranches.Add(new DendriteSeg3D {
+                        X0 = p1x, Y0 = p1y, Z0 = p1z,
+                        X1 = p2x, Y1 = p2y, Z1 = p2z,
+                        NeuronIdx = i, R = cr, G = cg, B = cb, Thickness = 0.90f, IsTip = true
+                    });
+                }
+            }
+
+            // Add anatomically faithful curved multi-segment axonal tracts inside the brain shell:
+            if (i < 16 && (i % 8) >= 4) {
+                // Crimson-Pink Curved Lateral Tract sweeping from Mushroom Body Calyx down-outward to Optic Peduncle
+                float m1x = side * 32f, m1y = 16f, m1z = 2f;
+                float m2x = side * 44f, m2y = 5f,  m2z = 0f;
+                float m3x = side * 56f, m3y = -6f, m3z = -2f;
+                DendriteBranches.Add(new DendriteSeg3D { X0 = m1x, Y0 = m1y, Z0 = m1z, X1 = sx, Y1 = sy, Z1 = sz, NeuronIdx = i, R = cr, G = cg, B = cb, Thickness = 1.35f, IsTip = false });
+                DendriteBranches.Add(new DendriteSeg3D { X0 = sx, Y0 = sy, Z0 = sz, X1 = m2x, Y1 = m2y, Z1 = m2z, NeuronIdx = i, R = cr, G = cg, B = cb, Thickness = 1.25f, IsTip = false });
+                DendriteBranches.Add(new DendriteSeg3D { X0 = m2x, Y0 = m2y, Z0 = m2z, X1 = m3x, Y1 = m3y, Z1 = m3z, NeuronIdx = i, R = cr, G = cg, B = cb, Thickness = 1.10f, IsTip = true });
+            } else if (reg == 3 && i >= 52) {
+                // Emerald-Green & Violet Curved Ventrolateral-to-Optic-Lobula Tract
+                float w1x = side * 26f, w1y = -16f, w1z = 2f;
+                float w2x = side * 46f, w2y = -11f, w2z = 0f;
+                float w3x = side * 66f, w3y = -14f + (i % 3 - 1) * 6f, w3z = -2f;
+                ConfinePointInsideBrain(3, side, ref w3x, ref w3y, ref w3z);
+                DendriteBranches.Add(new DendriteSeg3D { X0 = sx, Y0 = sy, Z0 = sz, X1 = w1x, Y1 = w1y, Z1 = w1z, NeuronIdx = i, R = cr, G = cg, B = cb, Thickness = 1.30f, IsTip = false });
+                DendriteBranches.Add(new DendriteSeg3D { X0 = w1x, Y0 = w1y, Z0 = w1z, X1 = w2x, Y1 = w2y, Z1 = w2z, NeuronIdx = i, R = cr, G = cg, B = cb, Thickness = 1.20f, IsTip = false });
+                DendriteBranches.Add(new DendriteSeg3D { X0 = w2x, Y0 = w2y, Z0 = w2z, X1 = w3x, Y1 = w3y, Z1 = w3z, NeuronIdx = i, R = cr, G = cg, B = cb, Thickness = 1.05f, IsTip = true });
+            }
+        }
+
         for (int i = 0; i < N; i++) {
             for (int j = 0; j < N; j++) {
                 if (i == j) continue;
@@ -142,24 +884,281 @@ public class FlyBrainConnectome {
             }
         }
 
-        // Functional pathways:
-        // Sensory 0..3 (Target Node Left/Right/Near) -> Curiosity & Steering
+        // Functional pathways (including Neuron 11 = VirusTotal Threat Sensor -> Alert & Motor Attack):
         W[0, 49] = 0.58f;
         W[1, 50] = 0.58f;
         W[2, 56] = 0.65f;
         W[3, 36] = 0.55f;
 
-        // Sensory 4..7 (Data Packet / Training Orb) -> Hunger & Thrust & Beam
         W[4, 49] = 0.62f;
         W[5, 50] = 0.62f;
         W[6, 48] = 0.72f;
         W[7, 60] = 0.85f;
 
-        // Sensory 8..11 (Firewall Anomaly / Peer Sync) -> Alert & TriAttack / Sync / QuantumBlink
         W[8, 42] = 0.78f;
         W[8, 61] = 0.82f;
         W[9, 62] = 0.80f;
         W[10, 63] = 0.75f;
+        W[11, 42] = 0.88f; // VirusTotal API Malicious Hit -> Central Alert
+        W[11, 61] = 0.90f; // VirusTotal API Malicious Hit -> Tri-Attack / Purge
+
+        // Initialize Evolutionary Anomaly Classifier Genome
+        AnomalyGenome[0] = 0.62f + (float)(rng.NextDouble() * 0.28); // DL Z-Score weight
+        AnomalyGenome[1] = 0.54f + (float)(rng.NextDouble() * 0.28); // UL Z-Score weight
+        AnomalyGenome[2] = 0.42f + (float)(rng.NextDouble() * 0.24); // Ping Z-Score weight
+        AnomalyGenome[3] = 0.96f + (float)(rng.NextDouble() * 0.30); // Port & VirusTotal Threat Risk weight
+        AnomalyGenome[4] = 0.88f + (float)(rng.NextDouble() * 0.28); // SYN Flood / Half-open weight
+        AnomalyGenome[5] = 0.78f + (float)(rng.NextDouble() * 0.26); // Flow Entropy / NDR Risk weight
+        AnomalyGenome[6] = 1.28f + (float)((rng.NextDouble() - 0.5) * 0.22); // Classification Bias Threshold (Lower = fewer FN)
+        AnomalyGenome[7] = 1.00f + (float)((rng.NextDouble() - 0.5) * 0.20); // Adaptive Exploration Gain
+        Array.Copy(AnomalyGenome, EliteGenome, 8);
+    }
+
+    public float EvaluateAnomalyProbability(float dlZ, float ulZ, float pingZ, float portAndVtRisk, float synRisk, float ndrEntropy) {
+        float z = AnomalyGenome[0] * Math.Max(0f, dlZ)
+                + AnomalyGenome[1] * Math.Max(0f, ulZ)
+                + AnomalyGenome[2] * Math.Max(0f, pingZ)
+                + AnomalyGenome[3] * portAndVtRisk
+                + AnomalyGenome[4] * synRisk
+                + AnomalyGenome[5] * ndrEntropy
+                - AnomalyGenome[6];
+        return 1.0f / (1.0f + (float)Math.Exp(-z));
+    }
+
+    // Multi-Core CPU Accelerated Evolutionary Training Batch ((1+1)-ES + Heavy False-Negative Penalty)
+    public void CpuTrainMicroBatch(int totalSteps, float liveDlZ, float liveUlZ, float livePingZ, float liveAnomIdx, uint seedVal) {
+        uint s = seedVal ^ (uint)(Generation * 7919 + Level * 104729 + 1234567);
+        if (s == 0) s = 2463534242u;
+
+        float[] bestG = new float[8];
+        float[] candG = new float[8];
+        Array.Copy(AnomalyGenome, bestG, 8);
+
+        int miniBatchSize = 25;
+        int epochs = Math.Max(1, totalSteps / miniBatchSize);
+        float sigma = MutationSigma;
+
+        int totalCorrect = 0;
+        int totalSamples = 0;
+        int batchTP = 0, batchTN = 0, batchFP = 0, batchFN = 0;
+
+        for (int ep = 0; ep < epochs; ep++) {
+            for (int g = 0; g < 8; g++) {
+                s ^= s << 13; s ^= s >> 17; s ^= s << 5;
+                float u1 = ((s & 0xFFFF) / 65535.0f) - 0.5f;
+                s ^= s << 13; s ^= s >> 17; s ^= s << 5;
+                float u2 = ((s & 0xFFFF) / 65535.0f) - 0.5f;
+                float gauss = (u1 + u2) * sigma;
+                candG[g] = Math.Max(0.08f, Math.Min(3.20f, bestG[g] + gauss));
+            }
+
+            float bestLoss = 0f, candLoss = 0f;
+            int epTP = 0, epTN = 0, epFP = 0, epFN = 0;
+
+            for (int m = 0; m < miniBatchSize; m++) {
+                s ^= s << 13; s ^= s >> 17; s ^= s << 5;
+                bool isAnomaly = ((s & 0xFF) < 98); // ~38% adversarial / VirusTotal anomaly samples
+
+                s ^= s << 13; s ^= s >> 17; s ^= s << 5;
+                float r0 = (s & 0x3FF) / 1023.0f;
+                s ^= s << 13; s ^= s >> 17; s ^= s << 5;
+                float r1 = (s & 0x3FF) / 1023.0f;
+                s ^= s << 13; s ^= s >> 17; s ^= s << 5;
+                float r2 = (s & 0x3FF) / 1023.0f;
+
+                float fDl, fUl, fPg, fPortVt, fSyn, fEnt;
+                if (isAnomaly) {
+                    int attackType = (int)(s % 5); // 0=DL_Surge, 1=UL_Exfil, 2=PortScan, 3=SYN_Flood, 4=VirusTotal_Malicious_IP
+                    fDl     = (attackType == 0) ? (1.5f + r0 * 2.3f) : (Math.Max(0f, liveDlZ) * 0.3f + r0 * 0.7f);
+                    fUl     = (attackType == 1) ? (1.4f + r1 * 2.1f) : (Math.Max(0f, liveUlZ) * 0.3f + r1 * 0.6f);
+                    fPg     = (attackType == 2) ? (1.3f + r2 * 1.9f) : (r2 * 0.5f);
+                    fPortVt = (attackType == 2 || attackType == 4) ? (0.80f + r0 * 0.20f) : (r1 * 0.35f);
+                    fSyn    = (attackType == 1 || attackType == 3) ? (0.72f + r2 * 0.28f) : (r0 * 0.25f);
+                    fEnt    = 0.62f + Math.Max(liveAnomIdx * 0.3f, r1 * 0.38f);
+                } else {
+                    fDl     = r0 * 0.62f;
+                    fUl     = r1 * 0.52f;
+                    fPg     = r2 * 0.48f;
+                    fPortVt = (r0 > 0.93f) ? 0.22f : 0.02f;
+                    fSyn    = r1 * 0.14f;
+                    fEnt    = r2 * 0.25f;
+                }
+
+                float zBest = bestG[0] * fDl + bestG[1] * fUl + bestG[2] * fPg + bestG[3] * fPortVt + bestG[4] * fSyn + bestG[5] * fEnt - bestG[6];
+                float pBest = 1.0f / (1.0f + (float)Math.Exp(-zBest));
+
+                float zCand = candG[0] * fDl + candG[1] * fUl + candG[2] * fPg + candG[3] * fPortVt + candG[4] * fSyn + candG[5] * fEnt - candG[6];
+                float pCand = 1.0f / (1.0f + (float)Math.Exp(-zCand));
+
+                float target = isAnomaly ? 1.0f : 0.0f;
+                float errBest = target - pBest;
+                float errCand = target - pCand;
+
+                // CRITICAL: 3.5x Heavy Penalty on False Negatives (missing an anomaly/VT threat is penalized 3.5x harder!)
+                float fnPenaltyWeight = isAnomaly ? 3.5f : 1.0f;
+                bestLoss += fnPenaltyWeight * errBest * errBest;
+                candLoss += fnPenaltyWeight * errCand * errCand;
+
+                bool pred = (pBest >= 0.5f);
+                if (pred && isAnomaly) epTP++;
+                else if (!pred && !isAnomaly) epTN++;
+                else if (pred && !isAnomaly) epFP++;
+                else epFN++;
+            }
+
+            if (candLoss < bestLoss) {
+                Array.Copy(candG, bestG, 8);
+            }
+
+            batchTP += epTP;
+            batchTN += epTN;
+            batchFP += epFP;
+            batchFN += epFN;
+            totalCorrect += (epTP + epTN);
+            totalSamples += miniBatchSize;
+        }
+
+        Array.Copy(bestG, AnomalyGenome, 8);
+        CpuStepsCompleted += totalSteps;
+        TruePositives += batchTP / 10;
+        TrueNegatives += batchTN / 10;
+        FalsePositives += Math.Max(0, batchFP / 15);
+        FalseNegatives += Math.Max(0, batchFN / 18);
+        GenTruePositives += batchTP / 10;
+        GenFalseNegatives += batchFN / 18;
+
+        float batchAcc = (totalSamples > 0) ? ((float)totalCorrect * 100.0f / totalSamples) : 78.0f;
+        float evoCap = Math.Min(99.5f, 82.0f + (Generation - 1) * 1.35f + LifeStage * 1.40f + (LifeAge * 0.03f));
+        float targetAcc = Math.Min(evoCap, Math.Max(68.0f, batchAcc * 0.88f + (Generation - 1) * 0.85f));
+        DetectionAccuracy = DetectionAccuracy * 0.90f + targetAcc * 0.10f;
+
+        float precision = (batchTP + batchFP > 0) ? ((float)batchTP / (batchTP + batchFP)) : 0.85f;
+        float recall = (batchTP + batchFN > 0) ? ((float)batchTP / (batchTP + batchFN)) : 0.88f;
+        RecallRate = RecallRate * 0.85f + (recall * 100.0f) * 0.15f;
+
+        // F2-Score weighs Recall (avoiding False Negatives) 2x higher than Precision
+        float f2 = (4f * precision + recall > 0.01f) ? (5f * precision * recall / (4f * precision + recall)) : 0.82f;
+        float fnDirectPenalty = (batchFN > 0 && batchTP > 0) ? Math.Min(12.0f, ((float)batchFN / (batchTP + batchFN)) * 28.0f) : 0f;
+        float rawFit = Math.Min(evoCap - 0.4f, Math.Max(50.0f, f2 * 83.0f - fnDirectPenalty + (Generation - 1) * 1.25f + LifeStage * 1.20f + SynapticGain * 1.8f));
+        FitnessScore = FitnessScore * 0.88f + rawFit * 0.12f;
+
+        if (FitnessScore > EliteFitness) {
+            EliteFitness = FitnessScore;
+            Array.Copy(AnomalyGenome, EliteGenome, 8);
+        }
+    }
+
+    // Post-Generation Natural Selection, BLX-alpha Crossover & Negative Trait Pruning Audit
+    public void CrossoverAndAuditGeneration(FlyBrainConnectome alphaParent, string selfName, string alphaName, int seedOffset,
+        out string auditSummaryLine, out string jsonlRecord) {
+        Random crng = new Random(seedOffset ^ Environment.TickCount);
+        int prevGen = Generation;
+        float preFit = FitnessScore;
+        float preAcc = DetectionAccuracy;
+        float preFnRate = (GenTruePositives + GenFalseNegatives > 0)
+            ? ((float)GenFalseNegatives * 100.0f / (GenTruePositives + GenFalseNegatives))
+            : 2.0f;
+
+        Generation++;
+        LifeAge = 0.0f;
+        LifeStage = 0;
+        MutationSigma = Math.Max(0.018f, MutationSigma * 0.91f);
+
+        List<string> prunedTraits = new List<string>();
+        string selectionMode = "BLX_ALPHA_CROSS";
+
+        // 1. NATURAL SELECTION CHECK: Did this individual regress in Fitness or suffer high False Negatives (>8% FN)?
+        bool regressedFitness = (preFit < EliteFitness - 1.8f);
+        bool excessiveFalseNegatives = (preFnRate > 8.5f);
+        if (regressedFitness || excessiveFalseNegatives) {
+            selectionMode = excessiveFalseNegatives ? "NAT_SEL_CULL_HIGH_FN" : "NAT_SEL_CULL_REGRESSION";
+            prunedTraits.Add(excessiveFalseNegatives ? string.Format("EXTINCT_FN({0:0.0}%)", preFnRate) : "EXTINCT_LOW_FIT");
+            // Natural selection replaces the defective genome with 80% Swarm Alpha + 20% Elite Ancestor
+            for (int g = 0; g < 8; g++) {
+                float pA = (alphaParent != null) ? alphaParent.AnomalyGenome[g] : EliteGenome[g];
+                AnomalyGenome[g] = pA * 0.80f + EliteGenome[g] * 0.20f;
+            }
+        } else {
+            // Standard BLX-alpha Genetic Crossover (68% Alpha Parent + 32% Self) + Gaussian Mutation
+            for (int g = 0; g < 8; g++) {
+                float pA = (alphaParent != null) ? alphaParent.AnomalyGenome[g] : AnomalyGenome[g];
+                float pB = AnomalyGenome[g];
+                float blend = pA * 0.68f + pB * 0.32f;
+                float mut = (float)((crng.NextDouble() - 0.5) * 2.0 * MutationSigma);
+                AnomalyGenome[g] = Math.Max(0.08f, Math.Min(3.20f, blend + mut));
+            }
+        }
+
+        // 2. POST-GENERATION NEGATIVE TRAIT AUDIT (Preventing Negative Traits from Transmitting to Gen G+1)
+        // Audit Rule A: Prevent False-Negative Blindness (Threshold Bias gene[6] drifting too high > 1.42)
+        float alphaBias = (alphaParent != null) ? alphaParent.AnomalyGenome[6] : 1.24f;
+        if (AnomalyGenome[6] > 1.42f || AnomalyGenome[6] > alphaBias + 0.08f) {
+            AnomalyGenome[6] = Math.Min(1.28f, alphaBias * 0.96f);
+            prunedTraits.Add("PRUNED:HIGH_FN_BIAS");
+            PrunedTraitsCount++;
+        }
+
+        // Audit Rule B: Prevent Loss of VirusTotal / Port Threat Sensitivity (gene[3] & gene[4])
+        float minPortVtGene = (alphaParent != null) ? Math.Max(0.95f, alphaParent.AnomalyGenome[3] * 0.96f) : 0.95f;
+        if (AnomalyGenome[3] < minPortVtGene) {
+            AnomalyGenome[3] = minPortVtGene + 0.04f;
+            prunedTraits.Add("PRUNED:WEAK_VT_GENE");
+            PrunedTraitsCount++;
+        }
+        float minSynGene = (alphaParent != null) ? Math.Max(0.88f, alphaParent.AnomalyGenome[4] * 0.95f) : 0.88f;
+        if (AnomalyGenome[4] < minSynGene) {
+            AnomalyGenome[4] = minSynGene + 0.03f;
+            prunedTraits.Add("PRUNED:WEAK_SYN_GENE");
+            PrunedTraitsCount++;
+        }
+
+        // Audit Rule C: Synaptic Connectome Inheritance & Apoptosis of Weakened Alert Axons
+        if (alphaParent != null && alphaParent != this) {
+            for (int i = 0; i < N; i++) {
+                for (int j = 0; j < N; j++) {
+                    if (alphaParent.W[i, j] > 0.01f || W[i, j] > 0.01f) {
+                        float wCross = alphaParent.W[i, j] * 0.65f + W[i, j] * 0.35f;
+                        if (crng.NextDouble() < 0.10) {
+                            wCross += (float)((crng.NextDouble() - 0.48) * MutationSigma);
+                        }
+                        W[i, j] = Math.Max(0f, Math.Min(1.45f, wCross));
+                    }
+                }
+            }
+            if (alphaParent.FitnessScore > FitnessScore) {
+                FitnessScore = FitnessScore * 0.40f + alphaParent.FitnessScore * 0.60f;
+            }
+            if (alphaParent.DetectionAccuracy > DetectionAccuracy) {
+                DetectionAccuracy = DetectionAccuracy * 0.40f + alphaParent.DetectionAccuracy * 0.60f;
+            }
+        }
+        // Guarantee critical sensory->attack axons never decay (VirusTotal neuron 11 & Anomaly neurons 7..10)
+        if (W[11, 61] < 0.85f || W[8, 61] < 0.80f) {
+            W[11, 61] = Math.Max(0.92f, W[11, 61]);
+            W[8, 61] = Math.Max(0.85f, W[8, 61]);
+            prunedTraits.Add("PRUNED:AXON_DECAY");
+            PrunedTraitsCount++;
+        }
+
+        SynapticGain = Math.Min(2.65f, SynapticGain + 0.04f);
+        EliteFitness = Math.Max(EliteFitness, FitnessScore);
+        Array.Copy(AnomalyGenome, EliteGenome, 8);
+        GenTruePositives = 0;
+        GenFalseNegatives = 0;
+
+        LastPrunedTrait = (prunedTraits.Count > 0) ? string.Join("+", prunedTraits.ToArray()) : "AUDIT_OK(0_NEG_TRAITS)";
+        LastCrossSummary = string.Format("G{0}->G{1}x{2} [{3}]", prevGen, Generation, alphaName, LastPrunedTrait);
+
+        string ts = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+        auditSummaryLine = string.Format("[{0}] [GEN_{1}_AUDIT] {2} x {3} ({4}) | FIT:{5:0.0}->{6:0.0} ACC:{7:0.0}% FN_RATE:{8:0.1}% | {9}",
+            DateTime.Now.ToString("HH:mm:ss"), Generation, selfName, alphaName, selectionMode,
+            preFit, FitnessScore, DetectionAccuracy, preFnRate, LastPrunedTrait);
+
+        jsonlRecord = string.Format(System.Globalization.CultureInfo.InvariantCulture,
+            "{{\"timestamp\":\"{0}\",\"agent\":\"{1}\",\"prev_gen\":{2},\"new_gen\":{3},\"alpha_parent\":\"{4}\",\"selection_mode\":\"{5}\",\"pre_fit\":{6:0.00},\"post_fit\":{7:0.00},\"accuracy\":{8:0.00},\"fn_rate_pct\":{9:0.00},\"pruned_traits\":\"{10}\",\"genome\":[{11:0.000},{12:0.000},{13:0.000},{14:0.000},{15:0.000},{16:0.000},{17:0.000},{18:0.000}]}}",
+            ts, selfName, prevGen, Generation, alphaName, selectionMode, preFit, FitnessScore, DetectionAccuracy, preFnRate, LastPrunedTrait,
+            AnomalyGenome[0], AnomalyGenome[1], AnomalyGenome[2], AnomalyGenome[3],
+            AnomalyGenome[4], AnomalyGenome[5], AnomalyGenome[6], AnomalyGenome[7]);
     }
 
     public bool HasSkill(int requiredLevel) {
@@ -285,6 +1284,7 @@ public class Porygon3DAvatar {
         public int[] Indices;
         public Color BaseColor;
         public float DepthBias;
+        public Vec3 LocalNormal;
         public Face3D(Color col, float bias, params int[] idx) {
             BaseColor = col;
             DepthBias = bias;
@@ -310,9 +1310,13 @@ public class Porygon3DAvatar {
         public string LastAnomalySummary;
     }
 
+    public static float GetDepthScale(float z) {
+        return Clamp(460f / (460f - z), 0.54f, 1.52f);
+    }
+
     public class DataPacket {
-        public float X, Y;
-        public float VX, VY;
+        public float X, Y, Z;
+        public float VX, VY, VZ;
         public float floatRot;
         public int Kind; // 0 = Real Normal Flow, 1 = New External Host / Elevated Flow Orb, 2 = Real Network Anomaly
         public int HP;
@@ -340,10 +1344,10 @@ public class Porygon3DAvatar {
         public FlyBrainConnectome Brain;
         public Color AuraColor;
 
-        public float PosX, PosY;
-        public float VelX, VelY;
-        public float HomeX, HomeY;
-        public float WaypointX, WaypointY;
+        public float PosX, PosY, PosZ;
+        public float VelX, VelY, VelZ;
+        public float HomeX, HomeY, HomeZ;
+        public float WaypointX, WaypointY, WaypointZ;
         public int WaypointTimer = 0;
 
         public float Yaw = 0.58f;
@@ -370,9 +1374,13 @@ public class Porygon3DAvatar {
         public PointF TriAttackTarget = PointF.Empty;
         public float QuantumBlinkTimer = 0.0f; // Skill LVL 5: Quantum Overclock Warp
         public PointF BlinkStartPt = PointF.Empty;
+        public float BlinkStartZ = 0.0f;
         public float ScanWaveTimer = 0.0f;     // Skill LVL 6: Deep Sonar Scan Wave
         public int SyncCooldown = 0;
         public float LevelUpBannerTimer = 0.0f;
+        public string LevelUpBannerText = "★ EVO CROSSOVER // GEN UP! ★";
+        public Vec3[] TvBuf;
+        public PointF[] PvBuf;
     }
 
     public List<PorygonAgent> Agents = new List<PorygonAgent>();
@@ -381,6 +1389,32 @@ public class Porygon3DAvatar {
     public DataPacket HoveredPacket = null;
     public PorygonAgent HoveredAgent = null;
     public RealTelemetryFeed LatestFeed;
+    public List<Rectangle> MonitorRects = new List<Rectangle>();
+    public Rectangle PrimaryRect;
+
+    // 3D Meshes for Life Cycle Morphogenesis (Stage 0: Porygon -> Stage 1: Porygon2 -> Stage 2: Porygon-Z)
+    public ModelData Stage0Model = null;
+    public ModelData Stage1Model = null;
+    public ModelData Stage2Model = null;
+
+    // Live CPU Multi-Core Evolutionary Training, Lineage Audit & VirusTotal Metrics
+    public int CpuEvoStepsPerSec = 18750;
+    public int CpuTrainingStepsPerSec { get { return CpuEvoStepsPerSec; } }
+    public int HighestGeneration = 1;
+    public float BestSwarmFitness = 86.0f;
+    public float AvgSwarmAccuracy = 91.5f;
+    public int TotalCrossovers = 0;
+    public int TotalPrunedTraits = 0;
+    public string LastLineageAuditSummary = "GEN_AUDIT // Waiting for first G1->G2 crossover...";
+    public int VtApiQueries = 0;
+    public int VtMaliciousHits = 0;
+    public int VtCleanVerified = 0;
+    public string LastVtVerdictSummary = "VT_API // Connected to 192.168.2.222:5080";
+    public string LastVtVerdict { get { return LastVtVerdictSummary; } }
+    public int SelectedBrainAgentIndex = 0;
+    public DateTime LastManualBrainSelectUtc = DateTime.MinValue;
+    public bool BrainAutoFocusedOnThreat = false;
+    private int cpuEvoBatchCounter = 0;
 
     private object packetLock = new object();
     private Random rng = new Random(1337);
@@ -393,44 +1427,183 @@ public class Porygon3DAvatar {
         }
     }
 
+    private static string LineageJsonlPath {
+        get {
+            string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "HackerWallpaper");
+            return Path.Combine(dir, "porygon_lineage_log.jsonl");
+        }
+    }
+
+    private static string ProjectLineageAuditLogPath {
+        get {
+            return @"C:\Users\CarlosAlbertoAcevesC\Desktop\03-ciberseguridad-soc\porygon-cyber-ids-wallpaper\logs\porygon_lineage_audit.log";
+        }
+    }
+
+    private void AppendLineageRecord(string auditSummaryLine, string jsonlRecord) {
+        try {
+            string dir1 = Path.GetDirectoryName(LineageJsonlPath);
+            if (!Directory.Exists(dir1)) Directory.CreateDirectory(dir1);
+            File.AppendAllText(LineageJsonlPath, jsonlRecord + "\r\n", Encoding.UTF8);
+
+            string dir2 = Path.GetDirectoryName(ProjectLineageAuditLogPath);
+            if (!Directory.Exists(dir2)) Directory.CreateDirectory(dir2);
+            File.AppendAllText(ProjectLineageAuditLogPath, auditSummaryLine + "\r\n", Encoding.UTF8);
+        } catch { }
+    }
+
+    public void InjectVirusTotalSensorySignal(string targetIp, int maliciousCount, int suspiciousCount, float threatScore, string verdictSummary) {
+        InjectVirusTotalSensorySignal(maliciousCount > 0 || suspiciousCount > 1 || threatScore >= 0.45f, threatScore, targetIp, verdictSummary);
+    }
+
+    public void InjectVirusTotalSensorySignal(bool isMalicious, float threatScore, string targetIp, string verdictSummary) {
+        lock (packetLock) {
+            VtApiQueries++;
+            if (isMalicious) VtMaliciousHits++;
+            else VtCleanVerified++;
+            LastVtVerdictSummary = verdictSummary;
+
+            for (int i = 0; i < Agents.Count; i++) {
+                FlyBrainConnectome br = Agents[i].Brain;
+                if (isMalicious) {
+                    // Excite Neuron 11 (VirusTotal Threat Sensor) & Central Alert Neurons (42..44)
+                    br.V[11] = 1.15f;
+                    br.SpikeGlow[11] = 1.0f;
+                    br.V[42] = Math.Max(br.V[42], 0.98f);
+                    br.SpikeGlow[42] = 1.0f;
+                    br.DriveAlert = Math.Min(1.0f, br.DriveAlert + 0.35f);
+                    br.TruePositives++;
+                    br.GenTruePositives++;
+                } else {
+                    // Verified clean by VirusTotal -> reinforce True Negative baseline & reduce false alarms
+                    br.V[11] = 0.25f;
+                    br.SpikeGlow[11] = Math.Max(br.SpikeGlow[11], 0.45f);
+                    br.TrueNegatives++;
+                }
+            }
+        }
+    }
+
+    public void RefreshMonitors(int fallbackW, int fallbackH) {
+        List<string> names;
+        int tw, th;
+        HackerWallpaperForm.QueryPhysicalMonitors(out MonitorRects, out names, out PrimaryRect, out tw, out th);
+        if (MonitorRects.Count == 0) {
+            PrimaryRect = new Rectangle(0, 0, fallbackW, fallbackH);
+            MonitorRects.Add(PrimaryRect);
+        }
+    }
+
+    public Rectangle GetContainingOrNearestMonitor(float x, float y) {
+        int ix = (int)x, iy = (int)y;
+        for (int i = 0; i < MonitorRects.Count; i++) {
+            if (MonitorRects[i].Contains(ix, iy)) return MonitorRects[i];
+        }
+        Rectangle best = PrimaryRect;
+        float bestDistSq = float.MaxValue;
+        for (int i = 0; i < MonitorRects.Count; i++) {
+            Rectangle m = MonitorRects[i];
+            float cx = Clamp(x, m.Left + 40, m.Right - 40);
+            float cy = Clamp(y, m.Top + 40, m.Bottom - 40);
+            float dx = x - cx, dy = y - cy;
+            float d2 = dx * dx + dy * dy;
+            if (d2 < bestDistSq) {
+                bestDistSq = d2;
+                best = m;
+            }
+        }
+        return best;
+    }
+
+    public bool IsInsideAnyMonitor(float x, float y, int margin) {
+        int ix = (int)x, iy = (int)y;
+        for (int i = 0; i < MonitorRects.Count; i++) {
+            Rectangle m = MonitorRects[i];
+            if (ix >= m.Left + margin && ix <= m.Right - margin && iy >= m.Top + margin && iy <= m.Bottom - margin) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public void PickRandomMonitorPoint(out float px, out float py, int padX, int padY) {
+        if (MonitorRects.Count == 0) {
+            px = 400f; py = 400f; return;
+        }
+        Rectangle m = MonitorRects[rng.Next(MonitorRects.Count)];
+        int minX = m.Left + Math.Min(padX, m.Width / 4);
+        int maxX = Math.Max(minX + 20, m.Right - Math.Min(padX, m.Width / 4));
+        int minY = m.Top + Math.Min(padY, m.Height / 4);
+        int maxY = Math.Max(minY + 20, m.Bottom - Math.Min(padY, m.Height / 4));
+        px = rng.Next(minX, maxX);
+        py = rng.Next(minY, maxY);
+    }
+
     public Porygon3DAvatar(int screenW, int screenH) {
+        RefreshMonitors(screenW, screenH);
         LoadThreeFavoriteModels(screenW, screenH);
         LoadBrainStates();
+        for (int i = 0; i < Agents.Count; i++) {
+            SyncAgentLifeStageMesh(Agents[i]);
+        }
 
-        IdsDetectionLog.Add("[" + DateTime.Now.ToString("HH:mm:ss") + "] IDS_INIT // 3 Neural Cores online — learning network baseline");
+        IdsDetectionLog.Add("[" + DateTime.Now.ToString("HH:mm:ss") + "] EVO_INIT // " + Agents.Count + " Evolutionary Cores + VT API online across " + MonitorRects.Count + " monitors");
     }
 
     private void LoadThreeFavoriteModels(int screenW, int screenH) {
         Agents.Clear();
 
-        // Favorite 1 (was #2): Porygon (3DS / Switch HD - GLB)
-        ModelData m1 = TryLoadGlb("pokemon_porygon.glb", "Porygon (Gen-1 Cyber Scout)", "PORYGON_V1");
-        // Favorite 2 (was #3): Porygon2 (Johto Cyber HD - GLB)
-        ModelData m2 = TryLoadGlb("porygon2__johto.glb", "Porygon2 (Johto Neural Core)", "PORYGON2_V2");
-        // Favorite 3 (was #4): Porygon-Z (Sinnoh Glitch HD - GLB)
-        ModelData m3 = TryLoadGlb("porygon-z.glb",       "Porygon-Z (Hyper Overclock AI)", "PORYGON_Z_V3");
+        // Stage 0: Porygon (Gen-1 Seed)
+        ModelData m1 = TryLoadGlb("pokemon_porygon.glb", "Porygon (Gen-1 Cyber Seed)", "PORYGON_V1");
+        // Stage 1: Porygon2 (Johto Mature Core)
+        ModelData m2 = TryLoadGlb("porygon2__johto.glb", "Porygon2 (Johto Mature Core)", "PORYGON2_V2");
+        // Stage 2: Porygon-Z (Sinnoh Apex Hunter)
+        ModelData m3 = TryLoadGlb("porygon-z.glb",       "Porygon-Z (Hyper Apex Hunter)", "PORYGON_Z_V3");
+
+        Stage0Model = m1;
+        Stage1Model = m2 ?? m1;
+        Stage2Model = m3 ?? m2 ?? m1;
+
+        Rectangle mon0 = PrimaryRect;
+        Rectangle mon1 = MonitorRects.Count > 1 ? MonitorRects[1 % MonitorRects.Count] : PrimaryRect;
+        Rectangle mon2 = MonitorRects.Count > 2 ? MonitorRects[2 % MonitorRects.Count] : mon0;
+        Rectangle mon3 = MonitorRects.Count > 3 ? MonitorRects[3 % MonitorRects.Count] : mon1;
+        Rectangle mon4 = MonitorRects.Count > 4 ? MonitorRects[4 % MonitorRects.Count] : mon2;
 
         if (m1 != null) {
             Agents.Add(CreateAgent(0, "PORYGON", "FLOW_BASELINE_AI",
-                "Analiza paquetes TCP estándar y entrena la línea base Z-Score de ancho de banda",
-                m1, screenW * 0.34f, screenH * 0.56f, 0.92f, Color.FromArgb(0, 240, 255), 101));
+                "Analiza paquetes TCP estándar y entrena la línea base Z-Score en el entorno multi-monitor",
+                m1, mon0.Left + mon0.Width * 0.42f, mon0.Top + mon0.Height * 0.56f, 0.94f, Color.FromArgb(0, 240, 255), 101, 14.0f));
         }
         if (m2 != null) {
             Agents.Add(CreateAgent(1, "PORYGON2", "ENDPOINT_AUDITOR",
-                "Inspecciona IPs remotas nuevas, verifica certificados TLS y sincroniza pesos P2P",
-                m2, screenW * 0.55f, screenH * 0.64f, 0.96f, Color.FromArgb(236, 72, 153), 202));
+                "Inspecciona IPs remotas nuevas con VirusTotal API y sincroniza pesos P2P entre pantallas",
+                m2, mon1.Left + mon1.Width * 0.50f, mon1.Top + mon1.Height * 0.56f, 0.96f, Color.FromArgb(236, 72, 153), 202, 42.0f));
         }
         if (m3 != null) {
             Agents.Add(CreateAgent(2, "PORYGON-Z", "ANOMALY_HUNTER_IDS",
-                "Detecta y neutraliza anomalías de red (Puertos inusuales, picos Z-Score, Jitter y SYN)",
-                m3, screenW * 0.77f, screenH * 0.54f, 1.02f, Color.FromArgb(168, 85, 247), 303));
+                "Detecta y neutraliza anomalías de red (VirusTotal, alertas NIDS/FortiGate y picos Z-Score)",
+                m3, mon2.Left + mon2.Width * 0.52f, mon2.Top + mon2.Height * 0.54f, 1.02f, Color.FromArgb(168, 85, 247), 303, 74.0f));
+        }
+        if (MonitorRects.Count >= 4 && m2 != null) {
+            Agents.Add(CreateAgent(3, "PORYGON2-A", "FORTIGATE_SENTINEL",
+                "Vigila el tráfico FortiGate y correlaciona flujos móviles en los monitores superiores",
+                m2, mon3.Left + mon3.Width * 0.48f, mon3.Top + mon3.Height * 0.56f, 0.95f, Color.FromArgb(250, 204, 21), 404, 54.0f));
+        }
+        if (MonitorRects.Count >= 5 && m3 != null) {
+            Agents.Add(CreateAgent(4, "PORYGON-Z2", "NIDS_DEEP_HUNTER",
+                "Cazador cuántico de sondas laterales NIDS y alertas SQL en la malla de 5 monitores",
+                m3, mon4.Left + mon4.Width * 0.48f, mon4.Top + mon4.Height * 0.56f, 1.00f, Color.FromArgb(16, 255, 160), 505, 86.0f));
         }
     }
 
     private PorygonAgent CreateAgent(int idx, string name, string role, string specDesc, ModelData model,
-        float startX, float startY, float scaleFactor, Color auraCol, int seed) {
+        float startX, float startY, float scaleFactor, Color auraCol, int seed, float initialLifeAge) {
         FlyBrainConnectome brain = new FlyBrainConnectome(seed);
-        brain.Level = idx + 2; // Porygon=LVL 2, Porygon2=LVL 3, Porygon-Z=LVL 4 initially (if no save file yet)
+        brain.Level = idx + 2;
+        brain.LifeAge = initialLifeAge;
+        brain.LifeStage = (initialLifeAge < 33f) ? 0 : (initialLifeAge < 68f ? 1 : 2);
+        float startZ = ((idx % 3) - 1) * 85f;
         return new PorygonAgent {
             AgentIndex = idx,
             Name = name,
@@ -441,14 +1614,118 @@ public class Porygon3DAvatar {
             AuraColor = auraCol,
             PosX = startX,
             PosY = startY,
+            PosZ = startZ,
             HomeX = startX,
             HomeY = startY,
+            HomeZ = startZ,
             WaypointX = startX,
             WaypointY = startY,
+            WaypointZ = startZ,
             FloatBob = idx * 2.1f,
             WalkPhase = idx * 1.7f,
             ScaleFactor = scaleFactor
         };
+    }
+
+    public void SyncAgentLifeStageMesh(PorygonAgent a) {
+        if (a == null || a.Brain == null) return;
+        int newStage = (a.Brain.LifeAge < 33.0f) ? 0 : ((a.Brain.LifeAge < 68.0f) ? 1 : 2);
+        bool stageChanged = (newStage != a.Brain.LifeStage);
+        a.Brain.LifeStage = newStage;
+
+        string suffix = (a.AgentIndex >= 3) ? ("-" + (a.AgentIndex - 2)) : "";
+        if (newStage == 0 && Stage0Model != null) {
+            a.Model = Stage0Model;
+            a.Name = "PORYGON" + suffix;
+            a.ScaleFactor = 0.93f;
+        } else if (newStage == 1 && Stage1Model != null) {
+            a.Model = Stage1Model;
+            a.Name = "PORYGON2" + suffix;
+            a.ScaleFactor = 0.96f;
+        } else if (Stage2Model != null) {
+            a.Model = Stage2Model;
+            a.Name = "PORYGON-Z" + suffix;
+            a.ScaleFactor = 1.01f;
+        }
+
+        if (stageChanged) {
+            a.SpinRollTimer = 1.0f;
+            a.ShieldTimer = 1.0f;
+            a.ScanWaveTimer = 0.85f;
+        }
+    }
+
+    // Multi-Threaded CPU Evolutionary Accelerator (runs on background CPU thread pool every 200ms)
+    public void RunCpuEvolutionTick(RealTelemetryFeed feed) {
+        if (Agents.Count == 0) return;
+        cpuEvoBatchCounter++;
+        int stepsPerAgent = 750; // 750 steps * 5 agents * 5 ticks/s = 18,750 evolutionary steps/sec on CPU!
+
+        float dlZ = feed.DlZScore;
+        float ulZ = feed.UlZScore;
+        float pgZ = feed.PingZScore;
+        float anomIdx = feed.AnomalyIndex;
+        int tickSeed = Environment.TickCount ^ (cpuEvoBatchCounter * 2654435761.GetHashCode());
+
+        // 1. Parallel Neuro-Evolutionary Training across all CPU cores (with 3.5x False Negative penalty)!
+        Parallel.For(0, Agents.Count, aIdx => {
+            PorygonAgent ag = Agents[aIdx];
+            uint sVal = (uint)(tickSeed + aIdx * 999983);
+            ag.Brain.CpuTrainMicroBatch(stepsPerAgent, dlZ, ulZ, pgZ, anomIdx, sVal);
+        });
+
+        // 2. Advance Life Cycle, Morph 3D Stages, and Execute Alpha Genetic Crossover + Anti-Negative-Trait Audit at 100% Age
+        lock (packetLock) {
+            PorygonAgent alphaAgent = Agents[0];
+            for (int i = 1; i < Agents.Count; i++) {
+                if (Agents[i].Brain.FitnessScore > alphaAgent.Brain.FitnessScore) {
+                    alphaAgent = Agents[i];
+                }
+            }
+
+            int maxGen = 1;
+            float maxFit = 0f;
+            float sumAcc = 0f;
+            int totalPruned = 0;
+
+            for (int i = 0; i < Agents.Count; i++) {
+                PorygonAgent ag = Agents[i];
+                FlyBrainConnectome br = ag.Brain;
+
+                br.LifeAge += 0.42f; // Full 3-stage life cycle (Porygon -> Porygon2 -> Porygon-Z -> Crossover) in ~47s
+                if (br.LifeAge >= 100.0f) {
+                    string oldName = ag.Name;
+                    string auditLine, jsonlLine;
+                    br.CrossoverAndAuditGeneration(alphaAgent.Brain, oldName, alphaAgent.Name, tickSeed + i * 31337, out auditLine, out jsonlLine);
+                    SyncAgentLifeStageMesh(ag);
+                    ag.LevelUpBannerTimer = 1.0f;
+                    ag.LevelUpBannerText = string.Format("★ G{0} CROSSOVER // {1} ★", br.Generation, br.LastPrunedTrait);
+                    ag.SpinRollTimer = 1.0f;
+                    ag.ShieldTimer = 1.0f;
+                    br.ActiveStateName = string.Format("GEN_{0}_AUDIT // {1}", br.Generation, br.LastPrunedTrait);
+
+                    TotalCrossovers++;
+                    LastLineageAuditSummary = string.Format("G{0} {1}x{2} -> {3}", br.Generation, oldName, alphaAgent.Name, br.LastPrunedTrait);
+                    AppendLineageRecord(auditLine, jsonlLine);
+
+                    IdsDetectionLog.Add(auditLine);
+                    while (IdsDetectionLog.Count > 10) IdsDetectionLog.RemoveAt(0);
+                } else {
+                    SyncAgentLifeStageMesh(ag);
+                }
+
+                if (br.Generation > maxGen) maxGen = br.Generation;
+                if (br.FitnessScore > maxFit) maxFit = br.FitnessScore;
+                sumAcc += br.DetectionAccuracy;
+                totalPruned += br.PrunedTraitsCount;
+            }
+
+            HighestGeneration = maxGen;
+            BestSwarmFitness = maxFit;
+            AvgSwarmAccuracy = sumAcc / Agents.Count;
+            TotalPrunedTraits = totalPruned;
+            CpuEvoStepsPerSec = Agents.Count * stepsPerAgent * 5;
+        }
     }
 
     public void SaveBrainStates() {
@@ -458,8 +1735,9 @@ public class Porygon3DAvatar {
             for (int i = 0; i < Agents.Count; i++) {
                 FlyBrainConnectome b = Agents[i].Brain;
                 sb.AppendFormat(System.Globalization.CultureInfo.InvariantCulture,
-                    "  {{ \"Name\": \"{0}\", \"Level\": {1}, \"XP\": {2}, \"Packets\": {3}, \"Anomalies\": {4}, \"Syncs\": {5}, \"Gain\": {6:0.000} }}{7}\r\n",
+                    "  {{ \"Name\": \"{0}\", \"Level\": {1}, \"XP\": {2}, \"Packets\": {3}, \"Anomalies\": {4}, \"Syncs\": {5}, \"Gain\": {6:0.000}, \"Gen\": {7}, \"Age\": {8:0.0}, \"Fit\": {9:0.0}, \"Acc\": {10:0.0}, \"Pruned\": {11} }}{12}\r\n",
                     Agents[i].Name, b.Level, b.XP, b.PacketsCollected, b.AnomaliesCleared, b.NeuralSyncs, b.SynapticGain,
+                    b.Generation, b.LifeAge, b.FitnessScore, b.DetectionAccuracy, b.PrunedTraitsCount,
                     (i < Agents.Count - 1) ? "," : "");
             }
             sb.Append("]");
@@ -484,6 +1762,12 @@ public class Porygon3DAvatar {
                 if (dict.ContainsKey("Anomalies")) b.AnomaliesCleared = Convert.ToInt32(dict["Anomalies"]);
                 if (dict.ContainsKey("Syncs"))     b.NeuralSyncs = Convert.ToInt32(dict["Syncs"]);
                 if (dict.ContainsKey("Gain"))      b.SynapticGain = Math.Max(1.0f, Math.Min(2.8f, Convert.ToSingle(dict["Gain"])));
+                if (dict.ContainsKey("Gen"))       b.Generation = Math.Max(1, Convert.ToInt32(dict["Gen"]));
+                if (dict.ContainsKey("Age"))       b.LifeAge = Math.Max(0f, Math.Min(99f, Convert.ToSingle(dict["Age"])));
+                if (dict.ContainsKey("Fit"))       b.FitnessScore = Math.Max(50f, Math.Min(99.9f, Convert.ToSingle(dict["Fit"])));
+                if (dict.ContainsKey("Acc"))       b.DetectionAccuracy = Math.Max(60f, Math.Min(99.9f, Convert.ToSingle(dict["Acc"])));
+                if (dict.ContainsKey("Pruned"))    b.PrunedTraitsCount = Math.Max(0, Convert.ToInt32(dict["Pruned"]));
+                b.EliteFitness = b.FitnessScore;
             }
         } catch { }
     }
@@ -500,7 +1784,8 @@ public class Porygon3DAvatar {
                     return;
                 }
             }
-            if (Packets.Count >= 18) {
+            int maxPackets = Math.Max(22, MonitorRects.Count * 7);
+            if (Packets.Count >= maxPackets) {
                 // If full, replace oldest normal flow if we are injecting an anomaly/new host
                 if (kind > 0) {
                     for (int i = 0; i < Packets.Count; i++) {
@@ -510,7 +1795,7 @@ public class Porygon3DAvatar {
                         }
                     }
                 }
-                if (Packets.Count >= 18) return;
+                if (Packets.Count >= maxPackets) return;
             }
 
             Color col = Color.FromArgb(0, 240, 255);
@@ -518,11 +1803,17 @@ public class Porygon3DAvatar {
             else if (kind == 2) col = Color.FromArgb(255, 42, 85);   // Red Real Traffic Anomaly
             else if (proto.Contains("UDP") || proto.Contains("HTTP")) col = Color.FromArgb(236, 72, 153);
 
+            float spawnX, spawnY;
+            PickRandomMonitorPoint(out spawnX, out spawnY, 170, 140);
+            float spawnZ = (float)(rng.NextDouble() * 420.0 - 250.0); // -250 (deep cyberspace) .. +170 (near foreground)
+
             Packets.Add(new DataPacket {
-                X = rng.Next(240, Math.Max(320, screenW - 210)),
-                Y = rng.Next(265, Math.Max(340, screenH - 175)),
-                VX = (float)((rng.NextDouble() - 0.5) * (kind == 2 ? 1.85 : 1.15)),
-                VY = (float)((rng.NextDouble() - 0.5) * (kind == 2 ? 1.85 : 1.15)),
+                X = spawnX,
+                Y = spawnY,
+                Z = spawnZ,
+                VX = (float)((rng.NextDouble() - 0.5) * (kind == 2 ? 2.15 : 1.35)),
+                VY = (float)((rng.NextDouble() - 0.5) * (kind == 2 ? 2.15 : 1.35)),
+                VZ = (float)((rng.NextDouble() - 0.5) * (kind == 2 ? 2.10 : 1.30)),
                 floatRot = (float)(rng.NextDouble() * 6.28),
                 Kind = kind,
                 HP = (kind == 2) ? 2 : 1,
@@ -715,6 +2006,14 @@ public class Porygon3DAvatar {
             for (int i = 0; i < model.Verts.Count; i++) {
                 Vec3 v = model.Verts[i];
                 model.Verts[i] = new Vec3((v.X - cx) * normScale, (v.Y - cy) * normScale, (v.Z - cz) * normScale);
+            }
+
+            for (int i = 0; i < model.Faces.Count; i++) {
+                Face3D f = model.Faces[i];
+                Vec3 v0 = model.Verts[f.Indices[0]];
+                Vec3 v1 = model.Verts[f.Indices[1]];
+                Vec3 v2 = model.Verts[f.Indices[2]];
+                f.LocalNormal = Vec3.Cross(v1 - v0, v2 - v0).Normalized();
             }
 
             return model;
@@ -996,15 +2295,16 @@ public class Porygon3DAvatar {
         }
 
         lock (packetLock) {
-            // 1. Hit-test Mouse Hover on Floating Network Nodes (freezes hovered node for inspection!)
+            // 1. Hit-test Mouse Hover on Floating 3D Network Nodes (scaled by Z perspective depth; freezes hovered node for inspection!)
             HoveredPacket = null;
-            float bestHoverNodeDist = 42f;
+            float bestHoverNodeDist = 48f;
             for (int i = 0; i < Packets.Count; i++) {
                 DataPacket p = Packets[i];
                 p.IsHovered = false;
+                float dScale = GetDepthScale(p.Z);
                 float mdx = mousePt.X - p.X;
                 float mdy = mousePt.Y - p.Y;
-                float md = (float)Math.Sqrt(mdx * mdx + mdy * mdy);
+                float md = (float)Math.Sqrt(mdx * mdx + mdy * mdy) / Math.Max(0.65f, dScale);
                 if (md < bestHoverNodeDist) {
                     bestHoverNodeDist = md;
                     HoveredPacket = p;
@@ -1014,15 +2314,16 @@ public class Porygon3DAvatar {
                 HoveredPacket.IsHovered = true;
             }
 
-            // 2. Hit-test Mouse Hover on the 3 Porygon Agents (only if not already hovering a node)
+            // 2. Hit-test Mouse Hover on the 5 3D Porygon Agents (only if not already hovering a node)
             HoveredAgent = null;
-            float bestHoverAgentDist = 74f;
+            float bestHoverAgentDist = 78f;
             for (int aIdx = 0; aIdx < Agents.Count; aIdx++) {
                 PorygonAgent a = Agents[aIdx];
                 a.IsHovered = false;
+                float dScale = GetDepthScale(a.PosZ);
                 float mdx = mousePt.X - a.PosX;
                 float mdy = mousePt.Y - a.PosY;
-                float md = (float)Math.Sqrt(mdx * mdx + mdy * mdy);
+                float md = (float)Math.Sqrt(mdx * mdx + mdy * mdy) / Math.Max(0.65f, dScale);
                 if (HoveredPacket == null && md < bestHoverAgentDist) {
                     bestHoverAgentDist = md;
                     HoveredAgent = a;
@@ -1032,18 +2333,35 @@ public class Porygon3DAvatar {
                 HoveredAgent.IsHovered = true;
             }
 
-            // 3. Move non-hovered network nodes in cyberspace
+            // 3. Move non-hovered network nodes in true 3D (X, Y, Z) across the 5-monitor virtual environment
             for (int i = 0; i < Packets.Count; i++) {
                 DataPacket p = Packets[i];
                 p.floatRot += (p.Kind == 2) ? 0.12f : 0.06f;
-                if (p.IsHovered) continue; // Freeze position while user inspects the node with the mouse!
-                p.X += p.VX;
-                p.Y += p.VY;
-                if (p.X < 210 || p.X > screenW - 140) p.VX = -p.VX;
-                if (p.Y < 260 || p.Y > screenH - 140) p.VY = -p.VY;
+                if (p.IsHovered) continue; // Freeze 3D position while user inspects the node with the mouse!
+                Rectangle curMon = GetContainingOrNearestMonitor(p.X, p.Y);
+                float zParallax = GetDepthScale(p.Z);
+                p.X += p.VX * zParallax;
+                p.Y += p.VY * zParallax;
+                p.Z += p.VZ;
+                if (p.Z < -250f || p.Z > 170f) {
+                    p.VZ = -p.VZ;
+                    p.Z = Clamp(p.Z, -250f, 170f);
+                }
+                if (!IsInsideAnyMonitor(p.X, p.Y, 55)) {
+                    // Check if we can transit to an adjacent/nearest monitor or bounce inside current monitor
+                    if (rng.NextDouble() < 0.18 && MonitorRects.Count > 1) {
+                        PickRandomMonitorPoint(out p.X, out p.Y, 150, 120);
+                        p.Z = (float)(rng.NextDouble() * 420.0 - 250.0);
+                    } else {
+                        if (p.X < curMon.Left + 75 || p.X > curMon.Right - 75) p.VX = -p.VX;
+                        if (p.Y < curMon.Top + 85 || p.Y > curMon.Bottom - 75) p.VY = -p.VY;
+                        p.X = Clamp(p.X, curMon.Left + 75, curMon.Right - 75);
+                        p.Y = Clamp(p.Y, curMon.Top + 85, curMon.Bottom - 75);
+                    }
+                }
             }
 
-            // 4. Update each of the 3 Porygons independently with REAL Network Telemetry!
+            // 4. Update each of the 5 Porygons independently in 3D (X, Y, Z) across all 5 monitors with REAL Network Telemetry!
             for (int aIdx = 0; aIdx < Agents.Count; aIdx++) {
                 PorygonAgent a = Agents[aIdx];
                 FlyBrainConnectome br = a.Brain;
@@ -1051,10 +2369,6 @@ public class Porygon3DAvatar {
                 if (a.SyncCooldown > 0) a.SyncCooldown--;
                 if (a.LevelUpBannerTimer > 0f) a.LevelUpBannerTimer -= 0.025f;
 
-                // Specialization per evolution:
-                // Porygon (aIdx=0): Baseline Flow Collector (Kind 0 & 1)
-                // Porygon2 (aIdx=1): New External Host Auditor & TLS Verifier (Kind 1 & 2)
-                // Porygon-Z (aIdx=2): Primary IDS Anomaly Hunter (Kind 2 priority!)
                 DataPacket bestPkt = null;
                 float bestScore = 999999f;
                 float bestDist = 999999f;
@@ -1063,22 +2377,21 @@ public class Porygon3DAvatar {
                     DataPacket p = Packets[i];
                     float dx = p.X - a.PosX;
                     float dy = p.Y - a.PosY;
-                    float d = (float)Math.Sqrt(dx * dx + dy * dy);
+                    float dz = p.Z - a.PosZ;
+                    float d = (float)Math.Sqrt(dx * dx + dy * dy + dz * dz);
                     float priority = d;
 
                     if (p.Kind == 2) {
-                        // Traffic Anomaly! Porygon-Z prioritizes anomalies heavily
-                        priority *= (aIdx == 2) ? 0.35f : (br.HasSkill(4) ? 0.58f : 0.85f);
+                        // Traffic Anomaly! Porygon-Z prioritizes anomalies heavily across all monitors & Z-depths
+                        priority *= (aIdx == 2) ? 0.30f : (br.HasSkill(4) ? 0.55f : 0.85f);
                     } else if (p.Kind == 1) {
                         // New Host / Elevated Flow Orb! Porygon2 prioritizes auditing new hosts
-                        priority *= (aIdx == 1) ? 0.42f : 0.68f;
+                        priority *= (aIdx == 1) ? 0.38f : 0.68f;
                     } else {
                         // Standard Flow! Porygon (Gen 1) prioritizes baseline collection
-                        priority *= (aIdx == 0) ? 0.62f : 0.95f;
+                        priority *= (aIdx == 0) ? 0.58f : 0.95f;
                     }
 
-                    // If user is hovering a node, boost priority slightly so the assigned Porygon looks at it,
-                    // but don't destroy the node while the user is actively reading its hover card!
                     if (p.IsHovered) {
                         priority *= 0.65f;
                     }
@@ -1087,7 +2400,8 @@ public class Porygon3DAvatar {
                         if (o == aIdx) continue;
                         float odx = p.X - Agents[o].PosX;
                         float ody = p.Y - Agents[o].PosY;
-                        if (odx * odx + ody * ody < d * d * 0.45f) priority += 260f;
+                        float odz = p.Z - Agents[o].PosZ;
+                        if (odx * odx + ody * ody + odz * odz < d * d * 0.45f) priority += 260f;
                     }
                     if (priority < bestScore) {
                         bestScore = priority;
@@ -1098,49 +2412,52 @@ public class Porygon3DAvatar {
 
                 if (bestPkt != null) {
                     bestPkt.AssignedAgentName = a.Name;
-                    a.CurrentTargetEndpoint = bestPkt.RemoteEndpoint + " [" + bestPkt.AnomalyType + "]";
+                    a.CurrentTargetEndpoint = string.Format("{0} [{1}] Z:{2:+0;-0;0}", bestPkt.RemoteEndpoint, bestPkt.AnomalyType, bestPkt.Z);
                 } else {
-                    a.CurrentTargetEndpoint = "PATROLLING_SECTOR";
+                    a.CurrentTargetEndpoint = string.Format("PATROL_3D [Z:{0:+0;-0;0}]", a.WaypointZ);
                 }
 
-                // Find nearest peer Porygon for P2P Neural Sync (Skill LVL 3) and Flocking Separation
+                // Find nearest peer Porygon in 3D space for P2P Neural Sync (Skill LVL 3) and 3D Flocking Separation
                 PorygonAgent nearestPeer = null;
                 float minPeerDist = 99999f;
-                float sepX = 0f, sepY = 0f;
+                float sepX = 0f, sepY = 0f, sepZ = 0f;
                 for (int o = 0; o < Agents.Count; o++) {
                     if (o == aIdx) continue;
                     float pdx = a.PosX - Agents[o].PosX;
                     float pdy = a.PosY - Agents[o].PosY;
-                    float pd = (float)Math.Sqrt(pdx * pdx + pdy * pdy);
+                    float pdz = a.PosZ - Agents[o].PosZ;
+                    float pd = (float)Math.Sqrt(pdx * pdx + pdy * pdy + pdz * pdz);
                     if (pd < minPeerDist) {
                         minPeerDist = pd;
                         nearestPeer = Agents[o];
                     }
-                    if (pd > 1f && pd < 195f) {
-                        float push = (195f - pd) / 195f;
+                    if (pd > 1f && pd < 210f) {
+                        float push = (210f - pd) / 210f;
                         sepX += (pdx / pd) * push * 2.4f;
                         sepY += (pdy / pd) * push * 2.4f;
+                        sepZ += (pdz / pd) * push * 2.0f;
                     }
                 }
 
-                // Build 16-channel Sensory Input fed by REAL Network Telemetry + Spatial Node Vector!
+                // Build 16-channel Sensory Input fed by REAL Network Telemetry + 3D Spatial Node Vector (X, Y, Z)!
                 float[] sensory = new float[16];
                 if (bestPkt != null) {
                     float pdx = bestPkt.X - a.PosX;
                     float pdy = bestPkt.Y - a.PosY;
+                    float pdz = bestPkt.Z - a.PosZ;
                     sensory[0] = (pdx < -30f) ? 0.85f : 0.1f;
                     sensory[1] = (pdx >  30f) ? 0.85f : 0.1f;
                     sensory[2] = (pdy < -30f) ? 0.75f : 0.1f;
                     sensory[3] = (pdy >  30f) ? 0.75f : 0.1f;
-                    sensory[4] = (bestDist < 420f) ? 0.95f : 0.35f;
-                    sensory[5] = (bestDist < 145f) ? 1.30f : 0.0f;
+                    sensory[4] = (bestDist < 440f) ? 0.95f : (Math.Abs(pdz) > 120f ? 0.65f : 0.35f);
+                    sensory[5] = (bestDist < 160f) ? 1.30f : 0.0f;
                     sensory[6] = (bestPkt.Kind == 1) ? 1.20f : 0.2f;
                     sensory[8] = (bestPkt.Kind == 2) ? (1.10f + bestPkt.AnomalyScore * 0.6f) : 0.1f;
                 }
                 // Feed REAL Network Z-Scores & Anomaly Metrics into Sensory Neurons 7, 9..15:
                 sensory[7]  = Clamp(feed.NewHostCount * 0.35f, 0f, 1.4f);
                 sensory[9]  = Clamp((feed.DownKbps + feed.UpKbps) / 420.0f, 0.05f, 1.3f);
-                sensory[10] = (minPeerDist < 230f) ? 1.1f : 0.1f;
+                sensory[10] = (minPeerDist < 245f) ? 1.1f : 0.1f;
                 sensory[11] = Clamp(Math.Max(0f, feed.DlZScore) * 0.45f, 0f, 1.5f);
                 sensory[12] = Clamp(Math.Max(0f, feed.UlZScore) * 0.45f, 0f, 1.5f);
                 sensory[13] = Clamp(Math.Max(0f, feed.PingZScore) * 0.45f, 0f, 1.5f);
@@ -1151,22 +2468,23 @@ public class Porygon3DAvatar {
 
                 float targetX = a.WaypointX;
                 float targetY = a.WaypointY;
+                float targetZ = a.WaypointZ;
 
                 float cdx = mousePt.X - a.PosX;
                 float cdy = mousePt.Y - a.PosY;
                 float cDist = (float)Math.Sqrt(cdx * cdx + cdy * cdy);
 
-                // Skill LVL 3: Neural Sync P2P Link (shares learned anomaly weights between Porygons!)
-                if (br.HasSkill(3) && nearestPeer != null && minPeerDist < 215f && a.SyncCooldown == 0 && nearestPeer.SyncCooldown == 0) {
+                // Skill LVL 3: Neural Sync P2P Link (shares learned anomaly weights between Porygons across monitors!)
+                if (br.HasSkill(3) && nearestPeer != null && (minPeerDist < 395f || rng.NextDouble() < 0.008) && a.SyncCooldown == 0 && nearestPeer.SyncCooldown == 0) {
                     a.SyncTimer = 1.0f;
                     a.SyncPartnerIdx = nearestPeer.AgentIndex;
-                    a.SyncCooldown = 260;
-                    nearestPeer.SyncCooldown = 260;
+                    a.SyncCooldown = 240;
+                    nearestPeer.SyncCooldown = 240;
                     br.NeuralSyncs++;
                     nearestPeer.Brain.NeuralSyncs++;
                     if (br.ReinforceReward(0.85f, 18)) a.LevelUpBannerTimer = 1.0f;
                     if (nearestPeer.Brain.ReinforceReward(0.85f, 18)) nearestPeer.LevelUpBannerTimer = 1.0f;
-                    br.ActiveStateName = "P2P_IDS_SYNC // WEIGHTS->" + nearestPeer.Name;
+                    br.ActiveStateName = "P2P_MESH_SYNC // WEIGHTS->" + nearestPeer.Name;
                 }
 
                 // Skill LVL 6: Deep Sonar Scan when network anomaly index rises or periodically
@@ -1175,39 +2493,53 @@ public class Porygon3DAvatar {
                     br.ActiveStateName = "SONAR_DEEP_SCAN // AUDITING_SOCKETS";
                 }
 
-                if (followMouse && cDist < 360f) {
+                if (followMouse && cDist < 520f) {
                     float desiredDist = 150f;
                     float ang = (float)Math.Atan2(cdy, cdx);
                     targetX = mousePt.X - (float)Math.Cos(ang) * desiredDist;
                     targetY = mousePt.Y - (float)Math.Sin(ang) * desiredDist;
+                    targetZ = 85f; // Come forward toward the glass when assisting cursor
                     br.ActiveStateName = "CURSOR_LINK // ASSIST_MODE";
-                } else if (bestPkt != null && (br.DriveHunger > 0.26f || trainingMode || bestPkt.Kind > 0)) {
-                    // If the user is hovering this packet, orbit just beside it so the Porygon inspects it without deleting the tooltip!
+                } else if (bestPkt != null && (br.DriveHunger > 0.22f || trainingMode || bestPkt.Kind > 0)) {
+                    // If the user is hovering this packet, orbit just beside it in 3D so the Porygon inspects it without deleting the tooltip!
                     if (bestPkt.IsHovered) {
                         targetX = bestPkt.X - 115f * a.FacingDir;
                         targetY = bestPkt.Y + 20f;
+                        targetZ = Clamp(bestPkt.Z + 18f, -240f, 165f);
                         br.ActiveStateName = "INSPECTING_HOVER // " + bestPkt.RemoteEndpoint;
                     } else {
                         targetX = bestPkt.X;
                         targetY = bestPkt.Y;
+                        targetZ = bestPkt.Z;
 
-                        // Skill LVL 5: Quantum Blink when chasing distant high-priority anomaly or new host
-                        if (br.HasSkill(5) && bestDist > 320f && bestDist < 680f && a.QuantumBlinkTimer <= 0f && (bestPkt.Kind == 2 || rng.NextDouble() < 0.025)) {
+                        // Skill LVL 5: Quantum Blink in 3D (X, Y, Z) when chasing distant high-priority anomaly or cross-monitor node
+                        if (br.HasSkill(5) && bestDist > 420f && bestDist < 2800f && a.QuantumBlinkTimer <= 0f && (bestPkt.Kind == 2 || rng.NextDouble() < 0.032)) {
                             a.BlinkStartPt = new PointF(a.PosX, a.PosY);
-                            a.PosX = a.PosX + (bestPkt.X - a.PosX) * 0.62f;
-                            a.PosY = a.PosY + (bestPkt.Y - a.PosY) * 0.62f;
+                            a.BlinkStartZ = a.PosZ;
+                            Rectangle dstMon = GetContainingOrNearestMonitor(bestPkt.X, bestPkt.Y);
+                            a.PosX = Clamp(a.PosX + (bestPkt.X - a.PosX) * 0.68f, dstMon.Left + 110f, dstMon.Right - 110f);
+                            a.PosY = Clamp(a.PosY + (bestPkt.Y - a.PosY) * 0.68f, dstMon.Top + 120f, dstMon.Bottom - 110f);
+                            a.PosZ = Clamp(a.PosZ + (bestPkt.Z - a.PosZ) * 0.68f, -240f, 165f);
                             a.QuantumBlinkTimer = 1.0f;
-                            br.ActiveStateName = "QUANTUM_BLINK // INTERCEPT_" + bestPkt.AnomalyType;
+                            br.ActiveStateName = "QUANTUM_PORTAL // WARP_" + bestPkt.AnomalyType;
                         } else if (bestPkt.Kind == 2) {
                             br.ActiveStateName = "IDS_INTERCEPT // " + bestPkt.AnomalyType;
+                            if ((DateTime.UtcNow - LastManualBrainSelectUtc).TotalSeconds > 8.0) {
+                                SelectedBrainAgentIndex = aIdx;
+                                BrainAutoFocusedOnThreat = true;
+                            }
                         } else if (bestPkt.Kind == 1) {
                             br.ActiveStateName = "HOST_AUDIT // " + bestPkt.RemoteEndpoint;
                         } else {
                             br.ActiveStateName = "FLOW_SAMPLE // " + bestPkt.RemoteEndpoint;
                         }
 
-                        float reachDist = 135f + Math.Min(50f, br.Level * 4f);
+                        float reachDist = 152f + Math.Min(55f, br.Level * 4f);
                         if (bestDist < reachDist) {
+                            if (bestPkt.Kind == 2 && (DateTime.UtcNow - LastManualBrainSelectUtc).TotalSeconds > 8.0) {
+                                SelectedBrainAgentIndex = aIdx;
+                                BrainAutoFocusedOnThreat = true;
+                            }
                             string ts = DateTime.Now.ToString("HH:mm:ss");
                             if (bestPkt.Kind == 2 && br.HasSkill(4)) {
                                 // Skill LVL 4: Tri-Attack Elemental Matrix neutralizes real network anomaly!
@@ -1244,34 +2576,63 @@ public class Porygon3DAvatar {
                     a.WaypointTimer--;
                     float wdx = a.WaypointX - a.PosX;
                     float wdy = a.WaypointY - a.PosY;
-                    if (a.WaypointTimer <= 0 || (wdx * wdx + wdy * wdy < 60f * 60f)) {
-                        a.WaypointX = Clamp(a.HomeX + rng.Next(-240, 240), 230f, screenW - 180f);
-                        a.WaypointY = Clamp(a.HomeY + rng.Next(-160, 160), 270f, screenH - 160f);
-                        a.WaypointTimer = rng.Next(90, 210);
+                    float wdz = a.WaypointZ - a.PosZ;
+                    if (a.WaypointTimer <= 0 || (wdx * wdx + wdy * wdy + wdz * wdz < 85f * 85f)) {
+                        PickRandomMonitorPoint(out a.WaypointX, out a.WaypointY, 175, 145);
+                        a.WaypointZ = (float)(rng.NextDouble() * 400.0 - 240.0); // Patrol across full 3D depth [-240 .. +160]
+                        a.WaypointTimer = rng.Next(110, 240);
                     }
                     targetX = a.WaypointX;
                     targetY = a.WaypointY;
+                    targetZ = a.WaypointZ;
                     if (a.SyncTimer <= 0f && a.ScanWaveTimer <= 0f) {
-                        br.ActiveStateName = "IDS_PATROL // Z-SCORE_MONITORING";
+                        br.ActiveStateName = "MESH_PATROL_3D // 5-MON_VIRTUAL_SOC";
                     }
                 }
 
-                float speedBonus = 1.0f + Math.Min(0.45f, (br.SynapticGain - 1.0f) * 0.35f);
+                float speedBonus = 1.0f + Math.Min(0.55f, (br.SynapticGain - 1.0f) * 0.40f);
                 float dxT = targetX - a.PosX;
                 float dyT = targetY - a.PosY;
-                float maxV = 3.6f * speedBonus;
-                a.VelX = a.VelX * 0.88f + (Clamp(dxT * 0.026f, -maxV, maxV) + sepX) * 0.12f;
-                a.VelY = a.VelY * 0.88f + (Clamp(dyT * 0.026f, -maxV * 0.8f, maxV * 0.8f) + sepY) * 0.12f;
-                a.PosX = Clamp(a.PosX + a.VelX, 225f, screenW - 165f);
-                a.PosY = Clamp(a.PosY + a.VelY, 265f, screenH - 145f);
+                float dzT = targetZ - a.PosZ;
+                float distToT = (float)Math.Sqrt(dxT * dxT + dyT * dyT + dzT * dzT);
+                // Boost cross-monitor transit speed when traveling to another screen
+                float crossMonMult = (distToT > 750f) ? 1.85f : 1.0f;
+                float zPerspSpeed = GetDepthScale(a.PosZ);
+                float maxV = 4.2f * speedBonus * crossMonMult;
+                a.VelX = a.VelX * 0.86f + (Clamp(dxT * 0.032f, -maxV, maxV) + sepX) * 0.14f;
+                a.VelY = a.VelY * 0.86f + (Clamp(dyT * 0.032f, -maxV * 0.85f, maxV * 0.85f) + sepY) * 0.14f;
+                a.VelZ = a.VelZ * 0.86f + (Clamp(dzT * 0.036f, -maxV * 0.85f, maxV * 0.85f) + sepZ) * 0.14f;
 
-                float spd = (float)Math.Sqrt(a.VelX * a.VelX + a.VelY * a.VelY);
+                float nextX = a.PosX + a.VelX * (0.72f + 0.28f * zPerspSpeed);
+                float nextY = a.PosY + a.VelY * (0.72f + 0.28f * zPerspSpeed);
+                a.PosZ = Clamp(a.PosZ + a.VelZ, -245f, 168f);
+
+                if (!IsInsideAnyMonitor(nextX, nextY, 70)) {
+                    Rectangle targetMon = GetContainingOrNearestMonitor(targetX, targetY);
+                    Rectangle curMon = GetContainingOrNearestMonitor(a.PosX, a.PosY);
+                    if (targetMon != curMon) {
+                        // Bridge across inter-monitor dead space onto the target monitor's entry border!
+                        a.BlinkStartPt = new PointF(a.PosX, a.PosY);
+                        a.BlinkStartZ = a.PosZ;
+                        a.PosX = Clamp(nextX, targetMon.Left + 95f, targetMon.Right - 95f);
+                        a.PosY = Clamp(nextY, targetMon.Top + 110f, targetMon.Bottom - 95f);
+                        if (a.QuantumBlinkTimer <= 0f) a.QuantumBlinkTimer = 0.65f;
+                    } else {
+                        a.PosX = Clamp(nextX, curMon.Left + 95f, curMon.Right - 95f);
+                        a.PosY = Clamp(nextY, curMon.Top + 110f, curMon.Bottom - 95f);
+                    }
+                } else {
+                    a.PosX = nextX;
+                    a.PosY = nextY;
+                }
+
+                float spd = (float)Math.Sqrt(a.VelX * a.VelX + a.VelY * a.VelY + a.VelZ * a.VelZ);
                 a.WalkPhase += 0.12f + spd * 0.06f;
 
                 if (dxT < -65f) a.FacingDir = -1.0f;
                 else if (dxT > 65f) a.FacingDir = 1.0f;
 
-                float baseYaw = a.FacingDir * 0.58f;
+                float baseYaw = a.FacingDir * 0.58f + Clamp(-a.VelZ * 0.045f * a.FacingDir, -0.22f, 0.22f);
                 if (a.SpinRollTimer > 0f) {
                     a.SpinRollTimer -= 0.045f;
                     a.Yaw = baseYaw + (1.0f - a.SpinRollTimer) * (float)(Math.PI * 2.0);
@@ -1279,7 +2640,7 @@ public class Porygon3DAvatar {
                     a.Yaw = a.Yaw * 0.88f + baseYaw * 0.12f;
                 }
 
-                a.Pitch = 0.16f + (float)Math.Sin(a.FloatBob) * 0.035f;
+                a.Pitch = 0.16f + (float)Math.Sin(a.FloatBob) * 0.035f + Clamp(-a.VelZ * 0.032f, -0.14f, 0.14f);
                 a.Roll = a.Roll * 0.88f + Clamp(-a.VelX * 0.018f, -0.06f, 0.06f) * 0.12f;
 
                 if (a.BeamTimer > 0f) a.BeamTimer -= 0.08f;
@@ -1363,18 +2724,47 @@ public class Porygon3DAvatar {
             hovAg = HoveredAgent;
         }
 
-        // 1. Draw floating Real Network Nodes (Kind 0 = Normal Flow, Kind 1 = New Host Orb, Kind 2 = Traffic Anomaly)
+        // Sort nodes and agents back-to-front by Z coordinate (-250 deep .. +170 near)
+        pktsSnap.Sort((a, b) => a.Z.CompareTo(b.Z));
+        List<PorygonAgent> agentsSorted = new List<PorygonAgent>(Agents);
+        agentsSorted.Sort((a, b) => a.PosZ.CompareTo(b.PosZ));
+
+        // 0. Draw Cross-Monitor Neural Mesh Conduits linking Porygon, Porygon2, and Porygon-Z across screens!
+        if (Agents.Count >= 2) {
+            using (Pen meshPen = new Pen(Color.FromArgb(42, themeCyan.R, themeCyan.G, themeCyan.B), 1.3f))
+            using (SolidBrush pulseBrush = new SolidBrush(Color.FromArgb(170, themeCyan.R, themeCyan.G, themeCyan.B))) {
+                meshPen.DashStyle = DashStyle.Dash;
+                for (int i = 0; i < Agents.Count; i++) {
+                    PorygonAgent a1 = Agents[i];
+                    PorygonAgent a2 = Agents[(i + 1) % Agents.Count];
+                    g.DrawLine(meshPen, a1.PosX, a1.PosY, a2.PosX, a2.PosY);
+                    float tPulse = (float)((a1.FloatBob * 0.18 + i * 0.33) % 1.0);
+                    if (tPulse < 0f) tPulse += 1f;
+                    float px = a1.PosX + (a2.PosX - a1.PosX) * tPulse;
+                    float py = a1.PosY + (a2.PosY - a1.PosY) * tPulse;
+                    g.FillEllipse(pulseBrush, px - 3.5f, py - 3.5f, 7f, 7f);
+                }
+            }
+        }
+
+        // 1. Draw floating 3D Real Network Nodes (with Z perspective scaling + 3D floor-tether stems)
         for (int i = 0; i < pktsSnap.Count; i++) {
             DataPacket p = pktsSnap[i];
-            float sz = (p.Kind == 0 ? 8.5f : 11.5f) + (float)Math.Sin(p.floatRot * 2f) * 2.5f;
+            float zScale = GetDepthScale(p.Z);
+            float sz = ((p.Kind == 0 ? 8.5f : 11.5f) + (float)Math.Sin(p.floatRot * 2f) * 2.5f) * zScale;
             if (p.IsHovered) sz *= 1.35f;
+            int depthAlpha = (int)Clamp(175f + (p.Z + 250f) * 0.19f, 120f, 255f);
 
-            using (SolidBrush glowB = new SolidBrush(Color.FromArgb(p.IsHovered ? 110 : 55, p.Col.R, p.Col.G, p.Col.B)))
-            using (Pen wireP = new Pen(Color.FromArgb(240, p.Col.R, p.Col.G, p.Col.B), p.IsHovered ? 2.6f : 2.0f))
-            using (SolidBrush coreB = new SolidBrush(Color.FromArgb(240, 250, 252, 255))) {
+            using (Pen stemP = new Pen(Color.FromArgb(depthAlpha / 3, p.Col.R, p.Col.G, p.Col.B), 1.0f))
+            using (SolidBrush glowB = new SolidBrush(Color.FromArgb(p.IsHovered ? 120 : (depthAlpha / 3), p.Col.R, p.Col.G, p.Col.B)))
+            using (Pen wireP = new Pen(Color.FromArgb(depthAlpha, p.Col.R, p.Col.G, p.Col.B), (p.IsHovered ? 2.6f : 1.9f) * Math.Max(0.8f, zScale * 0.9f)))
+            using (SolidBrush coreB = new SolidBrush(Color.FromArgb(depthAlpha, 250, 252, 255))) {
+                float stemH = 26f * zScale;
+                g.DrawLine(stemP, p.X, p.Y + sz, p.X, p.Y + sz + stemH);
+                g.DrawEllipse(stemP, p.X - sz * 0.8f, p.Y + sz + stemH - 2.5f, sz * 1.6f, 5f);
+
                 g.FillEllipse(glowB, p.X - sz * 2f, p.Y - sz * 2f, sz * 4f, sz * 4f);
                 if (p.Kind == 2) {
-                    // Spiky Red Firewall Anomaly Node
                     g.DrawEllipse(wireP, p.X - sz * 1.2f, p.Y - sz * 1.2f, sz * 2.4f, sz * 2.4f);
                     g.DrawLine(wireP, p.X - sz * 1.6f, p.Y, p.X + sz * 1.6f, p.Y);
                     g.DrawLine(wireP, p.X, p.Y - sz * 1.6f, p.X, p.Y + sz * 1.6f);
@@ -1390,20 +2780,14 @@ public class Porygon3DAvatar {
                         g.DrawEllipse(wireP, p.X - sz * 1.35f, p.Y - sz * 1.35f, sz * 2.7f, sz * 2.7f);
                     }
                 }
-                g.FillEllipse(coreB, p.X - 3f, p.Y - 3f, 6f, 6f);
-
-                // Subtle mini endpoint label next to non-hovered Anomaly or New-Host nodes
-                if (tagFont != null && p.Kind >= 1 && !p.IsHovered) {
-                    using (SolidBrush lblB = new SolidBrush(Color.FromArgb(215, p.Col.R, p.Col.G, p.Col.B))) {
-                        g.DrawString(p.RemoteEndpoint, tagFont, lblB, p.X + sz + 5f, p.Y - 6f);
-                    }
-                }
+                float cr = 3f * zScale;
+                g.FillEllipse(coreB, p.X - cr, p.Y - cr, cr * 2f, cr * 2f);
             }
         }
 
-        // 2. Render each of the 3 Porygon Agents & their active Advanced Skills!
-        for (int aIdx = 0; aIdx < Agents.Count; aIdx++) {
-            RenderSingleAgent(g, Agents[aIdx], userScale, themeCyan, themeMag, tagFont);
+        // 2. Render each of the 5 Porygon Agents sorted back-to-front by Z!
+        for (int aIdx = 0; aIdx < agentsSorted.Count; aIdx++) {
+            RenderSingleAgent(g, agentsSorted[aIdx], userScale, themeCyan, themeMag, tagFont);
         }
 
         // 3. Render Interactive Mouse-Hover Node Inspection Card (or AI Agent Inspection Card)!
@@ -1417,20 +2801,19 @@ public class Porygon3DAvatar {
     }
 
     private void DrawHoveredPacketCard(Graphics g, DataPacket p, Font f) {
-        // Find assigned Porygon agent to draw a tactical vector link line
         PorygonAgent responder = null;
         for (int i = 0; i < Agents.Count; i++) {
             if (Agents[i].Name == p.AssignedAgentName) { responder = Agents[i]; break; }
         }
         if (responder == null && Agents.Count > 0) responder = Agents[0];
 
-        // Rotating Cyber Target Lock Reticle around the hovered node
-        float r = 24f;
+        float zScale = GetDepthScale(p.Z);
+        float r = 24f * zScale;
         using (Pen lockPen = new Pen(Color.FromArgb(245, p.Col.R, p.Col.G, p.Col.B), 2.2f))
         using (Pen linkPen = new Pen(Color.FromArgb(145, p.Col.R, p.Col.G, p.Col.B), 1.4f)) {
             linkPen.DashStyle = DashStyle.Dash;
             g.DrawEllipse(lockPen, p.X - r, p.Y - r, r * 2f, r * 2f);
-            float b = 29f, l = 9f;
+            float b = 29f * zScale, l = 9f * zScale;
             g.DrawLine(lockPen, p.X - b, p.Y - b, p.X - b + l, p.Y - b);
             g.DrawLine(lockPen, p.X - b, p.Y - b, p.X - b, p.Y - b + l);
             g.DrawLine(lockPen, p.X + b, p.Y - b, p.X + b - l, p.Y - b);
@@ -1445,15 +2828,17 @@ public class Porygon3DAvatar {
             }
         }
 
-        int cw = 408;
-        int ch = 124;
+        Rectangle mon = GetContainingOrNearestMonitor(p.X, p.Y);
+        int cw = 424;
+        int ch = 138;
         int cx = (int)p.X + 36;
         int cy = (int)p.Y - ch / 2;
-        if (cx + cw > 1890) cx = (int)p.X - cw - 36;
-        if (cy < 28) cy = 28;
-        if (cy + ch > 1020) cy = 1020 - ch;
+        if (cx + cw > mon.Right - 24) cx = (int)p.X - cw - 36;
+        if (cx < mon.Left + 24) cx = mon.Left + 24;
+        if (cy < mon.Top + 28) cy = mon.Top + 28;
+        if (cy + ch > mon.Bottom - 54) cy = mon.Bottom - 54 - ch;
 
-        using (SolidBrush bg = new SolidBrush(Color.FromArgb(246, 5, 9, 20)))
+        using (SolidBrush bg = new SolidBrush(Color.FromArgb(148, 4, 8, 18)))
         using (Pen border = new Pen(Color.FromArgb(235, p.Col.R, p.Col.G, p.Col.B), 1.8f))
         using (SolidBrush headB = new SolidBrush(p.Col))
         using (SolidBrush txtB = new SolidBrush(Color.FromArgb(245, 235, 242, 252)))
@@ -1462,41 +2847,43 @@ public class Porygon3DAvatar {
             g.DrawRectangle(border, cx, cy, cw, ch);
 
             string kindTitle = (p.Kind == 2)
-                ? ">> [⚠ IDS ANOMALY NODE // HIGH PRIORITY]"
-                : (p.Kind == 1 ? ">> [★ NEW ENDPOINT AUDIT // GOLDEN ORB]" : ">> [● VERIFIED NETWORK FLOW NODE]");
+                ? ">> [⚠ IDS ANOMALY NODE // 3D HIGH PRIORITY]"
+                : (p.Kind == 1 ? ">> [★ NEW ENDPOINT AUDIT // 3D GOLDEN ORB]" : ">> [● VERIFIED 3D NETWORK FLOW NODE]");
             g.DrawString(kindTitle, f, headB, cx + 10, cy + 8);
 
-            g.DrawString(string.Format("REMOTE_EP : {0}  [{1}]", p.RemoteEndpoint, p.ProtocolName), f, txtB, cx + 10, cy + 28);
-            g.DrawString(string.Format("LOCAL_SKT : {0}  ({1})", p.LocalEndpoint, p.TcpStateStr), f, txtB, cx + 10, cy + 45);
+            g.DrawString(string.Format("REMOTE_EP : {0}  [{1}]", p.RemoteEndpoint, p.ProtocolName), f, txtB, cx + 10, cy + 26);
+            g.DrawString(string.Format("LOCAL_SKT : {0}  ({1})", p.LocalEndpoint, p.TcpStateStr), f, txtB, cx + 10, cy + 43);
+            g.DrawString(string.Format("COORD_3D  : [X:{0:0}, Y:{1:0}, Z:{2:+0;-0;0}] (Depth {3:0.00}x)", p.X, p.Y, p.Z, zScale), f, headB, cx + 10, cy + 60);
 
-            // Anomaly Score Progress Bar with generous spacing
             int pct = (int)Math.Round(p.AnomalyScore * 100f);
-            g.DrawString(string.Format("ANOMALY   : {0}% [{1}]", pct, p.AnomalyType), f, headB, cx + 10, cy + 63);
-            g.FillRectangle(barBg, cx + 288, cy + 66, 108, 8);
-            g.FillRectangle(headB, cx + 288, cy + 66, (int)(1.08f * Math.Min(100, pct)), 8);
+            g.DrawString(string.Format("ANOMALY   : {0}% [{1}]", pct, p.AnomalyType), f, headB, cx + 10, cy + 78);
+            g.FillRectangle(barBg, cx + 298, cy + 81, 108, 8);
+            g.FillRectangle(headB, cx + 298, cy + 81, (int)(1.08f * Math.Min(100, pct)), 8);
 
-            g.DrawString("DETAIL    : " + p.AnomalyDetail, f, txtB, cx + 10, cy + 82);
-            g.DrawString(string.Format("AI_AGENT  : {0} [LOCKED] | FLOW: {1:0.0} KB/s", p.AssignedAgentName, p.KbpsSample), f, headB, cx + 10, cy + 101);
+            g.DrawString("DETAIL    : " + p.AnomalyDetail, f, txtB, cx + 10, cy + 96);
+            g.DrawString(string.Format("AI_AGENT  : {0} [LOCKED] | FLOW: {1:0.0} KB/s", p.AssignedAgentName, p.KbpsSample), f, headB, cx + 10, cy + 114);
         }
     }
 
     private void DrawHoveredAgentCard(Graphics g, PorygonAgent a, Font f) {
-        float r = 76f;
+        float zScale = GetDepthScale(a.PosZ);
+        float r = 76f * zScale;
         using (Pen lockPen = new Pen(Color.FromArgb(230, a.AuraColor.R, a.AuraColor.G, a.AuraColor.B), 2.0f)) {
             lockPen.DashStyle = DashStyle.Dash;
             g.DrawEllipse(lockPen, a.PosX - r, a.PosY - r, r * 2f, r * 2f);
         }
 
-        int cw = 365;
-        int ch = 132;
+        Rectangle mon = GetContainingOrNearestMonitor(a.PosX, a.PosY);
+        int cw = 396;
+        int ch = 148;
         int cx = (int)a.PosX - cw / 2;
         int cy = (int)a.PosY - 92 - ch;
-        if (cx < 150) cx = 150;
-        if (cx + cw > 1890) cx = 1890 - cw;
-        if (cy < 24) cy = (int)a.PosY + 108;
+        if (cx < mon.Left + 24) cx = mon.Left + 24;
+        if (cx + cw > mon.Right - 24) cx = mon.Right - 24 - cw;
+        if (cy < mon.Top + 24) cy = (int)a.PosY + 108;
 
         FlyBrainConnectome br = a.Brain;
-        using (SolidBrush bg = new SolidBrush(Color.FromArgb(246, 5, 9, 20)))
+        using (SolidBrush bg = new SolidBrush(Color.FromArgb(148, 4, 8, 18)))
         using (Pen border = new Pen(Color.FromArgb(235, a.AuraColor.R, a.AuraColor.G, a.AuraColor.B), 1.8f))
         using (SolidBrush headB = new SolidBrush(a.AuraColor))
         using (SolidBrush goldB = new SolidBrush(Color.FromArgb(250, 204, 21)))
@@ -1505,10 +2892,10 @@ public class Porygon3DAvatar {
             g.DrawRectangle(border, cx, cy, cw, ch);
 
             g.DrawString(string.Format(">> AI_CORE // {0} [LVL {1}] — {2}", a.Name, br.Level, a.RoleTag), f, headB, cx + 10, cy + 8);
-            g.DrawString(a.SpecialtyDesc, f, goldB, cx + 10, cy + 26);
+            g.DrawString(string.Format("COORD_3D  : [X:{0:0}, Y:{1:0}, Z:{2:+0;-0;0}] (Scale {3:0.00}x)", a.PosX, a.PosY, a.PosZ, zScale), f, goldB, cx + 10, cy + 26);
             g.DrawString(string.Format("TELEMETRY : DL_Z:{0:+0.0;-0.0;0.0}σ | UL_Z:{1:+0.0;-0.0;0.0}σ | PING_Z:{2:+0.0;-0.0;0.0}σ",
                 LatestFeed.DlZScore, LatestFeed.UlZScore, LatestFeed.PingZScore), f, txtB, cx + 10, cy + 45);
-            g.DrawString("TARGET    : " + a.CurrentTargetEndpoint, f, txtB, cx + 10, cy + 63);
+            g.DrawString("TARGET_3D : " + a.CurrentTargetEndpoint, f, txtB, cx + 10, cy + 63);
             g.DrawString(string.Format("IDS_STATS : Flows:{0} | AnomaliesPurged:{1} | P2P_Syncs:{2}",
                 br.PacketsCollected, br.AnomaliesCleared, br.NeuralSyncs), f, txtB, cx + 10, cy + 81);
             g.DrawString(string.Format("SYNAPSES  : Gain {0:0.00}x | XP {1}/{2} | State: {3}",
@@ -1516,13 +2903,426 @@ public class Porygon3DAvatar {
         }
     }
 
+    public void RenderOpenGL(float userScale, Color themeCyan, Color themeMag) {
+        List<DataPacket> pktsSnap;
+        DataPacket hovPkt;
+        PorygonAgent hovAg;
+        lock (packetLock) {
+            pktsSnap = new List<DataPacket>(Packets);
+            hovPkt = HoveredPacket;
+            hovAg = HoveredAgent;
+        }
+
+        // Sort both network nodes and Porygon agents back-to-front by Z coordinate (-250 deep .. +170 near)
+        pktsSnap.Sort((a, b) => a.Z.CompareTo(b.Z));
+        List<PorygonAgent> agentsSorted = new List<PorygonAgent>(Agents);
+        agentsSorted.Sort((a, b) => a.PosZ.CompareTo(b.PosZ));
+
+        // 0. Draw Cross-Monitor 3D Neural Mesh Conduits linking the 5 Porygons across screens on the GPU
+        if (Agents.Count >= 2) {
+            Color meshCol = Color.FromArgb(55, themeCyan.R, themeCyan.G, themeCyan.B);
+            Color pulseCol = Color.FromArgb(195, themeCyan.R, themeCyan.G, themeCyan.B);
+            for (int i = 0; i < Agents.Count; i++) {
+                PorygonAgent a1 = Agents[i];
+                PorygonAgent a2 = Agents[(i + 1) % Agents.Count];
+                float avgScale = (GetDepthScale(a1.PosZ) + GetDepthScale(a2.PosZ)) * 0.5f;
+                GpuGl.DrawLine(a1.PosX, a1.PosY, a2.PosX, a2.PosY, meshCol, 1.2f * avgScale);
+                float tPulse = (float)((a1.FloatBob * 0.18 + i * 0.33) % 1.0);
+                if (tPulse < 0f) tPulse += 1f;
+                float px = a1.PosX + (a2.PosX - a1.PosX) * tPulse;
+                float py = a1.PosY + (a2.PosY - a1.PosY) * tPulse;
+                float pz = a1.PosZ + (a2.PosZ - a1.PosZ) * tPulse;
+                float pScale = GetDepthScale(pz);
+                GpuGl.FillEllipse(px, py, 3.8f * pScale, 3.8f * pScale, pulseCol, 10);
+            }
+        }
+
+        // 1. Draw floating 3D Real Network Nodes on GPU (with Z perspective scaling + 3D Floor Shadow Tethers)
+        for (int i = 0; i < pktsSnap.Count; i++) {
+            DataPacket p = pktsSnap[i];
+            float zScale = GetDepthScale(p.Z);
+            float sz = ((p.Kind == 0 ? 8.5f : 11.5f) + (float)Math.Sin(p.floatRot * 2f) * 2.5f) * zScale;
+            if (p.IsHovered) sz *= 1.35f;
+
+            int depthAlpha = (int)Clamp(170f + (p.Z + 250f) * 0.20f, 115f, 255f);
+            Color glowCol = Color.FromArgb(p.IsHovered ? 120 : (depthAlpha / 3), p.Col.R, p.Col.G, p.Col.B);
+            Color wireCol = Color.FromArgb(depthAlpha, p.Col.R, p.Col.G, p.Col.B);
+            Color stemCol = Color.FromArgb(depthAlpha / 3, p.Col.R, p.Col.G, p.Col.B);
+            Color coreCol = Color.FromArgb(depthAlpha, 250, 252, 255);
+            float lw = (p.IsHovered ? 2.5f : 1.8f) * Clamp(zScale, 0.75f, 1.35f);
+
+            // 3D Vertical Altitude Tether & Floor Shadow Ellipse beneath each floating node
+            float stemH = 26f * zScale;
+            float baseY = p.Y + sz + stemH;
+            GpuGl.DrawLine(p.X, p.Y + sz, p.X, baseY, stemCol, 1.1f);
+            GpuGl.DrawEllipse(p.X, baseY, sz * 0.85f, 2.8f * zScale, stemCol, 1.0f, 12);
+
+            GpuGl.FillEllipse(p.X, p.Y, sz * 2f, sz * 2f, glowCol, 14);
+            if (p.Kind == 2) {
+                GpuGl.DrawEllipse(p.X, p.Y, sz * 1.2f, sz * 1.2f, wireCol, lw, 16);
+                GpuGl.DrawLine(p.X - sz * 1.6f, p.Y, p.X + sz * 1.6f, p.Y, wireCol, lw);
+                GpuGl.DrawLine(p.X, p.Y - sz * 1.6f, p.X, p.Y + sz * 1.6f, wireCol, lw);
+            } else {
+                GpuGl.glLineWidth(lw);
+                GpuGl.SetColor(wireCol);
+                GpuGl.glBegin(GpuGl.GL_LINE_LOOP);
+                GpuGl.glVertex2f(p.X, p.Y - sz);
+                GpuGl.glVertex2f(p.X + sz, p.Y);
+                GpuGl.glVertex2f(p.X, p.Y + sz);
+                GpuGl.glVertex2f(p.X - sz, p.Y);
+                GpuGl.glEnd();
+                if (p.Kind == 1) {
+                    GpuGl.DrawEllipse(p.X, p.Y, sz * 1.35f, sz * 1.35f, wireCol, lw, 16);
+                }
+            }
+            GpuGl.FillEllipse(p.X, p.Y, 3.0f * zScale, 3.0f * zScale, coreCol, 8);
+
+            // Show compact 3D Z-depth readout on priority/anomaly or foreground nodes
+            if (p.Kind == 2 || p.IsHovered || p.Z > 85f) {
+                GpuGl.DrawText(string.Format("Z:{0:+0;-0;0}", p.Z), p.X - 18f, baseY + 12f, wireCol, GpuGl.FONT_LIST_HUD_SMALL);
+            }
+        }
+
+        // 2. Render each of the 5 3D Porygon Agents sorted back-to-front by PosZ via Hardware OpenGL Z-Buffer + Triangles!
+        for (int aIdx = 0; aIdx < agentsSorted.Count; aIdx++) {
+            GpuGl.glClear(GpuGl.GL_DEPTH_BUFFER_BIT);
+            RenderSingleAgentOpenGL(agentsSorted[aIdx], userScale, themeCyan, themeMag);
+        }
+
+        // 3. Render Interactive Mouse-Hover Node or Agent Inspection Card on GPU
+        if (hovPkt != null) {
+            DrawHoveredPacketCardOpenGL(hovPkt);
+        } else if (hovAg != null) {
+            DrawHoveredAgentCardOpenGL(hovAg);
+        }
+    }
+
+    private void DrawHoveredPacketCardOpenGL(DataPacket p) {
+        PorygonAgent responder = null;
+        for (int i = 0; i < Agents.Count; i++) {
+            if (Agents[i].Name == p.AssignedAgentName) { responder = Agents[i]; break; }
+        }
+        if (responder == null && Agents.Count > 0) responder = Agents[0];
+
+        float zScale = GetDepthScale(p.Z);
+        float r = 24f * zScale;
+        Color lockCol = Color.FromArgb(245, p.Col.R, p.Col.G, p.Col.B);
+        Color linkCol = Color.FromArgb(145, p.Col.R, p.Col.G, p.Col.B);
+        GpuGl.DrawEllipse(p.X, p.Y, r, r, lockCol, 2.2f, 24);
+        float b = 29f * zScale, l = 9f * zScale;
+        GpuGl.DrawLine(p.X - b, p.Y - b, p.X - b + l, p.Y - b, lockCol, 2.2f);
+        GpuGl.DrawLine(p.X - b, p.Y - b, p.X - b, p.Y - b + l, lockCol, 2.2f);
+        GpuGl.DrawLine(p.X + b, p.Y - b, p.X + b - l, p.Y - b, lockCol, 2.2f);
+        GpuGl.DrawLine(p.X + b, p.Y - b, p.X + b, p.Y - b + l, lockCol, 2.2f);
+        GpuGl.DrawLine(p.X - b, p.Y + b, p.X - b + l, p.Y + b, lockCol, 2.2f);
+        GpuGl.DrawLine(p.X - b, p.Y + b, p.X - b, p.Y + b - l, lockCol, 2.2f);
+        GpuGl.DrawLine(p.X + b, p.Y + b, p.X + b - l, p.Y + b, lockCol, 2.2f);
+        GpuGl.DrawLine(p.X + b, p.Y + b, p.X + b, p.Y + b - l, lockCol, 2.2f);
+        if (responder != null) {
+            GpuGl.DrawLine(p.X, p.Y, responder.PosX, responder.PosY, linkCol, 1.4f);
+        }
+
+        Rectangle mon = GetContainingOrNearestMonitor(p.X, p.Y);
+        int cw = 424;
+        int ch = 140;
+        int cx = (int)p.X + 36;
+        int cy = (int)p.Y - ch / 2;
+        if (cx + cw > mon.Right - 24) cx = (int)p.X - cw - 36;
+        if (cx < mon.Left + 24) cx = mon.Left + 24;
+        if (cy < mon.Top + 28) cy = mon.Top + 28;
+        if (cy + ch > mon.Bottom - 54) cy = mon.Bottom - 54 - ch;
+
+        GpuGl.FillRect(cx, cy, cw, ch, Color.FromArgb(148, 4, 8, 18));
+        GpuGl.DrawRect(cx, cy, cw, ch, Color.FromArgb(235, p.Col.R, p.Col.G, p.Col.B), 1.8f);
+
+        Color txtCol = Color.FromArgb(245, 235, 242, 252);
+        Color goldCol = Color.FromArgb(250, 204, 21);
+        string kindTitle = (p.Kind == 2)
+            ? ">> [! IDS ANOMALY NODE // 3D HIGH PRIORITY]"
+            : (p.Kind == 1 ? ">> [* NEW ENDPOINT AUDIT // 3D GOLDEN ORB]" : ">> [o VERIFIED 3D NETWORK FLOW NODE]");
+        GpuGl.DrawText(kindTitle, cx + 10, cy + 8, p.Col, GpuGl.FONT_LIST_HUD_SMALL);
+        GpuGl.DrawText(string.Format("REMOTE_EP : {0}  [{1}]", p.RemoteEndpoint, p.ProtocolName), cx + 10, cy + 26, txtCol, GpuGl.FONT_LIST_HUD_SMALL);
+        GpuGl.DrawText(string.Format("LOCAL_SKT : {0}  ({1})", p.LocalEndpoint, p.TcpStateStr), cx + 10, cy + 43, txtCol, GpuGl.FONT_LIST_HUD_SMALL);
+        GpuGl.DrawText(string.Format("COORD_3D  : [X:{0:0}, Y:{1:0}, Z:{2:+0;-0;0}] (Depth {3:0.00}x)", p.X, p.Y, p.Z, zScale), cx + 10, cy + 60, goldCol, GpuGl.FONT_LIST_HUD_SMALL);
+
+        int pct = (int)Math.Round(p.AnomalyScore * 100f);
+        GpuGl.DrawText(string.Format("ANOMALY   : {0}% [{1}]", pct, p.AnomalyType), cx + 10, cy + 78, p.Col, GpuGl.FONT_LIST_HUD_SMALL);
+        GpuGl.FillRect(cx + 298, cy + 81, 108, 8, Color.FromArgb(50, 255, 255, 255));
+        GpuGl.FillRect(cx + 298, cy + 81, (int)(1.08f * Math.Min(100, pct)), 8, p.Col);
+
+        GpuGl.DrawText("DETAIL    : " + p.AnomalyDetail, cx + 10, cy + 96, txtCol, GpuGl.FONT_LIST_HUD_SMALL);
+        GpuGl.DrawText(string.Format("AI_AGENT  : {0} [LOCKED] | FLOW: {1:0.0} KB/s", p.AssignedAgentName, p.KbpsSample), cx + 10, cy + 114, p.Col, GpuGl.FONT_LIST_HUD_SMALL);
+    }
+
+    private void DrawHoveredAgentCardOpenGL(PorygonAgent a) {
+        float zScale = GetDepthScale(a.PosZ);
+        float r = 76f * zScale;
+        GpuGl.DrawEllipse(a.PosX, a.PosY, r, r, Color.FromArgb(230, a.AuraColor.R, a.AuraColor.G, a.AuraColor.B), 2.0f, 32);
+
+        Rectangle mon = GetContainingOrNearestMonitor(a.PosX, a.PosY);
+        int cw = 412;
+        int ch = 162;
+        int cx = (int)a.PosX - cw / 2;
+        int cy = (int)a.PosY - 92 - ch;
+        if (cx < mon.Left + 24) cx = mon.Left + 24;
+        if (cx + cw > mon.Right - 24) cx = mon.Right - 24 - cw;
+        if (cy < mon.Top + 24) cy = (int)a.PosY + 108;
+
+        FlyBrainConnectome br = a.Brain;
+        GpuGl.FillRect(cx, cy, cw, ch, Color.FromArgb(148, 4, 8, 18));
+        GpuGl.DrawRect(cx, cy, cw, ch, Color.FromArgb(235, a.AuraColor.R, a.AuraColor.G, a.AuraColor.B), 1.8f);
+
+        Color goldCol = Color.FromArgb(250, 204, 21);
+        Color txtCol = Color.FromArgb(245, 235, 242, 252);
+        GpuGl.DrawText(string.Format(">> AI_CORE // {0} [GEN {1} | {2}] - {3}", a.Name, br.Generation, br.GetLifeStageLabel(), a.RoleTag), cx + 10, cy + 8, a.AuraColor, GpuGl.FONT_LIST_HUD_SMALL);
+        GpuGl.DrawText(string.Format("COORD_3D  : [X:{0:0}, Y:{1:0}, Z:{2:+0;-0;0}] (Depth {3:0.00}x)", a.PosX, a.PosY, a.PosZ, zScale), cx + 10, cy + 25, goldCol, GpuGl.FONT_LIST_HUD_SMALL);
+        GpuGl.DrawText(string.Format("LIFE_CYCLE: Age {0:0.0}% | Stage {1}/3 | MutSigma {2:0.000}", br.LifeAge, br.LifeStage + 1, br.MutationSigma), cx + 10, cy + 42, goldCol, GpuGl.FONT_LIST_HUD_SMALL);
+        GpuGl.DrawText(string.Format("EVO_MODEL : ACC:{0:0.0}% | FIT:{1:0.0} | TP:{2} TN:{3} FP:{4}",
+            br.DetectionAccuracy, br.FitnessScore, br.TruePositives, br.TrueNegatives, br.FalsePositives), cx + 10, cy + 59, txtCol, GpuGl.FONT_LIST_HUD_SMALL);
+        GpuGl.DrawText(string.Format("TELEMETRY : DL_Z:{0:+0.0;-0.0;0.0}s | UL_Z:{1:+0.0;-0.0;0.0}s | TARGET:{2}",
+            LatestFeed.DlZScore, LatestFeed.UlZScore, a.CurrentTargetEndpoint), cx + 10, cy + 76, txtCol, GpuGl.FONT_LIST_HUD_SMALL);
+        GpuGl.DrawText(string.Format("IDS_STATS : Flows:{0} | Purged:{1} | CPU_Epoch:{2}",
+            br.PacketsCollected, br.AnomaliesCleared, br.CpuStepsCompleted), cx + 10, cy + 93, txtCol, GpuGl.FONT_LIST_HUD_SMALL);
+        GpuGl.DrawText(string.Format("SYNAPSES  : Gain {0:0.00}x | LVL {1} ({2}/{3} XP) | {4}",
+            br.SynapticGain, br.Level, br.XP, br.NextLevelXP, br.ActiveStateName), cx + 10, cy + 110, a.AuraColor, GpuGl.FONT_LIST_HUD_SMALL);
+
+        // Life Cycle Progress Bar inside Hover Card
+        GpuGl.FillRect(cx + 10, cy + 136, cw - 20, 7, Color.FromArgb(45, 255, 255, 255));
+        GpuGl.FillRect(cx + 10, cy + 136, (cw - 20f) * Math.Min(1f, br.LifeAge / 100f), 7, goldCol);
+    }
+
+    private void RenderSingleAgentOpenGL(PorygonAgent a, float userScale, Color themeCyan, Color themeMag) {
+        ModelData model = a.Model;
+        if (model == null) return;
+
+        // Apply 3D Z-Coordinate Perspective Depth Scaling (0.65x in deep cyberspace up to 1.52x near foreground)
+        float zDepthScale = GetDepthScale(a.PosZ);
+        float effUserScale = userScale * zDepthScale;
+        float scale = 1.26f * a.ScaleFactor * (effUserScale / 100.0f);
+        float hopOffset = (a.SpinRollTimer > 0f) ? (float)Math.Sin(a.SpinRollTimer * Math.PI) * 32f * zDepthScale : 0f;
+        float bobY = a.PosY + (float)Math.Sin(a.FloatBob) * 9f * zDepthScale - hopOffset;
+
+        // Skill LVL 6: Deep Sonar Scan Expanding Ring
+        if (a.ScanWaveTimer > 0f) {
+            float prog = 1.0f - a.ScanWaveTimer;
+            float scanR = (40f + prog * 260f) * zDepthScale;
+            int alpha = (int)(a.ScanWaveTimer * 160f);
+            GpuGl.DrawEllipse(a.PosX, bobY, scanR, scanR * 0.45f, Color.FromArgb(alpha, a.AuraColor.R, a.AuraColor.G, a.AuraColor.B), 2.2f, 32);
+        }
+
+        // Skill LVL 5: Quantum Blink Warp Trail
+        if (a.QuantumBlinkTimer > 0f) {
+            int alpha = (int)(a.QuantumBlinkTimer * 190f);
+            Color warpCol = Color.FromArgb(alpha, 0, 240, 255);
+            GpuGl.DrawLine(a.BlinkStartPt.X, a.BlinkStartPt.Y, a.PosX, bobY, warpCol, 3.5f);
+            GpuGl.DrawLine(a.BlinkStartPt.X, a.BlinkStartPt.Y, a.PosX, bobY, Color.FromArgb(alpha, 255, 255, 255), 1.5f);
+            GpuGl.DrawEllipse(a.BlinkStartPt.X, a.BlinkStartPt.Y, 24f * zDepthScale, 24f * zDepthScale, warpCol, 2.2f, 20);
+        }
+
+        // Skill LVL 3: P2P Neural Sync Link Beam between Porygon Agents
+        if (a.SyncTimer > 0f && a.SyncPartnerIdx >= 0 && a.SyncPartnerIdx < Agents.Count) {
+            PorygonAgent partner = Agents[a.SyncPartnerIdx];
+            int alpha = (int)(a.SyncTimer * 210f);
+            GpuGl.DrawLine(a.PosX, bobY, partner.PosX, partner.PosY, Color.FromArgb(alpha / 2, a.AuraColor.R, a.AuraColor.G, a.AuraColor.B), 5.0f);
+            GpuGl.DrawLine(a.PosX, bobY, partner.PosX, partner.PosY, Color.FromArgb(alpha, 250, 204, 21), 2.0f);
+        }
+
+        // Cyber Holographic Platform beneath each Porygon (scaled by 3D Z depth)
+        float ringW = 126f * (effUserScale / 100f);
+        float ringH = 30f * (effUserScale / 100f);
+        float ringY = a.PosY + 74f * (effUserScale / 100f);
+        GpuGl.FillEllipse(a.PosX, ringY, ringW * 0.45f, ringH * 0.45f, Color.FromArgb(a.IsHovered ? 85 : 45, a.AuraColor.R, a.AuraColor.G, a.AuraColor.B), 24);
+        GpuGl.DrawEllipse(a.PosX, ringY, ringW * 0.50f, ringH * 0.50f, Color.FromArgb(a.IsHovered ? 230 : 125, a.AuraColor.R, a.AuraColor.G, a.AuraColor.B), a.IsHovered ? 2.4f : 1.8f, 28);
+        GpuGl.DrawEllipse(a.PosX, ringY, ringW * 0.68f, ringH * 0.68f, Color.FromArgb(65, themeCyan.R, themeCyan.G, themeCyan.B), 1.1f, 28);
+
+        // Precompute agent trigonometry ONCE per agent (eliminates 90,000 Math.Sin/Cos calls per frame!)
+        List<Vec3> bVerts = model.Verts;
+        List<Face3D> bFaces = model.Faces;
+        if (a.TvBuf == null || a.TvBuf.Length < bVerts.Count) {
+            a.TvBuf = new Vec3[bVerts.Count];
+            a.PvBuf = new PointF[bVerts.Count];
+        }
+        Vec3[] tv = a.TvBuf;
+        PointF[] pv = a.PvBuf;
+        float fov = 560f;
+        float camDist = 460f;
+
+        float cosY = (float)Math.Cos(a.Yaw), sinY = (float)Math.Sin(a.Yaw);
+        float cosP = (float)Math.Cos(a.Pitch), sinP = (float)Math.Sin(a.Pitch);
+        float cosR = (float)Math.Cos(a.Roll), sinR = (float)Math.Sin(a.Roll);
+        float sinWalk = (float)Math.Sin(a.WalkPhase);
+        float cosWalk = (float)Math.Cos(a.WalkPhase);
+        float sinTail = (float)Math.Sin(a.WalkPhase * 1.3f);
+
+        for (int i = 0; i < bVerts.Count; i++) {
+            Vec3 v = bVerts[i];
+            float vx = v.X, vy = v.Y, vz = v.Z;
+            if (vy > 12f) {
+                float hw = (vy - 12f) * 0.025f;
+                if (hw > 1.0f) hw = 1.0f;
+                float ry = vy - 12f;
+                float hp = a.HeadPitch * hw;
+                float hy = a.HeadYaw * hw;
+                float y1 = ry - vz * hp;
+                float z1 = ry * hp + vz;
+                vx = vx + z1 * hy;
+                vz = -vx * hy + z1;
+                vy = 12f + y1;
+            } else if (vy < -14f && (vx > 10f || vx < -10f)) {
+                float fw = (-14f - vy) * 0.03333f;
+                if (fw > 1.0f) fw = 1.0f;
+                float sideSign = (vx < 0f) ? 1.0f : -1.0f;
+                vz += sinWalk * sideSign * 7.5f * fw;
+                vy += cosWalk * sideSign * 3.0f * fw;
+            }
+            if (vz < -22f) {
+                float tw = (-22f - vz) * 0.0263f;
+                if (tw > 1.0f) tw = 1.0f;
+                vx += sinTail * 8.0f * tw;
+            }
+
+            // RotateY -> RotateX -> RotateZ * scale
+            float x1 = vx * cosY + vz * sinY;
+            float z1r = -vx * sinY + vz * cosY;
+            float y2 = vy * cosP - z1r * sinP;
+            float z2 = vy * sinP + z1r * cosP;
+            float wx = (x1 * cosR - y2 * sinR) * scale;
+            float wy = (x1 * sinR + y2 * cosR) * scale;
+            float wz = z2 * scale;
+
+            tv[i] = new Vec3(wx, wy, wz);
+            float zProj = camDist - wz;
+            if (zProj < 80f) zProj = 80f;
+            float persp = fov / zProj;
+            pv[i] = new PointF(a.PosX + wx * persp, bobY - wy * persp);
+        }
+
+        // Hardware 3D Rasterization + Hardware Z-Buffer on AMD Radeon RX 9060 XT!
+        GpuGl.glEnable(GpuGl.GL_DEPTH_TEST);
+        GpuGl.glDepthFunc(GpuGl.GL_LEQUAL);
+        GpuGl.glDisable(GpuGl.GL_TEXTURE_2D);
+
+        float depthAtmos = Clamp(0.84f + (a.PosZ + 250f) * 0.00045f, 0.78f, 1.05f);
+
+        GpuGl.glBegin(GpuGl.GL_TRIANGLES);
+        for (int i = 0; i < bFaces.Count; i++) {
+            Face3D f = bFaces[i];
+            int i0 = f.Indices[0], i1 = f.Indices[1], i2 = f.Indices[2];
+            PointF p0 = pv[i0], p1 = pv[i1], p2 = pv[i2];
+            Vec3 v0 = tv[i0], v1 = tv[i1], v2 = tv[i2];
+
+            Vec3 ln = f.LocalNormal;
+            float nx1 = ln.X * cosY + ln.Z * sinY;
+            float nz1 = -ln.X * sinY + ln.Z * cosY;
+            float ny2 = ln.Y * cosP - nz1 * sinP;
+            float nz2 = ln.Y * sinP + nz1 * cosP;
+            float nx = nx1 * cosR - ny2 * sinR;
+            float ny = nx1 * sinR + ny2 * cosR;
+            float nz = nz2;
+            if (nz < 0f) { nx = -nx; ny = -ny; nz = -nz; }
+
+            float ndotl = nx * -0.32f + ny * 0.72f + nz * 0.62f;
+            if (ndotl < 0f) ndotl = 0f;
+            float shade = (0.80f + ndotl * 0.26f) * depthAtmos;
+            byte r = (byte)Math.Min(255, (int)(f.BaseColor.R * shade));
+            byte gr = (byte)Math.Min(255, (int)(f.BaseColor.G * shade));
+            byte b = (byte)Math.Min(255, (int)(f.BaseColor.B * shade));
+
+            float z0 = v0.Z + f.DepthBias;
+            float z1 = v1.Z + f.DepthBias;
+            float z2 = v2.Z + f.DepthBias;
+
+            GpuGl.glColor4ub(r, gr, b, 255);
+            GpuGl.glVertex3f(p0.X, p0.Y, z0);
+            GpuGl.glVertex3f(p1.X, p1.Y, z1);
+            GpuGl.glVertex3f(p2.X, p2.Y, z2);
+        }
+        GpuGl.glEnd();
+        GpuGl.glDisable(GpuGl.GL_DEPTH_TEST);
+
+        // Skill LVL 2: Hexagonal Conversion2 Energy Shield
+        if (a.ShieldTimer > 0f) {
+            int sAlpha = (int)(Math.Min(1.0f, a.ShieldTimer) * 165f);
+            float shR = 72f * (effUserScale / 100f);
+            GpuGl.SetColor(a.AuraColor, sAlpha / 6);
+            GpuGl.glBegin(GpuGl.GL_TRIANGLE_FAN);
+            GpuGl.glVertex2f(a.PosX, bobY);
+            for (int k = 0; k <= 6; k++) {
+                double ang = a.FloatBob * 1.4f + (k % 6) * (Math.PI / 3.0);
+                GpuGl.glVertex2f(a.PosX + (float)Math.Cos(ang) * shR, bobY + (float)Math.Sin(ang) * shR * 0.85f);
+            }
+            GpuGl.glEnd();
+
+            GpuGl.glLineWidth(2.2f);
+            GpuGl.SetColor(a.AuraColor, sAlpha);
+            GpuGl.glBegin(GpuGl.GL_LINE_LOOP);
+            for (int k = 0; k < 6; k++) {
+                double ang = a.FloatBob * 1.4f + k * (Math.PI / 3.0);
+                GpuGl.glVertex2f(a.PosX + (float)Math.Cos(ang) * shR, bobY + (float)Math.Sin(ang) * shR * 0.85f);
+            }
+            GpuGl.glEnd();
+        }
+
+        // Skill LVL 1: Conversion Beam
+        if (a.BeamTimer > 0f) {
+            Vec3 beakTip = TransformAgentVertex(a, new Vec3(0, 18, 56), scale);
+            float zProj = Math.Max(80f, camDist - beakTip.Z);
+            PointF beakPt = new PointF(a.PosX + beakTip.X * (fov / zProj), bobY - beakTip.Y * (fov / zProj));
+            GpuGl.DrawLine(beakPt.X, beakPt.Y, a.BeamTarget.X, a.BeamTarget.Y, Color.FromArgb(150, a.AuraColor.R, a.AuraColor.G, a.AuraColor.B), 6.0f);
+            GpuGl.DrawLine(beakPt.X, beakPt.Y, a.BeamTarget.X, a.BeamTarget.Y, Color.FromArgb(245, 255, 255, 255), 2.5f);
+        }
+
+        // Skill LVL 4: Tri-Attack Elemental Matrix Beam
+        if (a.TriAttackTimer > 0f) {
+            Vec3 beakTip = TransformAgentVertex(a, new Vec3(0, 18, 56), scale);
+            float zProj = Math.Max(80f, camDist - beakTip.Z);
+            PointF beakPt = new PointF(a.PosX + beakTip.X * (fov / zProj), bobY - beakTip.Y * (fov / zProj));
+            PointF[] tri = new PointF[3];
+            for (int k = 0; k < 3; k++) {
+                double ang = a.FloatBob * 3.0f + k * (2.0 * Math.PI / 3.0);
+                tri[k] = new PointF(beakPt.X + (float)Math.Cos(ang) * 18f * zDepthScale, beakPt.Y + (float)Math.Sin(ang) * 18f * zDepthScale);
+            }
+            Color cIce  = Color.FromArgb(220, 0, 240, 255);
+            Color cPlas = Color.FromArgb(220, 236, 72, 153);
+            Color cElec = Color.FromArgb(230, 250, 204, 21);
+            GpuGl.DrawLine(tri[0].X, tri[0].Y, tri[1].X, tri[1].Y, cElec, 3.0f);
+            GpuGl.DrawLine(tri[1].X, tri[1].Y, tri[2].X, tri[2].Y, cElec, 3.0f);
+            GpuGl.DrawLine(tri[2].X, tri[2].Y, tri[0].X, tri[0].Y, cElec, 3.0f);
+            GpuGl.DrawLine(tri[0].X, tri[0].Y, a.TriAttackTarget.X, a.TriAttackTarget.Y, cIce, 3.2f);
+            GpuGl.DrawLine(tri[1].X, tri[1].Y, a.TriAttackTarget.X, a.TriAttackTarget.Y, cPlas, 3.2f);
+            GpuGl.DrawLine(tri[2].X, tri[2].Y, a.TriAttackTarget.X, a.TriAttackTarget.Y, cElec, 3.2f);
+            GpuGl.DrawEllipse(a.TriAttackTarget.X, a.TriAttackTarget.Y, 18f, 18f, cPlas, 3.0f, 20);
+        }
+
+        // Floating Mini-HUD Tag under each Porygon showing Evolutionary Generation, Life Stage & Live 3D [X,Y,Z] Coordinates!
+        string badge = string.Format("{0} G{1} {2}", a.Name, a.Brain.Generation, a.Brain.GetLifeStageTag());
+        string subBadge = string.Format("XYZ:[{0:0},{1:0},{2:+0;-0;0}] F2:{3:0}%", a.PosX, a.PosY, a.PosZ, a.Brain.F2Score);
+        float tagW = 166f;
+        float tagH = 34f;
+        float tagX = a.PosX - tagW * 0.5f;
+        float tagY = ringY + 10f;
+        GpuGl.FillRect(tagX, tagY, tagW, tagH, Color.FromArgb(148, 4, 7, 16));
+        GpuGl.DrawRect(tagX, tagY, tagW, tagH, Color.FromArgb(170, a.AuraColor.R, a.AuraColor.G, a.AuraColor.B), 1.1f);
+        GpuGl.DrawText(badge, tagX + 5f, tagY + 2f, Color.FromArgb(245, 240, 248, 255), GpuGl.FONT_LIST_HUD_SMALL);
+        GpuGl.DrawText(subBadge, tagX + 5f, tagY + 13f, Color.FromArgb(240, 250, 204, 21), GpuGl.FONT_LIST_HUD_SMALL);
+        float ageRatio = Math.Min(1.0f, Math.Max(0f, a.Brain.LifeAge / 100.0f));
+        float xpRatio = Math.Min(1.0f, (float)a.Brain.XP / Math.Max(1, a.Brain.NextLevelXP));
+        GpuGl.FillRect(tagX + 4f, tagY + 26f, (tagW - 8f) * ageRatio, 2.5f, Color.FromArgb(235, 250, 204, 21));
+        GpuGl.FillRect(tagX + 4f, tagY + 30f, (tagW - 8f) * xpRatio, 2.5f, a.AuraColor);
+
+        if (a.LevelUpBannerTimer > 0f) {
+            GpuGl.DrawText("* EVO / GEN UP! MUTACION NEURAL *", a.PosX - 88f, bobY - 82f * zDepthScale, Color.FromArgb(250, 250, 204, 21), GpuGl.FONT_LIST_HUD_SMALL);
+        }
+    }
+
     private void RenderSingleAgent(Graphics g, PorygonAgent a, float userScale, Color themeCyan, Color themeMag, Font tagFont) {
         ModelData model = a.Model;
         if (model == null) return;
 
-        float scale = 1.26f * a.ScaleFactor * (userScale / 100.0f);
-        float hopOffset = (a.SpinRollTimer > 0f) ? (float)Math.Sin(a.SpinRollTimer * Math.PI) * 32f : 0f;
-        float bobY = a.PosY + (float)Math.Sin(a.FloatBob) * 9f - hopOffset;
+        float zDepthScale = GetDepthScale(a.PosZ);
+        float scale = 1.26f * a.ScaleFactor * (userScale / 100.0f) * zDepthScale;
+        float hopOffset = (a.SpinRollTimer > 0f) ? (float)Math.Sin(a.SpinRollTimer * Math.PI) * 32f * zDepthScale : 0f;
+        float bobY = a.PosY + (float)Math.Sin(a.FloatBob) * 9f * zDepthScale - hopOffset;
 
         // Skill LVL 6: Deep Sonar Scan Expanding Ring
         if (a.ScanWaveTimer > 0f) {
@@ -1689,25 +3489,25 @@ public class Porygon3DAvatar {
             }
         }
 
-        // Floating Mini-HUD Tag under each Porygon showing Name, Level & XP bar
+        // Floating Mini-HUD Tag under each Porygon showing Name, Generation, LifeStage, Level & XP bar
         if (tagFont != null) {
-            string badge = string.Format("{0} [LVL {1}]", a.Name, a.Brain.Level);
-            float tagX = a.PosX - 54f;
-            float tagY = ringY + 14f;
-            using (SolidBrush tagBg = new SolidBrush(Color.FromArgb(195, 5, 8, 18)))
+            string badge = string.Format("{0} G{1} {2}", a.Name, a.Brain.Generation, a.Brain.GetLifeStageLabel());
+            float tagX = a.PosX - 66f;
+            float tagY = ringY + 12f;
+            using (SolidBrush tagBg = new SolidBrush(Color.FromArgb(128, 5, 8, 18)))
             using (Pen tagBorder = new Pen(Color.FromArgb(140, a.AuraColor.R, a.AuraColor.G, a.AuraColor.B), 1f))
             using (SolidBrush txtB = new SolidBrush(Color.FromArgb(245, 240, 248, 255)))
             using (SolidBrush xpFill = new SolidBrush(a.AuraColor)) {
-                g.FillRectangle(tagBg, tagX, tagY, 108f, 22f);
-                g.DrawRectangle(tagBorder, tagX, tagY, 108f, 22f);
-                g.DrawString(badge, tagFont, txtB, tagX + 5f, tagY + 2f);
+                g.FillRectangle(tagBg, tagX, tagY, 132f, 24f);
+                g.DrawRectangle(tagBorder, tagX, tagY, 132f, 24f);
+                g.DrawString(badge, tagFont, txtB, tagX + 4f, tagY + 2f);
                 float xpRatio = Math.Min(1.0f, (float)a.Brain.XP / Math.Max(1, a.Brain.NextLevelXP));
-                g.FillRectangle(xpFill, tagX + 4f, tagY + 17f, 100f * xpRatio, 3f);
+                g.FillRectangle(xpFill, tagX + 4f, tagY + 19f, 124f * xpRatio, 3f);
             }
 
             if (a.LevelUpBannerTimer > 0f) {
                 using (SolidBrush lvlB = new SolidBrush(Color.FromArgb(250, 250, 204, 21))) {
-                    g.DrawString("★ LEVEL UP! NUEVA HABILIDAD ★", tagFont, lvlB, a.PosX - 82f, bobY - 82f);
+                    g.DrawString(a.LevelUpBannerText ?? "★ LEVEL UP! ★", tagFont, lvlB, a.PosX - 88f, bobY - 82f);
                 }
             }
         }
@@ -1746,10 +3546,63 @@ public class HackerWallpaperForm : Form {
     public static extern bool IsZoomed(IntPtr hWnd);
 
     [DllImport("user32.dll")]
+    public static extern short GetAsyncKeyState(int vKey);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr WindowFromPoint(Point pt);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    public static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
+
+    [DllImport("user32.dll")]
     public static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
 
     [DllImport("user32.dll")]
     public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+
+    public delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    public static extern IntPtr SetWindowsHookEx(int idHook, LowLevelMouseProc lpfn, IntPtr hMod, uint dwThreadId);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    public static extern bool UnhookWindowsHookEx(IntPtr hhk);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    public static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    public static extern IntPtr GetModuleHandle(string lpModuleName);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MSLLHOOKSTRUCT {
+        public Point pt;
+        public uint mouseData;
+        public uint flags;
+        public uint time;
+        public IntPtr dwExtraInfo;
+    }
+
+    [DllImport("user32.dll")]
+    public static extern bool SetProcessDpiAwarenessContext(IntPtr dpiContext);
+
+    [DllImport("shcore.dll")]
+    public static extern int SetProcessDpiAwareness(int value);
+
+    [DllImport("user32.dll")]
+    public static extern bool SetProcessDPIAware();
+
+    [DllImport("user32.dll", CharSet = CharSet.Ansi)]
+    public static extern bool EnumDisplaySettingsA(string lpszDeviceName, int iModeNum, ref DEVMODEA lpDevMode);
+
+    [StructLayout(LayoutKind.Explicit, Size = 220, CharSet = CharSet.Ansi)]
+    public struct DEVMODEA {
+        [FieldOffset(36)] public short dmSize;
+        [FieldOffset(44)] public int dmPositionX;
+        [FieldOffset(48)] public int dmPositionY;
+        [FieldOffset(108)] public int dmPelsWidth;
+        [FieldOffset(112)] public int dmPelsHeight;
+    }
 
     [DllImport("kernel32.dll", SetLastError = true)]
     public static extern bool GetSystemTimes(out FILETIME lpIdleTime, out FILETIME lpKernelTime, out FILETIME lpUserTime);
@@ -1791,8 +3644,15 @@ public class HackerWallpaperForm : Form {
     const int WM_HOTKEY = 0x0312;
     const int HOTKEY_ID = 9001;
     const int HOTKEY_MODEL_ID = 9002;
+    const int HOTKEY_BRAIN_FULL_ID = 9003;
+    const int HOTKEY_OPACITY_UP_ID = 9004;
+    const int HOTKEY_OPACITY_DOWN_ID = 9005;
+    const int HOTKEY_BG_MODE_ID = 9006;
     const uint MOD_ALT = 0x0001;
     const uint MOD_CONTROL = 0x0002;
+    const int WH_MOUSE_LL = 14;
+    const int WM_MOUSEWHEEL = 0x020A;
+    private int terminalOpacityPct = 50;
 
     public WallpaperConfig Config;
     private int screenW;
@@ -1800,11 +3660,39 @@ public class HackerWallpaperForm : Form {
     private Bitmap bgBitmap;
     private System.Windows.Forms.Timer renderTimer;
     private System.Threading.Timer telemetryTimer;
+    private System.Threading.Timer cpuEvoTimer;
     private EventWaitHandle showConfigEvent;
     private Form configForm;
     private Random rng = new Random();
 
     private Porygon3DAvatar porygon;
+
+    // Collapsible HUD Cards State (Single-Click Fold / Unfold on Desktop, Persisted in config.json)
+    private bool radarCollapsed = false;
+    private bool telemetryCollapsed = false;
+    private bool connectomeCollapsed = false;
+    private bool brain3DCollapsed = false;
+    private bool secondaryBarsCollapsed = false;
+    private bool prevLeftMouseDown = false;
+    private bool prevRightMouseDown = false;
+    private bool hudTelemetryDirty = true;
+    private bool hudRadarDirty = true;
+    private bool hudConnectomeDirty = true;
+    private bool hudBrain3DDirty = true;
+    private float brain3DYaw = 0f;
+    private bool brain3DFullscreen = false;
+    private bool brain3DAutoRotate = true;
+    private float brain3DManualYaw = 0f;
+    private float brain3DManualPitch = 0.14f;
+    private float brain3DZoom = 1.0f;
+    private bool brain3DDragging = false;
+    private bool brain3DDragMoved = false;
+    private Point brain3DDragStartPt;
+    private float brain3DDragStartYaw = 0f;
+    private float brain3DDragStartPitch = 0.14f;
+    private IntPtr mouseHookHandle = IntPtr.Zero;
+    private LowLevelMouseProc mouseHookProc;
+    private HashSet<string> vtAuditedIps = new HashSet<string>();
 
     // Real System Telemetry & Radar Blips with Mouse Hover Metadata
     public struct RadarBlip {
@@ -1822,6 +3710,13 @@ public class HackerWallpaperForm : Form {
 
     private float cpuUsage = 0f;
     private ulong prevIdle = 0, prevKernel = 0, prevUser = 0;
+    private float gpuUsagePct = 11.2f;
+    private float gpuFrameMs = 3.8f;
+    private int currentFps = 24;
+    private bool gpuEcoMode = false;
+    private Stopwatch frameSw = new Stopwatch();
+    private List<PerformanceCounter> gpuCounters = null;
+    private bool gpuCountersInitTried = false;
     private float ramUsedGB = 0f, ramTotalGB = 32f;
     private int ramPercent = 0;
     private string activeNicName = "Wi-Fi";
@@ -1851,10 +3746,207 @@ public class HackerWallpaperForm : Form {
         public int Length;
         public char[] Chars;
         public int ColorSlot;
+        public int DepthLayer; // 0 = Far 3D Plane (Z=0.38), 1 = Mid 3D Plane (Z=0.70), 2 = Near Foreground 3D Plane (Z=1.0)
+        public int CharStep;
         public bool IsForeground;
+        public string LogTag;
+        public int MinY, MaxY, MinX, MaxX;
     }
     private List<RainColumn> columns = new List<RainColumn>();
+    private List<Rectangle> monitorRects = new List<Rectangle>();
+    private List<string> monitorNames = new List<string>();
+    private Rectangle primaryMonRect;
+
+    private List<string> qbRainTokens = new List<string>() {
+        "QB-SOC:5080 // NIDS_ONLINE",
+        "FORTIGATE_SYNC // ACTIVE",
+        "PORYGON-Z // IDS_HUNTER"
+    };
+    private int qbTokenCursor = 0;
     private const string GLYPHS = "0123456789ABCDEF<>[]{}/\\*+#$@%&010110";
+
+    public static void QueryPhysicalMonitors(out List<Rectangle> localRects, out List<string> names, out Rectangle primaryLocal, out int totalW, out int totalH) {
+        localRects = new List<Rectangle>();
+        names = new List<string>();
+        Screen[] scrs = Screen.AllScreens;
+        List<Rectangle> rawRects = new List<Rectangle>();
+        int minX = int.MaxValue, minY = int.MaxValue, maxX = int.MinValue, maxY = int.MinValue;
+        int primaryIdx = 0;
+
+        for (int i = 0; i < scrs.Length; i++) {
+            Rectangle b = scrs[i].Bounds;
+            try {
+                DEVMODEA dm = new DEVMODEA();
+                dm.dmSize = 156;
+                if (EnumDisplaySettingsA(scrs[i].DeviceName, -1, ref dm) && dm.dmPelsWidth > 0 && dm.dmPelsHeight > 0) {
+                    b = new Rectangle(dm.dmPositionX, dm.dmPositionY, dm.dmPelsWidth, dm.dmPelsHeight);
+                }
+            } catch { }
+            rawRects.Add(b);
+            string cleanName = (scrs[i].DeviceName ?? ("DISPLAY" + (i + 1))).Replace("\\\\.\\", "");
+            names.Add(cleanName);
+            if (scrs[i].Primary) primaryIdx = i;
+
+            if (b.Left < minX) minX = b.Left;
+            if (b.Top < minY) minY = b.Top;
+            if (b.Right > maxX) maxX = b.Right;
+            if (b.Bottom > maxY) maxY = b.Bottom;
+        }
+
+        if (rawRects.Count == 0) {
+            totalW = 1920;
+            totalH = 1080;
+            primaryLocal = new Rectangle(0, 0, 1920, 1080);
+            localRects.Add(primaryLocal);
+            names.Add("DISPLAY1");
+            return;
+        }
+
+        totalW = Math.Max(1920, maxX - minX);
+        totalH = Math.Max(1080, maxY - minY);
+        primaryLocal = new Rectangle(0, 0, 1920, 1080);
+
+        for (int i = 0; i < rawRects.Count; i++) {
+            Rectangle r = rawRects[i];
+            Rectangle loc = new Rectangle(r.X - minX, r.Y - minY, r.Width, r.Height);
+            localRects.Add(loc);
+            if (i == primaryIdx) primaryLocal = loc;
+        }
+    }
+
+    private void RefreshMonitorLayout() {
+        QueryPhysicalMonitors(out monitorRects, out monitorNames, out primaryMonRect, out screenW, out screenH);
+        if (porygon != null) {
+            porygon.RefreshMonitors(screenW, screenH);
+        }
+    }
+
+    private int ClassifyRainTokenCategory(string upperToken) {
+        if (string.IsNullOrEmpty(upperToken)) return 4;
+        if (upperToken.Contains("CRITICAL") || upperToken.Contains("INTRUSION") || upperToken.Contains("EXPLOIT") || upperToken.Contains("RANSOM") || upperToken.Contains("DANGER") || upperToken.Contains("HIGH_RISK"))
+            return 0; // Red: Critical IDS Threat / Intrusion
+        if (upperToken.Contains("VT_") || upperToken.Contains("VIRUSTOTAL") || upperToken.Contains("IOC") || upperToken.Contains("MAL:") || upperToken.Contains("MALICIOUS") || upperToken.Contains("SUSPICIOUS"))
+            return 1; // Gold/Amber: VirusTotal v3 Threat Intelligence
+        if (upperToken.Contains("FORTIGATE") || upperToken.Contains("FIREWALL") || upperToken.Contains("DENY") || upperToken.Contains("BLOCK") || upperToken.Contains("VPN") || upperToken.Contains("IPS"))
+            return 2; // Cyber Orange: FortiGate Firewall & IPS
+        if (upperToken.Contains("NIDS") || upperToken.Contains("NDR") || upperToken.Contains("ANOMALY") || upperToken.Contains("PORT_ALERT") || upperToken.Contains("SYN_BURST") || upperToken.Contains("ALERT"))
+            return 3; // Electric Magenta: NIDS / NDR Anomaly Detection
+        if (upperToken.Contains("EVO") || upperToken.Contains("GEN_") || upperToken.Contains("PORYGON") || upperToken.Contains("BRAIN") || upperToken.Contains("PRUNED") || upperToken.Contains("CROSS"))
+            return 6; // Synaptic Violet/Purple: Porygon Neuro-Evolution & Connectome
+        if (upperToken.Contains("BASELINE") || upperToken.Contains("CLEAN") || upperToken.Contains("VERIFIED") || upperToken.Contains("HEALTH") || upperToken.Contains("ONLINE"))
+            return 5; // Emerald Matrix Green: Verified Clean / Baseline Health
+        return 4;     // Electric Cyan: Active TCP/TLS/HTTPS/DNS Network Flows
+    }
+
+    private void GetRainSemanticColors(int categorySlot, Color c1, Color c2, Color c3, out Color bodyCol, out Color headCol) {
+        // Eye-Care Matte Semantic Palette (-35% to -40% luminance attenuation, zero harsh neon glare)
+        switch (categorySlot) {
+            case 0: // CRITICAL / INTRUSION -> Matte Terracotta Crimson
+                bodyCol = Color.FromArgb(192, 54, 74);
+                headCol = Color.FromArgb(222, 186, 194);
+                break;
+            case 1: // VIRUSTOTAL / IOC -> Warm Matte Ochre Gold
+                bodyCol = Color.FromArgb(192, 152, 42);
+                headCol = Color.FromArgb(224, 212, 176);
+                break;
+            case 2: // FORTIGATE / FIREWALL -> Muted Copper Amber
+                bodyCol = Color.FromArgb(184, 106, 38);
+                headCol = Color.FromArgb(218, 192, 170);
+                break;
+            case 3: // NIDS / NDR ANOMALY -> Muted Coral Rose (replaces harsh neon magenta)
+                bodyCol = Color.FromArgb(168, 82, 108);
+                headCol = Color.FromArgb(212, 186, 196);
+                break;
+            case 5: // BASELINE / VERIFIED CLEAN -> Matte Forest Emerald
+                bodyCol = Color.FromArgb(44, 164, 108);
+                headCol = Color.FromArgb(184, 220, 202);
+                break;
+            case 6: // PORYGON NEURO-EVOLUTION / 3D BRAIN -> Matte Bio-Teal Slate (replaces bright violet)
+                bodyCol = Color.FromArgb(62, 148, 162);
+                headCol = Color.FromArgb(186, 216, 222);
+                break;
+            default: // ACTIVE TCP / TLS / DNS FLOW -> Matte Phosphor Sage-Cyan
+                bodyCol = Color.FromArgb(48, 158, 168);
+                headCol = Color.FromArgb(184, 218, 222);
+                break;
+        }
+    }
+
+    private void AssignColumnLogText(RainColumn col) {
+        string token = null;
+        int cursorSnap = 0;
+        lock (telemetryLock) {
+            cursorSnap = qbTokenCursor;
+            qbTokenCursor = (qbTokenCursor + 1) % 100000;
+            int mode = cursorSnap % 7;
+            string qbSample = (qbRainTokens != null && qbRainTokens.Count > 0)
+                ? qbRainTokens[(cursorSnap / 7) % qbRainTokens.Count]
+                : "QB-SOC:5080//NIDS_ACTIVE";
+
+            if (mode == 0) {
+                // Category 0 (Crimson Red): Critical IDS Alert / High-Risk Anomaly
+                string anom = currentFeed.LastAnomalySummary ?? "CRITICAL_IDS//PORT_SCAN_DETECT";
+                token = "CRITICAL_ALERT//" + anom + "//" + qbSample;
+            } else if (mode == 1) {
+                // Category 1 (Solar Gold): VirusTotal v3 Threat Intelligence
+                string vt = (porygon != null && !string.IsNullOrEmpty(porygon.LastVtVerdict))
+                    ? porygon.LastVtVerdict
+                    : "VT_IOC_SCAN//192.168.2.222:5080//VERIFIED";
+                token = "VIRUSTOTAL//" + vt;
+            } else if (mode == 2) {
+                // Category 2 (Cyber Orange): FortiGate Firewall & IPS Telemetry
+                token = "FORTIGATE_IPS//FW_SYNC_5080//" + qbSample;
+            } else if (mode == 3) {
+                // Category 3 (Electric Magenta): NIDS / NDR Anomaly & Z-Score Telemetry
+                token = string.Format("NIDS_NDR//{0}//Z_SCORE:{1:+0.0;-0.0;0.0}S", qbSample, currentFeed.DlZScore);
+            } else if (mode == 4) {
+                // Category 4 (Electric Cyan): Active TCP / TLS / HTTPS Socket Flows
+                if (radarBlips != null && radarBlips.Count > 0) {
+                    RadarBlip rb = radarBlips[(cursorSnap / 7) % radarBlips.Count];
+                    token = "TCP_TLS_FLOW//" + rb.FullRemoteEp + "//" + rb.Proto;
+                } else {
+                    token = "TCP_TLS_FLOW//" + localIPv4 + ":443//" + qbSample;
+                }
+            } else if (mode == 5) {
+                // Category 5 (Emerald Matrix Green): Verified Clean Baseline & Network Health
+                token = string.Format("BASELINE_CLEAN//PING_{0}MS//DL_{1:0}KBPS//HEALTH_OK", pingMs, netDownKbps);
+            } else {
+                // Category 6 (Matte Bio-Teal): Porygon Neuro-Evolution, 3D Connectome & Natural Selection
+                string evo = (porygon != null && !string.IsNullOrEmpty(porygon.LastLineageAuditSummary))
+                    ? porygon.LastLineageAuditSummary
+                    : "PORYGON_Z//F2_SCORE_99%//GENOME_CLEAN";
+                token = "EVO_BRAIN_3D//" + evo;
+            }
+        }
+        col.LogTag = null; // Strictly vertical text only — never draw horizontal floating tags
+        if (!string.IsNullOrEmpty(token)) {
+            string upper = token.ToUpperInvariant();
+            col.ColorSlot = ClassifyRainTokenCategory(upper);
+            string clean = upper.Replace(" ", "_").Replace("[", "").Replace("]", "");
+            int len = Math.Max(14, Math.Min(30, clean.Length));
+            col.Length = len;
+            col.Chars = new char[len];
+            // Fill characters so reading top-to-bottom down the vertical column spells the log entry
+            for (int c = 0; c < len; c++) {
+                int srcIdx = (len - 1 - c) % clean.Length;
+                col.Chars[c] = clean[srcIdx];
+            }
+        } else {
+            col.ColorSlot = rng.Next(0, 7);
+            col.Length = rng.Next(12, 24);
+            col.Chars = new char[col.Length];
+            for (int c = 0; c < col.Length; c++) col.Chars[c] = GLYPHS[rng.Next(GLYPHS.Length)];
+        }
+
+        // Compute 3D Depth-Layer base speed + Priority Acceleration (1.34x) for Critical Red (0) & VirusTotal Gold (1)!
+        float layerSpeed = (col.DepthLayer == 2)
+            ? (float)(6.6 + rng.NextDouble() * 5.8)
+            : (col.DepthLayer == 1 ? (float)(4.1 + rng.NextDouble() * 3.4) : (float)(2.1 + rng.NextDouble() * 1.9));
+        if (col.ColorSlot == 0 || col.ColorSlot == 1) {
+            layerSpeed *= 1.34f; // Critical Alerts & VirusTotal IOCs plunge faster in 3D space!
+        }
+        col.BaseSpeed = layerSpeed;
+    }
 
     private float radarAngle = 0f;
     private int frameCount = 0;
@@ -1869,17 +3961,20 @@ public class HackerWallpaperForm : Form {
     public HackerWallpaperForm(EventWaitHandle configEvt, bool openConfigOnStart) {
         this.showConfigEvent = configEvt;
         Config = WallpaperConfig.Load();
+        radarCollapsed = Config.RadarCollapsed;
+        telemetryCollapsed = Config.TelemetryCollapsed;
+        connectomeCollapsed = Config.ConnectomeCollapsed;
+        brain3DCollapsed = Config.Brain3DCollapsed;
+        secondaryBarsCollapsed = Config.SecondaryBarsCollapsed;
 
-        Rectangle bounds = Screen.PrimaryScreen.Bounds;
-        screenW = bounds.Width;
-        screenH = bounds.Height;
+        RefreshMonitorLayout();
 
         this.FormBorderStyle = FormBorderStyle.None;
         this.StartPosition = FormStartPosition.Manual;
-        this.Bounds = bounds;
+        this.Bounds = new Rectangle(0, 0, screenW, screenH);
         this.ShowInTaskbar = false;
-        this.DoubleBuffered = true;
-        this.SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer, true);
+        this.DoubleBuffered = false;
+        this.SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.Opaque, true);
 
         fontRainFg = new Font("Consolas", 11f, FontStyle.Bold);
         fontRainBg = new Font("Consolas", 9f, FontStyle.Regular);
@@ -1891,15 +3986,33 @@ public class HackerWallpaperForm : Form {
         porygon = new Porygon3DAvatar(screenW, screenH);
 
         for (int i = 0; i < pingHistory.Length; i++) pingHistory[i] = 15f;
+        if (configEvt == null) {
+            cpuUsage = 8.4f;
+            gpuUsagePct = 5.2f;
+            gpuFrameMs = 3.4f;
+            currentFps = 24;
+            ramUsedGB = 14.2f;
+            ramTotalGB = 32.0f;
+            ramPercent = 44;
+            netDownKbps = 142.5f;
+            netUpKbps = 28.4f;
+            pingMs = 14;
+            liveLogLines.Add("[13:20:01] [3D_BG_SCENE] Entorno 3D -> [1/3] SELVA+OSC (Ctrl+Alt+M)");
+            liveLogLines.Add("[13:20:02] [TERM_OPACITY] Opacidad Terminal -> 50% (Ctrl+Alt+Up/Down)");
+            liveLogLines.Add("[13:20:03] BASELINE // DL:142.5KB/s | GPU:5.2% (24FPS) | PING:14ms");
+            return;
+        }
         RebuildBackground();
         RebuildRainColumns();
         UpdateRealTelemetry(null);
 
         renderTimer = new System.Windows.Forms.Timer();
-        renderTimer.Interval = 40; // 25 FPS smooth
+        renderTimer.Interval = 42; // Hardware GPU Eco-Balanced target (~24 FPS active desktop / 15 FPS when app focused)
         renderTimer.Tick += OnRenderTick;
 
         telemetryTimer = new System.Threading.Timer(UpdateRealTelemetry, null, 1200, 1800);
+        // Dedicated Multi-Core CPU Evolutionary Training Timer (runs every 200ms across CPU threads while GPU renders)
+        cpuEvoTimer = new System.Threading.Timer(OnCpuEvolutionTimerTick, null, 600, 200);
 
         if (openConfigOnStart) {
             System.Windows.Forms.Timer t = new System.Windows.Forms.Timer();
@@ -1909,91 +4022,197 @@ public class HackerWallpaperForm : Form {
         }
     }
 
+    private void OnCpuEvolutionTimerTick(object state) {
+        if (porygon == null || !Config.ShowPorygon) return;
+        Porygon3DAvatar.RealTelemetryFeed feedSnap;
+        lock (telemetryLock) { feedSnap = currentFeed; }
+        porygon.RunCpuEvolutionTick(feedSnap);
+    }
+
+    public static string GetBgSceneModeShortName(int mode) {
+        if (mode == 1) return "TOPO+MESH";
+        if (mode == 2) return "MYCELIUM";
+        return "SELVA+OSC";
+    }
+
+    public void CycleBgSceneMode() {
+        Config.BgSceneMode = (Config.BgSceneMode + 1) % 3;
+        Config.Save();
+        RebuildBackground();
+        lock (telemetryLock) {
+            string ts = DateTime.Now.ToString("HH:mm:ss");
+            liveLogLines.Add(string.Format("[{0}] [3D_BG_SCENE] Entorno 3D -> [{1}/3] {2} (Ctrl+Alt+M)",
+                ts, Config.BgSceneMode + 1, GetBgSceneModeShortName(Config.BgSceneMode)));
+            while (liveLogLines.Count > 5) liveLogLines.RemoveAt(0);
+        }
+        hudTelemetryDirty = true;
+    }
+
     public void GetThemeColors(out Color c1, out Color c2, out Color c3, out Color head) {
+        // Eye-Care Matte Palette (-35% brightness attenuation, zero monotonous purple)
         if (Config.ThemeIndex == 1) {
-            c1 = Color.FromArgb(0, 255, 102);
-            c2 = Color.FromArgb(16, 185, 129);
-            c3 = Color.FromArgb(52, 211, 153);
-            head = Color.FromArgb(220, 255, 235);
+            c1 = Color.FromArgb(42, 174, 98);
+            c2 = Color.FromArgb(28, 138, 98);
+            c3 = Color.FromArgb(52, 158, 118);
+            head = Color.FromArgb(186, 222, 202);
         } else if (Config.ThemeIndex == 2) {
-            c1 = Color.FromArgb(255, 42, 85);
-            c2 = Color.FromArgb(245, 158, 11);
-            c3 = Color.FromArgb(244, 63, 94);
-            head = Color.FromArgb(255, 235, 240);
+            c1 = Color.FromArgb(188, 56, 78);
+            c2 = Color.FromArgb(186, 126, 34);
+            c3 = Color.FromArgb(168, 68, 86);
+            head = Color.FromArgb(220, 198, 204);
         } else if (Config.ThemeIndex == 3) {
-            c1 = Color.FromArgb(56, 189, 248);
-            c2 = Color.FromArgb(59, 130, 246);
-            c3 = Color.FromArgb(99, 102, 241);
-            head = Color.FromArgb(224, 242, 254);
+            c1 = Color.FromArgb(54, 148, 186);
+            c2 = Color.FromArgb(48, 110, 172);
+            c3 = Color.FromArgb(68, 120, 166);
+            head = Color.FromArgb(188, 214, 226);
         } else {
-            c1 = Color.FromArgb(0, 240, 255);
-            c2 = Color.FromArgb(236, 72, 153);
-            c3 = Color.FromArgb(168, 85, 247);
-            head = Color.FromArgb(230, 252, 255);
+            // Theme 0 Default: Matte Phosphor Sage + Warm Ochre Amber + Deep Slate Teal (Zero Purple!)
+            c1 = Color.FromArgb(52, 168, 138);
+            c2 = Color.FromArgb(186, 138, 56);
+            c3 = Color.FromArgb(46, 128, 142);
+            head = Color.FromArgb(188, 222, 212);
         }
     }
 
     public void RebuildBackground() {
+        RefreshMonitorLayout();
         Bitmap newBg = new Bitmap(screenW, screenH, PixelFormat.Format32bppPArgb);
         Color c1, c2, c3, head;
         GetThemeColors(out c1, out c2, out c3, out head);
 
         using (Graphics g = Graphics.FromImage(newBg)) {
             g.SmoothingMode = SmoothingMode.HighQuality;
-            using (LinearGradientBrush bgGrad = new LinearGradientBrush(
-                new Rectangle(0, 0, screenW, screenH),
-                Color.FromArgb(4, 6, 14),
-                Color.FromArgb(8, 13, 28),
-                LinearGradientMode.Vertical)) {
-                g.FillRectangle(bgGrad, 0, 0, screenW, screenH);
-            }
+            g.Clear(Color.FromArgb(3, 6, 6));
 
-            using (Pen gridPen = new Pen(Color.FromArgb(14, c1.R, c1.G, c1.B), 1f)) {
-                for (int x = 0; x < screenW; x += 64) g.DrawLine(gridPen, x, 0, x, screenH);
-                for (int y = 0; y < screenH; y += 64) g.DrawLine(gridPen, 0, y, screenW, y);
-            }
+            for (int mIdx = 0; mIdx < monitorRects.Count; mIdx++) {
+                Rectangle m = monitorRects[mIdx];
+                GraphicsState st = g.Save();
+                g.SetClip(m);
 
-            int horizonY = (int)(screenH * 0.68f);
-            using (Pen floorPen = new Pen(Color.FromArgb(22, c2.R, c2.G, c2.B), 1f)) {
-                for (int i = 1; i <= 8; i++) {
-                    int fy = horizonY + (int)(Math.Pow(i / 8.0, 1.7) * (screenH - horizonY));
-                    g.DrawLine(floorPen, 0, fy, screenW, fy);
+                // Deep Eye-Care Matte Forest Obsidian Gradient per Monitor (#030706 -> #07120F)
+                using (LinearGradientBrush bgGrad = new LinearGradientBrush(
+                    m,
+                    Color.FromArgb(3, 7, 6),
+                    Color.FromArgb(7, 17, 14),
+                    LinearGradientMode.Vertical)) {
+                    g.FillRectangle(bgGrad, m);
                 }
-                int vanishX = (int)(screenW * 0.56f);
-                for (int x = -screenW; x <= screenW * 2; x += 140) {
-                    g.DrawLine(floorPen, vanishX + (x - vanishX) / 5, horizonY, x, screenH);
+
+                int horizonY = m.Top + (int)(m.Height * 0.64f);
+                int vanishX = m.Left + (int)(m.Width * 0.50f);
+
+                // Subtle Recessed Atmospheric Depth Grid (ultra-low alpha=9 so it never strains the eyes)
+                using (Pen gridPen = new Pen(Color.FromArgb(9, c3.R, c3.G, c3.B), 1f)) {
+                    for (int x = m.Left; x < m.Right; x += 96) g.DrawLine(gridPen, x, m.Top, x, horizonY);
+                    for (int y = m.Top; y < horizonY; y += 96) g.DrawLine(gridPen, m.Left, y, m.Right, y);
                 }
+
+                // Soft Matte Atmospheric Mist Band at Horizon (attenuated by 40%)
+                Rectangle glowTop = new Rectangle(m.Left, horizonY - 52, m.Width, 52);
+                Rectangle glowBot = new Rectangle(m.Left, horizonY, m.Width, 64);
+                using (LinearGradientBrush hTop = new LinearGradientBrush(glowTop, Color.FromArgb(0, c1.R, c1.G, c1.B), Color.FromArgb(24, c1.R, c1.G, c1.B), LinearGradientMode.Vertical))
+                using (LinearGradientBrush hBot = new LinearGradientBrush(glowBot, Color.FromArgb(26, c3.R, c3.G, c3.B), Color.FromArgb(0, c3.R, c3.G, c3.B), LinearGradientMode.Vertical)) {
+                    g.FillRectangle(hTop, glowTop);
+                    g.FillRectangle(hBot, glowBot);
+                }
+                using (Pen horizonLine = new Pen(Color.FromArgb(95, c1.R, c1.G, c1.B), 1.4f)) {
+                    g.DrawLine(horizonLine, m.Left, horizonY, m.Right, horizonY);
+                }
+
+                // Subtle Central 3D Horizon Depth Well
+                using (Pen nexusOuter = new Pen(Color.FromArgb(62, c1.R, c1.G, c1.B), 1.4f))
+                using (Pen nexusInner = new Pen(Color.FromArgb(78, c2.R, c2.G, c2.B), 1.1f)) {
+                    g.DrawEllipse(nexusOuter, vanishX - 135, horizonY - 26, 270, 52);
+                    g.DrawEllipse(nexusInner, vanishX - 76, horizonY - 14, 152, 28);
+                }
+
+                // Attenuated Inter-Monitor Portal Conduits at left/right/top edges of each monitor
+                int midY = m.Top + (int)(m.Height * 0.56f);
+                int midX = m.Left + (int)(m.Width * 0.50f);
+                using (Pen portalGlow = new Pen(Color.FromArgb(88, c1.R, c1.G, c1.B), 2.4f))
+                using (Pen portalAccent = new Pen(Color.FromArgb(120, c2.R, c2.G, c2.B), 1.5f)) {
+                    g.DrawLine(portalGlow, m.Left + 2, midY - 100, m.Left + 2, midY + 100);
+                    g.DrawLine(portalAccent, m.Left + 7, midY - 64, m.Left + 7, midY + 64);
+                    g.DrawLine(portalGlow, m.Right - 3, midY - 100, m.Right - 3, midY + 100);
+                    g.DrawLine(portalAccent, m.Right - 8, midY - 64, m.Right - 8, midY + 64);
+                    g.DrawLine(portalGlow, midX - 130, m.Top + 2, midX + 130, m.Top + 2);
+                }
+
+                // Draw Attenuated Sector Identification Banner on each monitor
+                string sceneTag = GetBgSceneModeShortName(Config.BgSceneMode);
+                string sectorTitle = string.Format(">> CYBER_SECTOR_0{0} // {1} [{2}x{3}] // 3D_{4}",
+                    mIdx + 1, monitorNames[mIdx], m.Width, m.Height, sceneTag);
+                using (SolidBrush bannerBg = new SolidBrush(Color.FromArgb(115, 4, 9, 8)))
+                using (Pen bannerBor = new Pen(Color.FromArgb(112, c1.R, c1.G, c1.B), 1.0f))
+                using (SolidBrush bannerTxt = new SolidBrush(Color.FromArgb(195, c1.R, c1.G, c1.B))) {
+                    int bx = m.Left + 140;
+                    int by = m.Top + 18;
+                    g.FillRectangle(bannerBg, bx, by, 475, 22);
+                    g.DrawRectangle(bannerBor, bx, by, 475, 22);
+                    if (fontHudSmall != null) {
+                        g.DrawString(sectorTitle, fontHudSmall, bannerTxt, bx + 8, by + 4);
+                    }
+                }
+
+                g.Restore(st);
             }
 
-            using (Pen scanPen = new Pen(Color.FromArgb(12, 0, 240, 255), 1f)) {
-                for (int y = 0; y < screenH; y += 4) g.DrawLine(scanPen, 0, y, screenW, y);
+            // Draw subtle Virtual Environment Horizon Conduit connecting adjacent monitors
+            using (Pen meshHorizon = new Pen(Color.FromArgb(45, c1.R, c1.G, c1.B), 1.2f)) {
+                meshHorizon.DashStyle = DashStyle.Dot;
+                for (int i = 0; i < monitorRects.Count; i++) {
+                    for (int j = i + 1; j < monitorRects.Count; j++) {
+                        Rectangle a = monitorRects[i];
+                        Rectangle b = monitorRects[j];
+                        Point ca = new Point(a.Left + a.Width / 2, a.Top + (int)(a.Height * 0.64f));
+                        Point cb = new Point(b.Left + b.Width / 2, b.Top + (int)(b.Height * 0.64f));
+                        g.DrawLine(meshHorizon, ca, cb);
+                    }
+                }
             }
         }
         Bitmap old = bgBitmap;
         bgBitmap = newBg;
+        bgTexDirty = true;
+        lastHudTheme = -1;
         if (old != null) old.Dispose();
     }
 
     public void RebuildRainColumns() {
         columns.Clear();
-        int count = Math.Max(10, Config.RainDensity);
-        float spacing = (float)screenW / count;
-        for (int i = 0; i < count; i++) {
-            float x = i * spacing + 6f;
-            if (x < 135 && i % 2 == 1) continue;
+        int perMonitorCount = Math.Max(20, (int)(Config.RainDensity * 0.78f));
+        for (int mIdx = 0; mIdx < monitorRects.Count; mIdx++) {
+            Rectangle m = monitorRects[mIdx];
+            float spacing = (float)m.Width / perMonitorCount;
+            for (int i = 0; i < perMonitorCount; i++) {
+                float x = m.Left + i * spacing + 4f;
+                if ((x - m.Left) < 130 && i % 2 == 1) continue;
 
-            RainColumn col = new RainColumn();
-            col.X = x;
-            col.Y = rng.Next(-screenH, screenH);
-            col.IsForeground = (rng.NextDouble() > 0.45) && (x > 135);
-            col.BaseSpeed = col.IsForeground ? (float)(5.2 + rng.NextDouble() * 6.5) : (float)(2.8 + rng.NextDouble() * 3.8);
-            col.Length = rng.Next(8, 20);
-            col.Chars = new char[col.Length];
-            for (int c = 0; c < col.Length; c++) col.Chars[c] = GLYPHS[rng.Next(GLYPHS.Length)];
+                RainColumn col = new RainColumn();
+                col.X = x;
+                col.MinY = m.Top;
+                col.MaxY = m.Bottom;
+                col.MinX = m.Left;
+                col.MaxX = m.Right;
+                col.Y = rng.Next(m.Top - m.Height, m.Bottom);
 
-            double p = rng.NextDouble();
-            col.ColorSlot = (p < 0.58) ? 0 : (p < 0.82 ? 1 : 2);
-            columns.Add(col);
+                // 3-Layer 3D Parallax Distribution: 0=Far Background (34%), 1=Midground (36%), 2=Near Foreground (30%)
+                double dRoll = rng.NextDouble();
+                if ((x - m.Left) < 130) {
+                    col.DepthLayer = 0;
+                } else if (dRoll < 0.34) {
+                    col.DepthLayer = 0;
+                } else if (dRoll < 0.70) {
+                    col.DepthLayer = 1;
+                } else {
+                    col.DepthLayer = 2;
+                }
+                col.IsForeground = (col.DepthLayer == 2);
+                col.CharStep = (col.DepthLayer == 2) ? 17 : (col.DepthLayer == 1 ? 15 : 13);
+
+                AssignColumnLogText(col);
+                columns.Add(col);
+            }
         }
     }
 
@@ -2193,6 +4412,33 @@ public class HackerWallpaperForm : Form {
                         if (anomalyHeadline == "BASELINE_NORMAL") anomalyHeadline = "NEW_HOST: " + remIp;
                     }
 
+                    // If this is a newly seen external IP, let Porygon query QB-Network VirusTotal API (http://192.168.2.222:5080/api/wallpaper-vt-check)
+                    if (!isLan && !vtAuditedIps.Contains(remIp) && vtAuditedIps.Count < 45 && porygon != null) {
+                        vtAuditedIps.Add(remIp);
+                        try {
+                            using (System.Net.WebClient vtWc = new System.Net.WebClient()) {
+                                vtWc.Encoding = System.Text.Encoding.UTF8;
+                                string vtJson = vtWc.DownloadString("http://127.0.0.1:5080/api/wallpaper-vt-check?target=" + remIp + "&port=" + remPort);
+                                JavaScriptSerializer vtSer = new JavaScriptSerializer();
+                                Dictionary<string, object> vtObj = vtSer.Deserialize<Dictionary<string, object>>(vtJson);
+                                if (vtObj != null) {
+                                    int vtMal = vtObj.ContainsKey("malicious_count") ? Convert.ToInt32(vtObj["malicious_count"]) : 0;
+                                    int vtSusp = vtObj.ContainsKey("suspicious_count") ? Convert.ToInt32(vtObj["suspicious_count"]) : 0;
+                                    float vtSc = vtObj.ContainsKey("threat_score") ? Convert.ToSingle(vtObj["threat_score"]) / 100f : 0f;
+                                    string vtSum = vtObj.ContainsKey("summary") && vtObj["summary"] != null ? vtObj["summary"].ToString() : ("VT:" + remIp);
+                                    porygon.InjectVirusTotalSensorySignal(remIp, vtMal, vtSusp, vtSc, vtSum);
+                                    if (vtMal > 0 || vtSc >= 0.45f) {
+                                        nodeKind = 2;
+                                        anomType = "VT_MALICIOUS_" + vtMal;
+                                        anomDetail = vtSum;
+                                        anomScore = Math.Max(anomScore, Math.Min(0.99f, 0.72f + vtSc * 0.27f));
+                                        anomalyHeadline = "VT_HIT: " + remIp + " (MAL:" + vtMal + ")";
+                                    }
+                                }
+                            }
+                        } catch { }
+                    }
+
                     // Feed real connection node into Porygon 3D Cyberspace!
                     if (porygon != null && (nodeKind > 0 || porygon.Packets.Count < 8 || rng.NextDouble() < 0.35)) {
                         porygon.InjectRealNetworkNode(screenW, screenH, nodeKind,
@@ -2280,8 +4526,132 @@ public class HackerWallpaperForm : Form {
                 LastAnomalySummary = anomalyHeadline
             };
 
+            // Poll QB-Network SOC Unified API + VirusTotal Threat Intel (http://127.0.0.1:5080/api/wallpaper-telemetry)
+            List<string> fetchedRainTokens = null;
+            List<string> fetchedLogLines = null;
+            if (telemetryCycles == 1 || telemetryCycles % 2 == 0) {
+                try {
+                    using (System.Net.WebClient wc = new System.Net.WebClient()) {
+                        wc.Encoding = System.Text.Encoding.UTF8;
+                        string json = wc.DownloadString("http://127.0.0.1:5080/api/wallpaper-telemetry");
+                        JavaScriptSerializer ser = new JavaScriptSerializer();
+                        Dictionary<string, object> root = ser.Deserialize<Dictionary<string, object>>(json);
+                        if (root != null) {
+                            if (root.ContainsKey("rain_tokens") && root["rain_tokens"] is System.Collections.IEnumerable) {
+                                fetchedRainTokens = new List<string>();
+                                foreach (object item in (System.Collections.IEnumerable)root["rain_tokens"]) {
+                                    if (item != null) fetchedRainTokens.Add(item.ToString());
+                                }
+                            }
+                            if (root.ContainsKey("log_lines") && root["log_lines"] is System.Collections.IEnumerable) {
+                                fetchedLogLines = new List<string>();
+                                foreach (object item in (System.Collections.IEnumerable)root["log_lines"]) {
+                                    if (item != null) fetchedLogLines.Add(item.ToString());
+                                }
+                            }
+                            if (porygon != null && root.ContainsKey("vt_reports") && root["vt_reports"] is System.Collections.IEnumerable) {
+                                foreach (object vtItem in (System.Collections.IEnumerable)root["vt_reports"]) {
+                                    Dictionary<string, object> vr = vtItem as Dictionary<string, object>;
+                                    if (vr == null) continue;
+                                    string vtIp = vr.ContainsKey("ip") && vr["ip"] != null ? vr["ip"].ToString() : "0.0.0.0";
+                                    int vtMal = vr.ContainsKey("malicious_count") ? Convert.ToInt32(vr["malicious_count"]) : 0;
+                                    int vtSusp = vr.ContainsKey("suspicious_count") ? Convert.ToInt32(vr["suspicious_count"]) : 0;
+                                    float vtSc = vr.ContainsKey("threat_score") ? Convert.ToSingle(vr["threat_score"]) / 100f : 0f;
+                                    string vtSum = vr.ContainsKey("summary") && vr["summary"] != null ? vr["summary"].ToString() : ("VT:" + vtIp);
+                                    porygon.InjectVirusTotalSensorySignal(vtIp, vtMal, vtSusp, vtSc, vtSum);
+                                    if (vtMal > 0 || vtSc >= 0.45f) {
+                                        feed.AnomalyIndex = Math.Max(feed.AnomalyIndex, Math.Min(0.98f, vtSc));
+                                        if (anomalyHeadline == "BASELINE_NORMAL") {
+                                            anomalyHeadline = string.Format("VT_ALERT:{0}(M:{1})", vtIp, vtMal);
+                                            feed.LastAnomalySummary = anomalyHeadline;
+                                        }
+                                    }
+                                }
+                            }
+                            if (porygon != null && root.ContainsKey("nodes") && root["nodes"] is System.Collections.IEnumerable) {
+                                foreach (object nObj in (System.Collections.IEnumerable)root["nodes"]) {
+                                    Dictionary<string, object> nd = nObj as Dictionary<string, object>;
+                                    if (nd == null) continue;
+                                    string rEp = nd.ContainsKey("remote_ep") && nd["remote_ep"] != null ? nd["remote_ep"].ToString() : "192.168.2.1:5080";
+                                    string lSkt = nd.ContainsKey("local_skt") && nd["local_skt"] != null ? nd["local_skt"].ToString() : (ipv4 + ":5080");
+                                    int nKind = nd.ContainsKey("kind") ? Convert.ToInt32(nd["kind"]) : 1;
+                                    string nType = nd.ContainsKey("type") && nd["type"] != null ? nd["type"].ToString() : "QB_NIDS_EVENT";
+                                    string nDet = nd.ContainsKey("detail") && nd["detail"] != null ? nd["detail"].ToString() : "QB-Network NIDS Telemetry";
+                                    float nScore = nd.ContainsKey("score") ? Convert.ToSingle(nd["score"]) : 0.55f;
+                                    float nKbps = nd.ContainsKey("kbps") ? Convert.ToSingle(nd["kbps"]) : 45.0f;
+
+                                    porygon.InjectRealNetworkNode(screenW, screenH, nKind, rEp, lSkt, "QB-NIDS/5080", "SOC_ACTIVE", nType, nDet, nScore, nKbps);
+                                    if (nKind == 2 && anomalyHeadline == "BASELINE_NORMAL") {
+                                        anomalyHeadline = nType + " (" + rEp + ")";
+                                        feed.LastAnomalySummary = anomalyHeadline;
+                                        feed.AnomalyIndex = Math.Max(feed.AnomalyIndex, nScore);
+                                    }
+                                    if (newBlips.Count < 18) {
+                                        int h = Math.Abs(rEp.GetHashCode());
+                                        newBlips.Add(new RadarBlip {
+                                            AngleDeg = (h % 360),
+                                            DistNorm = (nKind == 2) ? 0.82f : 0.44f,
+                                            Label = rEp.Length > 15 ? rEp.Substring(0, 15) : rEp,
+                                            FullRemoteEp = rEp,
+                                            LocalEp = lSkt,
+                                            Proto = nType,
+                                            RingZone = (nKind == 2) ? "RING3:QB_ALERT" : "RING1:QB_NDR",
+                                            AnomalyScore = nScore,
+                                            IsHttps = false,
+                                            IsAnomaly = (nKind == 2)
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch { }
+            }
+
+            // Sample Real GPU 3D Utilization (Lightweight 3D Engine Counters + OpenGL Frame Duty Fallback)
+            float newGpuPct = gpuUsagePct;
+            try {
+                if (!gpuCountersInitTried && telemetryCycles >= 2) {
+                    gpuCountersInitTried = true;
+                    gpuCounters = new List<PerformanceCounter>();
+                    PerformanceCounterCategory cat = new PerformanceCounterCategory("GPU Engine");
+                    string[] instNames = cat.GetInstanceNames();
+                    int myPid = Process.GetCurrentProcess().Id;
+                    string pidTag = "pid_" + myPid + "_";
+                    for (int i = 0; i < instNames.Length; i++) {
+                        string nm = instNames[i];
+                        if (nm.Contains("engtype_3D") && (nm.Contains(pidTag) || nm.Contains("dwm") || gpuCounters.Count < 6)) {
+                            if (nm.Contains(pidTag)) {
+                                PerformanceCounter pc = new PerformanceCounter("GPU Engine", "Utilization Percentage", nm, true);
+                                pc.NextValue();
+                                gpuCounters.Add(pc);
+                            }
+                        }
+                    }
+                }
+                if (gpuCounters != null && gpuCounters.Count > 0) {
+                    float sumGpu = 0f;
+                    for (int i = 0; i < gpuCounters.Count; i++) {
+                        sumGpu += gpuCounters[i].NextValue();
+                    }
+                    if (sumGpu > 0.1f) {
+                        newGpuPct = Math.Min(100f, sumGpu);
+                    } else {
+                        float dutyPct = (gpuFrameMs * currentFps) / 10.0f;
+                        newGpuPct = Math.Max(3.5f, Math.Min(99f, dutyPct * 1.35f));
+                    }
+                } else {
+                    float dutyPct = (gpuFrameMs * currentFps) / 10.0f;
+                    newGpuPct = Math.Max(4.0f, Math.Min(99f, dutyPct * 1.45f));
+                }
+            } catch {
+                float dutyPct = (gpuFrameMs * currentFps) / 10.0f;
+                newGpuPct = Math.Max(4.0f, Math.Min(99f, dutyPct * 1.45f));
+            }
+
             lock (telemetryLock) {
                 cpuUsage = newCpu;
+                gpuUsagePct = gpuUsagePct * 0.45f + newGpuPct * 0.55f;
                 ramUsedGB = newRamUsed;
                 ramTotalGB = newRamTotal;
                 ramPercent = newRamPct;
@@ -2294,18 +4664,24 @@ public class HackerWallpaperForm : Form {
                 radarBlips = newBlips;
                 currentFeed = feed;
 
+                if (fetchedRainTokens != null && fetchedRainTokens.Count > 0) {
+                    qbRainTokens = fetchedRainTokens;
+                }
+
                 for (int i = 0; i < pingHistory.Length - 1; i++) pingHistory[i] = pingHistory[i + 1];
                 pingHistory[pingHistory.Length - 1] = newPing;
 
                 string ts = DateTime.Now.ToString("HH:mm:ss");
                 string logEntry;
-                if (anomalyHeadline != "BASELINE_NORMAL") {
+                if (fetchedLogLines != null && fetchedLogLines.Count > 0) {
+                    logEntry = string.Format("[{0}] {1}", ts, fetchedLogLines[telemetryCycles % fetchedLogLines.Count]);
+                } else if (anomalyHeadline != "BASELINE_NORMAL") {
                     logEntry = string.Format("[{0}] [IDS_DETECT] {1} | SCORE:{2:0.00}", ts, anomalyHeadline, compositeAnomaly);
                 } else if (rng.Next(2) == 0 && sampleConn != null) {
                     logEntry = string.Format("[{0}] {1} [Z:{2:+0.0;-0.0;0.0}σ]", ts, sampleConn, dlZ);
                 } else {
-                    logEntry = string.Format("[{0}] BASELINE // DL:{1:0.0}KB/s (μ={2:0.0}) | PING:{3}ms | HOSTS:{4}",
-                        ts, netDownKbps, emaDownKbps, pingMs, knownRemoteHosts.Count);
+                    logEntry = string.Format("[{0}] BASELINE // DL:{1:0.0}KB/s | GPU:{2:0.0}% ({3}FPS) | PING:{4}ms",
+                        ts, netDownKbps, gpuUsagePct, currentFps, pingMs);
                 }
                 liveLogLines.Add(logEntry);
                 while (liveLogLines.Count > 5) liveLogLines.RemoveAt(0);
@@ -2318,15 +4694,136 @@ public class HackerWallpaperForm : Form {
         AttachToDesktopWorkerW();
         RegisterHotKey(this.Handle, HOTKEY_ID, MOD_CONTROL | MOD_ALT, (uint)Keys.W);
         RegisterHotKey(this.Handle, HOTKEY_MODEL_ID, MOD_CONTROL | MOD_ALT, (uint)Keys.P);
+        RegisterHotKey(this.Handle, HOTKEY_BRAIN_FULL_ID, MOD_CONTROL | MOD_ALT, (uint)Keys.B);
+        RegisterHotKey(this.Handle, HOTKEY_OPACITY_UP_ID, MOD_CONTROL | MOD_ALT, (uint)Keys.Up);
+        RegisterHotKey(this.Handle, HOTKEY_OPACITY_DOWN_ID, MOD_CONTROL | MOD_ALT, (uint)Keys.Down);
+        RegisterHotKey(this.Handle, HOTKEY_BG_MODE_ID, MOD_CONTROL | MOD_ALT, (uint)Keys.M);
+        InstallMouseWheelHook();
         renderTimer.Start();
         try { EmptyWorkingSet(Process.GetCurrentProcess().Handle); } catch { }
     }
 
     protected override void OnFormClosing(FormClosingEventArgs e) {
+        if (mouseHookHandle != IntPtr.Zero) {
+            try { UnhookWindowsHookEx(mouseHookHandle); } catch { }
+            mouseHookHandle = IntPtr.Zero;
+        }
         UnregisterHotKey(this.Handle, HOTKEY_ID);
         UnregisterHotKey(this.Handle, HOTKEY_MODEL_ID);
+        UnregisterHotKey(this.Handle, HOTKEY_BRAIN_FULL_ID);
+        UnregisterHotKey(this.Handle, HOTKEY_OPACITY_UP_ID);
+        UnregisterHotKey(this.Handle, HOTKEY_OPACITY_DOWN_ID);
+        UnregisterHotKey(this.Handle, HOTKEY_BG_MODE_ID);
         if (porygon != null) porygon.SaveBrainStates();
         base.OnFormClosing(e);
+    }
+
+    private void AdjustTerminalOpacity(int deltaPct) {
+        try {
+            terminalOpacityPct = Math.Max(15, Math.Min(100, terminalOpacityPct + deltaPct));
+
+            // 1. Live-update Windows Terminal settings.json (Windows Terminal hot-reloads opacity immediately)
+            string localApp = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            string wtSettings = Path.Combine(localApp, @"Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json");
+            if (File.Exists(wtSettings)) {
+                string json = File.ReadAllText(wtSettings);
+                string updated = System.Text.RegularExpressions.Regex.Replace(json, @"(""opacity""\s*:\s*)\d+(\s*,\s*""useAcrylic"")", "${1}" + terminalOpacityPct + "${2}");
+                if (updated != json) {
+                    File.WriteAllText(wtSettings, updated, Encoding.UTF8);
+                }
+            }
+
+            // 2. Also apply Win32 LWA_ALPHA to any open classic ConsoleWindowClass windows
+            byte alphaByte = (byte)Math.Max(38, Math.Min(255, (int)Math.Round(terminalOpacityPct * 255.0 / 100.0)));
+            IntPtr hCon = FindWindow("ConsoleWindowClass", null);
+            if (hCon != IntPtr.Zero) {
+                int ex = GetWindowLong(hCon, GWL_EXSTYLE);
+                SetWindowLong(hCon, GWL_EXSTYLE, ex | WS_EX_LAYERED);
+                SetLayeredWindowAttributes(hCon, 0, alphaByte, LWA_ALPHA);
+            }
+
+            lock (telemetryLock) {
+                string ts = DateTime.Now.ToString("HH:mm:ss");
+                liveLogLines.Add(string.Format("[{0}] [TERM_OPACITY] Opacidad Terminal -> {1}% (Ctrl+Alt+Up/Down)", ts, terminalOpacityPct));
+                while (liveLogLines.Count > 5) liveLogLines.RemoveAt(0);
+            }
+            hudTelemetryDirty = true;
+        } catch { }
+    }
+
+    private void InstallMouseWheelHook() {
+        if (mouseHookHandle != IntPtr.Zero) return;
+        try {
+            mouseHookProc = new LowLevelMouseProc(MouseWheelHookCallback);
+            using (Process curProcess = Process.GetCurrentProcess())
+            using (ProcessModule curModule = curProcess.MainModule) {
+                mouseHookHandle = SetWindowsHookEx(WH_MOUSE_LL, mouseHookProc, GetModuleHandle(curModule.ModuleName), 0);
+            }
+        } catch { }
+    }
+
+    private Rectangle GetCurrentBrain3DRect() {
+        if (brain3DFullscreen && !brain3DCollapsed) {
+            return new Rectangle(primaryMonRect.Left + 108, primaryMonRect.Top + 18, primaryMonRect.Width - 126, primaryMonRect.Height - 68);
+        }
+        int bw = 584;
+        int bx = primaryMonRect.Right - bw - 22;
+        int brainW = 356;
+        int brainH = brain3DCollapsed ? 32 : 246;
+        int brainX = bx - brainW - 14;
+        int brainY = primaryMonRect.Bottom - brainH - 54;
+        return new Rectangle(brainX, brainY, brainW, brainH);
+    }
+
+    private float GetEffectiveBrainYaw() {
+        if (brain3DAutoRotate) {
+            return brain3DManualYaw + (float)Math.Sin(brain3DYaw) * 0.44f;
+        }
+        return brain3DManualYaw;
+    }
+
+    private float GetEffectiveBrainPitch() {
+        if (brain3DAutoRotate) {
+            return brain3DManualPitch + (float)Math.Cos(brain3DYaw * 0.72f) * 0.12f;
+        }
+        return brain3DManualPitch;
+    }
+
+    private IntPtr MouseWheelHookCallback(int nCode, IntPtr wParam, IntPtr lParam) {
+        try {
+            if (nCode >= 0 && wParam == (IntPtr)WM_MOUSEWHEEL && Config != null && Config.ShowPorygon && !brain3DCollapsed) {
+                MSLLHOOKSTRUCT hs = (MSLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(MSLLHOOKSTRUCT));
+                Point screenPt = hs.pt;
+                IntPtr hHit = WindowFromPoint(screenPt);
+                if (IsDesktopWindowHandle(hHit)) {
+                    Point clientPt = this.PointToClient(screenPt);
+                    Rectangle bRect = GetCurrentBrain3DRect();
+                    if (bRect.Contains(clientPt)) {
+                        short wheelDelta = (short)((hs.mouseData >> 16) & 0xFFFF);
+                        float notches = wheelDelta / 120.0f;
+                        Keys mods = Control.ModifierKeys;
+                        if ((mods & Keys.Control) != 0) {
+                            brain3DZoom = Math.Max(0.55f, Math.Min(2.50f, brain3DZoom + notches * 0.15f));
+                        } else if ((mods & Keys.Shift) != 0) {
+                            if (brain3DAutoRotate) {
+                                brain3DManualYaw = GetEffectiveBrainYaw();
+                                brain3DAutoRotate = false;
+                            }
+                            brain3DManualPitch = Math.Max(-1.20f, Math.Min(1.20f, brain3DManualPitch + notches * 0.14f));
+                        } else {
+                            // Standard Mouse Wheel over the 3D Brain: smoothly rotate 3D Yaw in 360 degrees!
+                            if (brain3DAutoRotate) {
+                                brain3DManualYaw = GetEffectiveBrainYaw();
+                                brain3DAutoRotate = false;
+                            }
+                            brain3DManualYaw += notches * 0.24f;
+                        }
+                        hudBrain3DDirty = true;
+                    }
+                }
+            }
+        } catch { }
+        return CallNextHookEx(mouseHookHandle, nCode, wParam, lParam);
     }
 
     private void TriggerPorygonTrainingWave() {
@@ -2346,6 +4843,20 @@ public class HackerWallpaperForm : Form {
             } else if (hk == HOTKEY_MODEL_ID) {
                 TriggerPorygonTrainingWave();
                 return;
+            } else if (hk == HOTKEY_BRAIN_FULL_ID) {
+                brain3DCollapsed = false;
+                brain3DFullscreen = !brain3DFullscreen;
+                hudBrain3DDirty = true;
+                return;
+            } else if (hk == HOTKEY_OPACITY_UP_ID) {
+                AdjustTerminalOpacity(10);
+                return;
+            } else if (hk == HOTKEY_OPACITY_DOWN_ID) {
+                AdjustTerminalOpacity(-10);
+                return;
+            } else if (hk == HOTKEY_BG_MODE_ID) {
+                CycleBgSceneMode();
+                return;
             }
         }
         if (m.Msg == WM_NCHITTEST) {
@@ -2362,6 +4873,96 @@ public class HackerWallpaperForm : Form {
     private IntPtr cachedProgman = IntPtr.Zero;
     private IntPtr cachedDefView = IntPtr.Zero;
 
+    // Hardware OpenGL 4.6 State (AMD Radeon RX 9060 XT)
+    private IntPtr glHdc = IntPtr.Zero;
+    private IntPtr glContext = IntPtr.Zero;
+    private bool glEnabled = false;
+    private string gpuRendererName = "RX 9060 XT [GL]";
+    private uint bgTexId = 0;
+    private int bgTexW = 0, bgTexH = 0;
+    private bool bgTexDirty = true;
+
+    private Bitmap hudTelemetryBmp = null;
+    private uint hudTelemetryTexId = 0;
+    private int hudTelemetryTexW = 0, hudTelemetryTexH = 0;
+    private int lastHudTelemetryCycle = -1;
+    private int lastHudTheme = -1;
+
+    private Bitmap hudConnectomeBmp = null;
+    private uint hudConnectomeTexId = 0;
+    private int hudConnectomeTexW = 0, hudConnectomeTexH = 0;
+
+    private Bitmap hudBrain3DBmp = null;
+    private uint hudBrain3DTexId = 0;
+    private int hudBrain3DTexW = 0, hudBrain3DTexH = 0;
+
+    private Bitmap hudBrain3DFullBmp = null;
+    private uint hudBrain3DFullTexId = 0;
+    private int hudBrain3DFullTexW = 0, hudBrain3DFullTexH = 0;
+
+    private Bitmap hudRadarBmp = null;
+    private uint hudRadarTexId = 0;
+    private int hudRadarTexW = 0, hudRadarTexH = 0;
+
+    private void InitOpenGL() {
+        if (glEnabled) return;
+        try {
+            glHdc = GpuGl.GetDC(this.Handle);
+            if (glHdc == IntPtr.Zero) return;
+
+            GpuGl.PIXELFORMATDESCRIPTOR pfd = new GpuGl.PIXELFORMATDESCRIPTOR();
+            pfd.nSize = (ushort)Marshal.SizeOf(typeof(GpuGl.PIXELFORMATDESCRIPTOR));
+            pfd.nVersion = 1;
+            pfd.dwFlags = 0x00000004 | 0x00000020 | 0x00000001; // PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER
+            pfd.iPixelType = 0; // PFD_TYPE_RGBA
+            pfd.cColorBits = 32;
+            pfd.cAlphaBits = 8;
+            pfd.cDepthBits = 24;
+            pfd.iLayerType = 0; // PFD_MAIN_PLANE
+
+            int pf = GpuGl.ChoosePixelFormat(glHdc, ref pfd);
+            if (pf == 0) return;
+            if (!GpuGl.SetPixelFormat(glHdc, pf, ref pfd)) return;
+
+            glContext = GpuGl.wglCreateContext(glHdc);
+            if (glContext == IntPtr.Zero) return;
+            if (!GpuGl.wglMakeCurrent(glHdc, glContext)) return;
+
+            IntPtr pRenderer = GpuGl.glGetString(GpuGl.GL_RENDERER);
+            if (pRenderer != IntPtr.Zero) {
+                string rName = Marshal.PtrToStringAnsi(pRenderer);
+                if (!string.IsNullOrEmpty(rName)) {
+                    gpuRendererName = rName.Replace("AMD Radeon ", "").Trim();
+                }
+            }
+
+            IntPtr hFontFg = fontRainFg.ToHfont();
+            IntPtr oldFont = GpuGl.SelectObject(glHdc, hFontFg);
+            GpuGl.wglUseFontBitmapsA(glHdc, 0, 255, GpuGl.FONT_LIST_RAIN_FG);
+
+            IntPtr hFontBg = fontRainBg.ToHfont();
+            GpuGl.SelectObject(glHdc, hFontBg);
+            GpuGl.wglUseFontBitmapsA(glHdc, 0, 255, GpuGl.FONT_LIST_RAIN_BG);
+
+            IntPtr hFontSm = fontHudSmall.ToHfont();
+            GpuGl.SelectObject(glHdc, hFontSm);
+            GpuGl.wglUseFontBitmapsA(glHdc, 0, 255, GpuGl.FONT_LIST_HUD_SMALL);
+
+            GpuGl.SelectObject(glHdc, oldFont);
+            GpuGl.DeleteObject(hFontFg);
+            GpuGl.DeleteObject(hFontBg);
+            GpuGl.DeleteObject(hFontSm);
+
+            GpuGl.CanvasW = screenW;
+            GpuGl.CanvasH = screenH;
+            bgTexDirty = true;
+            lastHudTheme = -1;
+            glEnabled = true;
+        } catch {
+            glEnabled = false;
+        }
+    }
+
     private void AttachToDesktopWorkerW() {
         cachedProgman = FindWindow("Progman", null);
         IntPtr res;
@@ -2374,45 +4975,332 @@ public class HackerWallpaperForm : Form {
         const int WS_CAPTION = 0x00C00000;
         const int WS_THICKFRAME = 0x00040000;
         const int WS_DISABLED = 0x08000000;
+        const int WS_CLIPCHILDREN = 0x02000000;
+        const int WS_CLIPSIBLINGS = 0x04000000;
         const uint SWP_FRAMECHANGED = 0x0020;
 
         int style = GetWindowLong(this.Handle, GWL_STYLE);
-        style = (style & ~WS_POPUP & ~WS_CAPTION & ~WS_THICKFRAME) | WS_CHILD | WS_VISIBLE | WS_DISABLED;
+        style = (style & ~WS_POPUP & ~WS_CAPTION & ~WS_THICKFRAME) | WS_CHILD | WS_VISIBLE | WS_DISABLED | WS_CLIPCHILDREN | WS_CLIPSIBLINGS;
         SetWindowLong(this.Handle, GWL_STYLE, style);
 
         SetParent(this.Handle, cachedProgman);
 
         int exStyle = GetWindowLong(this.Handle, GWL_EXSTYLE);
-        exStyle |= WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
+        exStyle = (exStyle & ~WS_EX_LAYERED) | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
         SetWindowLong(this.Handle, GWL_EXSTYLE, exStyle);
-        SetLayeredWindowAttributes(this.Handle, 0, 255, LWA_ALPHA);
 
+        // Progman spans the entire VirtualScreen (all 5 monitors), so (0, 0, screenW, screenH) covers all monitors!
         if (cachedDefView != IntPtr.Zero) {
             SetWindowPos(this.Handle, cachedDefView, 0, 0, screenW, screenH, SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_FRAMECHANGED);
         } else {
             SetWindowPos(this.Handle, new IntPtr(1), 0, 0, screenW, screenH, SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_FRAMECHANGED);
         }
+
+        InitOpenGL();
+        // Windows 11 24H2 Progman requires WS_EX_LAYERED + LWA_ALPHA on child windows to composite them;
+        // applying it AFTER InitOpenGL preserves hardware OpenGL on AMD Radeon RX 9060 XT while making Progman display it!
+        exStyle |= WS_EX_LAYERED;
+        SetWindowLong(this.Handle, GWL_EXSTYLE, exStyle);
+        SetLayeredWindowAttributes(this.Handle, 0, 255, LWA_ALPHA);
     }
 
     private void EnsureBehindDesktopIcons() {
         if (cachedProgman == IntPtr.Zero) cachedProgman = FindWindow("Progman", null);
         if (cachedDefView == IntPtr.Zero) cachedDefView = FindWindowEx(cachedProgman, IntPtr.Zero, "SHELLDLL_DefView", null);
+        int exStyle = GetWindowLong(this.Handle, GWL_EXSTYLE);
+        if ((exStyle & WS_EX_LAYERED) == 0) {
+            SetWindowLong(this.Handle, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
+            SetLayeredWindowAttributes(this.Handle, 0, 255, LWA_ALPHA);
+        }
         if (cachedDefView != IntPtr.Zero) {
-            SetWindowPos(this.Handle, cachedDefView, 0, 0, 0, 0, 0x0001 | 0x0002 | SWP_NOACTIVATE);
+            SetWindowPos(this.Handle, cachedDefView, 0, 0, screenW, screenH, SWP_NOACTIVATE | SWP_SHOWWINDOW);
         }
     }
 
     private bool IsAnotherWindowMaximized() {
-        IntPtr fg = GetForegroundWindow();
-        if (fg == IntPtr.Zero || fg == this.Handle) return false;
-        if (configForm != null && !configForm.IsDisposed && fg == configForm.Handle) return false;
-        return IsZoomed(fg);
+        return false; // With 5 monitors, keep the connected virtual environment live across visible screens
+    }
+
+    private bool IsDesktopWindowHandle(IntPtr hWnd) {
+        if (hWnd == IntPtr.Zero) return false;
+        if (hWnd == this.Handle || hWnd == cachedProgman || hWnd == cachedDefView) return true;
+        StringBuilder sb = new StringBuilder(64);
+        GetClassName(hWnd, sb, sb.Capacity);
+        string cls = sb.ToString();
+        return cls == "SysListView32" || cls == "SHELLDLL_DefView" || cls == "Progman" || cls == "WorkerW";
+    }
+
+    private void HandleBrain3DClick(Point pt, Rectangle brainRect) {
+        int relX = pt.X - brainRect.X;
+        int relY = pt.Y - brainRect.Y;
+
+        if (brain3DCollapsed) {
+            brain3DCollapsed = false;
+            Config.Brain3DCollapsed = false;
+            Config.Save();
+            hudBrain3DDirty = true;
+            return;
+        }
+
+        // 1. Header Bar Clicks (Top 32px): [FULL / EXIT FULL] button vs [-] Fold button
+        if (relY <= 34) {
+            if (relX >= brainRect.Width - 38) {
+                // [-] Fold button
+                brain3DFullscreen = false;
+                brain3DCollapsed = !brain3DCollapsed;
+                Config.Brain3DCollapsed = brain3DCollapsed;
+                Config.Save();
+            } else if (relX >= brainRect.Width - 135) {
+                // [FULL] / [EXIT FULL] button
+                brain3DFullscreen = !brain3DFullscreen;
+                brain3DCollapsed = false;
+            } else {
+                // Clicking left title header folds card (or exits fullscreen if in fullscreen)
+                if (brain3DFullscreen) {
+                    brain3DFullscreen = false;
+                } else {
+                    brain3DCollapsed = !brain3DCollapsed;
+                    Config.Brain3DCollapsed = brain3DCollapsed;
+                    Config.Save();
+                }
+            }
+            hudBrain3DDirty = true;
+            return;
+        }
+
+        // 2. Bottom Interactive 3D Control Toolbar (Bottom 28px): [< ROT] [ROT >] [ZOOM] [AUTO/FREE] [NEXT PORYGON]
+        if (relY >= brainRect.Height - 28) {
+            float xFrac = (float)relX / Math.Max(1, brainRect.Width);
+            if (xFrac < 0.18f) {
+                // [< ROT] Rotate Left
+                if (brain3DAutoRotate) { brain3DManualYaw = GetEffectiveBrainYaw(); brain3DAutoRotate = false; }
+                brain3DManualYaw -= 0.36f;
+            } else if (xFrac < 0.36f) {
+                // [ROT >] Rotate Right
+                if (brain3DAutoRotate) { brain3DManualYaw = GetEffectiveBrainYaw(); brain3DAutoRotate = false; }
+                brain3DManualYaw += 0.36f;
+            } else if (xFrac < 0.56f) {
+                // [ZOOM] Cycle Zoom Level
+                if (brain3DZoom < 1.15f) brain3DZoom = 1.35f;
+                else if (brain3DZoom < 1.55f) brain3DZoom = 1.75f;
+                else if (brain3DZoom > 0.90f) brain3DZoom = 0.80f;
+                else brain3DZoom = 1.0f;
+            } else if (xFrac < 0.76f) {
+                // [AUTO / FREE] Toggle Orbital Auto-Rotation
+                brain3DAutoRotate = !brain3DAutoRotate;
+                if (brain3DAutoRotate) {
+                    brain3DManualYaw = 0f;
+                    brain3DManualPitch = 0.14f;
+                }
+            } else {
+                // [NEXT PORYGON] Cycle inspected Porygon brain
+                if (porygon != null && porygon.Agents.Count > 0) {
+                    porygon.SelectedBrainAgentIndex = (porygon.SelectedBrainAgentIndex + 1) % porygon.Agents.Count;
+                    porygon.LastManualBrainSelectUtc = DateTime.UtcNow;
+                    porygon.BrainAutoFocusedOnThreat = false;
+                }
+            }
+            hudBrain3DDirty = true;
+            return;
+        }
+
+        // 3. Single-click inside the 3D viewport (if user didn't drag to rotate): cycle to next Porygon's 3D brain
+        if (!brain3DDragMoved && porygon != null && porygon.Agents.Count > 0) {
+            porygon.SelectedBrainAgentIndex = (porygon.SelectedBrainAgentIndex + 1) % porygon.Agents.Count;
+            porygon.LastManualBrainSelectUtc = DateTime.UtcNow;
+            porygon.BrainAutoFocusedOnThreat = false;
+            hudBrain3DDirty = true;
+        }
+    }
+
+    private void HandleDesktopCardClick() {
+        try {
+            Point screenPt = Control.MousePosition;
+            IntPtr hHit = WindowFromPoint(screenPt);
+            if (!IsDesktopWindowHandle(hHit)) return;
+
+            Point pt = this.PointToClient(screenPt);
+
+            // Priority 1: If 3D Brain is in Fullscreen Mode on Primary Monitor, handle clicks on it first!
+            if (Config.ShowPorygon && porygon != null && brain3DFullscreen && !brain3DCollapsed) {
+                Rectangle fullBrainRect = GetCurrentBrain3DRect();
+                if (fullBrainRect.Contains(pt)) {
+                    HandleBrain3DClick(pt, fullBrainRect);
+                    return;
+                }
+            }
+
+            int hudW = 584;
+            int hudH = telemetryCollapsed ? 32 : 228;
+            int hudX = primaryMonRect.Right - hudW - 22;
+            int hudY = primaryMonRect.Top + 22;
+
+            int radPanelW = 246;
+            int radPanelH = radarCollapsed ? 32 : 228;
+            int radPanelX = hudX - radPanelW - 14;
+            int radPanelY = primaryMonRect.Top + 22;
+
+            if (Config.ShowRadar) {
+                Rectangle radRect = new Rectangle(radPanelX, radPanelY, radPanelW, radPanelH);
+                if (radRect.Contains(pt)) {
+                    radarCollapsed = !radarCollapsed;
+                    Config.RadarCollapsed = radarCollapsed;
+                    Config.Save();
+                    hudRadarDirty = true;
+                    return;
+                }
+            }
+
+            if (Config.ShowTelemetry) {
+                Rectangle telRect = new Rectangle(hudX, hudY, hudW, hudH);
+                if (telRect.Contains(pt)) {
+                    int relX = pt.X - hudX;
+                    int relY = pt.Y - hudY;
+                    if (relY <= 30 && relX >= hudW - 142 && relX < hudW - 96) {
+                        CycleBgSceneMode();
+                        return;
+                    } else if (relY <= 30 && relX >= hudW - 96 && relX < hudW - 64) {
+                        AdjustTerminalOpacity(-10);
+                        return;
+                    } else if (relY <= 30 && relX >= hudW - 64 && relX < hudW - 32) {
+                        AdjustTerminalOpacity(10);
+                        return;
+                    }
+                    telemetryCollapsed = !telemetryCollapsed;
+                    Config.TelemetryCollapsed = telemetryCollapsed;
+                    Config.Save();
+                    hudTelemetryDirty = true;
+                    return;
+                }
+
+                for (int mIdx = 0; mIdx < monitorRects.Count; mIdx++) {
+                    Rectangle m = monitorRects[mIdx];
+                    if (m == primaryMonRect) continue;
+                    int pw = Math.Min(520, m.Width - 180);
+                    if (pw < 260) continue;
+                    int ph = secondaryBarsCollapsed ? 24 : 46;
+                    int px = m.Right - pw - 18;
+                    int py = m.Top + 16;
+                    if (new Rectangle(px, py, pw, ph).Contains(pt)) {
+                        secondaryBarsCollapsed = !secondaryBarsCollapsed;
+                        Config.SecondaryBarsCollapsed = secondaryBarsCollapsed;
+                        Config.Save();
+                        return;
+                    }
+                }
+            }
+
+            if (Config.ShowPorygon && porygon != null) {
+                int bw = 584;
+                int bh = connectomeCollapsed ? 32 : (78 + porygon.Agents.Count * 21);
+                int bx = primaryMonRect.Right - bw - 22;
+                int by = primaryMonRect.Bottom - bh - 54;
+                Rectangle connRect = new Rectangle(bx, by, bw, bh);
+                if (connRect.Contains(pt)) {
+                    connectomeCollapsed = !connectomeCollapsed;
+                    Config.ConnectomeCollapsed = connectomeCollapsed;
+                    Config.Save();
+                    hudConnectomeDirty = true;
+                    return;
+                }
+
+                Rectangle brainRect = GetCurrentBrain3DRect();
+                if (brainRect.Contains(pt)) {
+                    HandleBrain3DClick(pt, brainRect);
+                    return;
+                }
+            }
+        } catch { }
     }
 
     private void OnRenderTick(object sender, EventArgs e) {
         if (showConfigEvent != null && showConfigEvent.WaitOne(0)) {
             ShowConfigWindow();
         }
+
+        // Check external flag file for instant Fullscreen 3D Brain toggle or 3D Background Scene switch if requested by script/CLI
+        try {
+            string flagPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "brain_fullscreen.flag");
+            if (File.Exists(flagPath)) {
+                string txt = File.ReadAllText(flagPath).Trim();
+                File.Delete(flagPath);
+                brain3DCollapsed = false;
+                brain3DFullscreen = (txt == "1" || txt.Equals("true", StringComparison.OrdinalIgnoreCase) || !brain3DFullscreen);
+                hudBrain3DDirty = true;
+            }
+            string bgFlagPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "bg_scene.flag");
+            if (File.Exists(bgFlagPath)) {
+                string btxt = File.ReadAllText(bgFlagPath).Trim();
+                File.Delete(bgFlagPath);
+                int parsedMode;
+                if (int.TryParse(btxt, out parsedMode)) {
+                    Config.BgSceneMode = Math.Max(0, Math.Min(2, parsedMode));
+                    Config.Save();
+                    RebuildBackground();
+                    hudTelemetryDirty = true;
+                } else {
+                    CycleBgSceneMode();
+                }
+            }
+        } catch { }
+
+        // Adaptive GPU Eco-Governor: 24 FPS (42ms) when Desktop is focused or dragging 3D Brain; 15 FPS (64ms) when another app is focused!
+        if (frameCount % 12 == 0) {
+            IntPtr fgWnd = GetForegroundWindow();
+            bool deskActive = IsDesktopWindowHandle(fgWnd) || brain3DDragging || hudBrain3DDirty;
+            gpuEcoMode = !deskActive;
+            int targetInterval = deskActive ? 42 : 64;
+            if (renderTimer.Interval != targetInterval) {
+                renderTimer.Interval = targetInterval;
+            }
+            currentFps = deskActive ? 24 : 15;
+        }
+
+        // Interactive 3D Brain Click-and-Drag Orbit + Single-Click Detection on Desktop HUD Cards
+        bool leftDown = (GetAsyncKeyState(0x01) & 0x8000) != 0;
+        bool rightDown = (GetAsyncKeyState(0x02) & 0x8000) != 0;
+        bool anyBrainDragBtn = leftDown || rightDown;
+
+        if (Config.ShowPorygon && !brain3DCollapsed) {
+            Point screenPt = Control.MousePosition;
+            Point clientPt = this.PointToClient(screenPt);
+            Rectangle bRect = GetCurrentBrain3DRect();
+
+            if (anyBrainDragBtn && !prevLeftMouseDown && !prevRightMouseDown) {
+                if (bRect.Contains(clientPt) && IsDesktopWindowHandle(WindowFromPoint(screenPt))) {
+                    int relY = clientPt.Y - bRect.Y;
+                    if (relY > 34 && relY < bRect.Height - 28) {
+                        brain3DDragging = true;
+                        brain3DDragMoved = false;
+                        brain3DDragStartPt = clientPt;
+                        brain3DDragStartYaw = GetEffectiveBrainYaw();
+                        brain3DDragStartPitch = GetEffectiveBrainPitch();
+                    }
+                }
+            } else if (anyBrainDragBtn && brain3DDragging) {
+                int dx = clientPt.X - brain3DDragStartPt.X;
+                int dy = clientPt.Y - brain3DDragStartPt.Y;
+                if (Math.Abs(dx) > 4 || Math.Abs(dy) > 4) {
+                    brain3DDragMoved = true;
+                    brain3DAutoRotate = false;
+                    brain3DManualYaw = brain3DDragStartYaw + dx * 0.012f;
+                    brain3DManualPitch = Math.Max(-1.20f, Math.Min(1.20f, brain3DDragStartPitch - dy * 0.010f));
+                    hudBrain3DDirty = true;
+                }
+            } else if (!anyBrainDragBtn && brain3DDragging) {
+                brain3DDragging = false;
+            }
+        }
+
+        if (!leftDown && prevLeftMouseDown) {
+            // Fire card click on mouse button release (unless it was a 3D drag orbit gesture)
+            if (!brain3DDragMoved) {
+                HandleDesktopCardClick();
+            }
+            brain3DDragMoved = false;
+        }
+        prevLeftMouseDown = leftDown;
+        prevRightMouseDown = rightDown;
 
         frameCount++;
         if (frameCount <= 5 || frameCount % 30 == 0) {
@@ -2424,15 +5312,13 @@ public class HackerWallpaperForm : Form {
 
         if (Config.RainSpeed > 0) {
             float speedMult = Config.RainSpeed / 100.0f;
-            int charStep = 16;
             for (int i = 0; i < columns.Count; i++) {
                 RainColumn col = columns[i];
+                int cStep = col.CharStep > 0 ? col.CharStep : 16;
                 col.Y += col.BaseSpeed * speedMult;
-                if (rng.NextDouble() < 0.22) {
-                    col.Chars[rng.Next(col.Length)] = GLYPHS[rng.Next(GLYPHS.Length)];
-                }
-                if (col.Y - col.Length * charStep > screenH) {
-                    col.Y = rng.Next(-260, -20);
+                if (col.Y - col.Length * cStep > col.MaxY) {
+                    col.Y = col.MinY - rng.Next(20, 240);
+                    AssignColumnLogText(col);
                 }
             }
         }
@@ -2440,21 +5326,707 @@ public class HackerWallpaperForm : Form {
         if (Config.ShowPorygon) {
             Porygon3DAvatar.RealTelemetryFeed feedSnap;
             lock (telemetryLock) { feedSnap = currentFeed; }
-            porygon.Update(screenW, screenH, Control.MousePosition, feedSnap, Config.FollowMouse, Config.TrainingMode);
+            Point clientMouse = this.PointToClient(Control.MousePosition);
+            porygon.Update(screenW, screenH, clientMouse, feedSnap, Config.FollowMouse, Config.TrainingMode);
         }
 
         radarAngle = (radarAngle + 3.0f) % 360f;
+        brain3DYaw = (brain3DYaw + 0.042f) % (float)(Math.PI * 2.0);
 
         if (frameCount % 600 == 0) {
             try { EmptyWorkingSet(Process.GetCurrentProcess().Handle); } catch { }
         }
 
-        this.Invalidate();
+        if (glEnabled) {
+            RenderOpenGLFrame();
+        } else {
+            this.Invalidate();
+        }
+    }
+
+    private void Render3DProceduralEnvironmentOpenGL(int mIdx, Rectangle m, Color c1, Color c2, Color c3) {
+        int mode = Math.Max(0, Math.Min(2, Config.BgSceneMode));
+        float horizonY = m.Top + m.Height * 0.64f;
+        float vanishX = m.Left + m.Width * 0.50f;
+        float floorSpan = m.Bottom - horizonY;
+        float ceilSpan = (horizonY - 24f) - m.Top;
+        float phase = frameCount * 0.032f + mIdx * 0.85f;
+        float netMod = Math.Min(1.8f, 0.45f + (netDownKbps / 180.0f) + currentFeed.AnomalyIndex * 0.65f);
+
+        if (mode == 0) {
+            // =========================================================================
+            // MODE 0 (SELVA+OSC): HÍBRIDO SELVA BIO-DIGITAL LOW-POLY + SUELO DE OSCILADOR 3D
+            // =========================================================================
+            int rows = 7;
+            int cols = 16;
+            float[,] vx = new float[rows, cols + 1];
+            float[,] vy = new float[rows, cols + 1];
+
+            for (int r = 0; r < rows; r++) {
+                float t = (r + 0.35f) / (float)rows;
+                float persp = (float)Math.Pow(t, 1.55);
+                float baseY = horizonY + persp * floorSpan;
+                float spread = 0.28f + 0.72f * persp;
+                float amp = (6.0f + persp * 26.0f) * netMod;
+
+                for (int j = 0; j <= cols; j++) {
+                    float u = (j / (float)cols) * 2.0f - 1.0f; // -1..+1
+                    float x = vanishX + u * (m.Width * 0.54f) * spread;
+                    x = Math.Max(m.Left, Math.Min(m.Right, x));
+                    float w1 = (float)Math.Sin(j * 0.75f + phase * 1.15f + r * 0.65f);
+                    float w2 = (float)Math.Cos(j * 1.35f - phase * 0.85f + r * 0.90f);
+                    float y = baseY - (w1 * 0.65f + w2 * 0.35f) * amp;
+                    vx[r, j] = x;
+                    vy[r, j] = Math.Max(horizonY - 18f, Math.Min(m.Bottom - 2f, y));
+                }
+
+                // 1A. Polygon Occlusion Ribbon (Matte Dark Moss Triangles)
+                Color polyFill = Color.FromArgb((int)(26 + persp * 34f), 6, 19, 15);
+                GpuGl.SetColor(polyFill);
+                GpuGl.glBegin(GpuGl.GL_TRIANGLES);
+                for (int j = 0; j < cols; j++) {
+                    float yBot = Math.Min(m.Bottom, baseY + 22f + persp * 36f);
+                    GpuGl.glVertex2f(vx[r, j], vy[r, j]);
+                    GpuGl.glVertex2f(vx[r, j + 1], vy[r, j + 1]);
+                    GpuGl.glVertex2f(vx[r, j], yBot);
+
+                    GpuGl.glVertex2f(vx[r, j + 1], vy[r, j + 1]);
+                    GpuGl.glVertex2f(vx[r, j + 1], yBot);
+                    GpuGl.glVertex2f(vx[r, j], yBot);
+                }
+                GpuGl.glEnd();
+
+                // 1B. Triangulated Wireframe Struts between row r and r-1
+                if (r > 0) {
+                    int strutAlpha = (int)(16 + persp * 42f);
+                    GpuGl.glLineWidth(0.9f);
+                    GpuGl.SetColor(Color.FromArgb(strutAlpha, c3.R, c3.G, c3.B));
+                    GpuGl.glBegin(GpuGl.GL_LINES);
+                    for (int j = 0; j <= cols; j++) {
+                        GpuGl.glVertex2f(vx[r - 1, j], vy[r - 1, j]);
+                        GpuGl.glVertex2f(vx[r, j], vy[r, j]);
+                        if (j < cols) {
+                            GpuGl.glVertex2f(vx[r - 1, j], vy[r - 1, j]);
+                            GpuGl.glVertex2f(vx[r, j + 1], vy[r, j + 1]);
+                        }
+                    }
+                    GpuGl.glEnd();
+                }
+
+                // 1C. Oscilloscope 3D Ridge Line + Crest Vertices
+                int lineAlpha = (int)(38 + persp * 82f);
+                Color waveCol = (r % 2 == 0)
+                    ? Color.FromArgb(lineAlpha, c1.R, c1.G, c1.B)
+                    : Color.FromArgb(lineAlpha, (c1.R + c2.R) / 2, (c1.G + c2.G) / 2, (c1.B + c2.B) / 2);
+                GpuGl.glLineWidth(1.0f + persp * 1.1f);
+                GpuGl.SetColor(waveCol);
+                GpuGl.glBegin(GpuGl.GL_LINE_STRIP);
+                for (int j = 0; j <= cols; j++) {
+                    GpuGl.glVertex2f(vx[r, j], vy[r, j]);
+                }
+                GpuGl.glEnd();
+
+                for (int j = 1; j < cols; j += 2) {
+                    Color nodeCol = (j % 4 == 1) ? Color.FromArgb(lineAlpha + 25, c2.R, c2.G, c2.B) : Color.FromArgb(lineAlpha + 15, c1.R, c1.G, c1.B);
+                    GpuGl.FillRect(vx[r, j] - 1.6f, vy[r, j] - 1.6f, 3.2f, 3.2f, nodeCol);
+                }
+            }
+
+            // 1D. 3D Faceted Low-Poly Bio-Trees along Flanks & Horizon (Constructed from Vertices & Shaded Triangles)
+            float[] treePosNorm = new float[] { 0.06f, 0.14f, 0.23f, 0.77f, 0.86f, 0.94f };
+            float[] treeDepth   = new float[] { 0.88f, 0.62f, 0.42f, 0.42f, 0.62f, 0.88f };
+            for (int tIdx = 0; tIdx < treePosNorm.Length; tIdx++) {
+                float dScale = treeDepth[tIdx];
+                float baseX = m.Left + m.Width * treePosNorm[tIdx];
+                float baseY = horizonY + (dScale - 0.35f) * floorSpan * 0.55f;
+                float treeH = m.Height * (0.18f + dScale * 0.20f);
+                float treeW = m.Width * (0.028f + dScale * 0.026f);
+                float sway = (float)Math.Sin(phase * 0.65f + tIdx * 1.4f) * (4.5f * dScale);
+
+                // Faceted Low-Poly Trunk (2 Triangles)
+                float trkW = treeW * 0.18f;
+                float topTrkX = baseX + sway * 0.4f;
+                float topTrkY = baseY - treeH * 0.42f;
+                GpuGl.FillTriangle(baseX - trkW, baseY, baseX + trkW, baseY, topTrkX, topTrkY, Color.FromArgb(78, 24, 38, 30));
+                GpuGl.DrawTriangle(baseX - trkW, baseY, baseX + trkW, baseY, topTrkX, topTrkY, Color.FromArgb(72, c2.R, c2.G, c2.B), 0.9f);
+
+                // 3 Tiered Faceted Low-Poly Canopy Pyramids (Left-Lit Triangle + Right-Shaded Triangle + Wireframe Facets)
+                for (int tier = 0; tier < 3; tier++) {
+                    float tierFrac = tier / 3.0f;
+                    float tyBot = baseY - treeH * (0.26f + tierFrac * 0.24f);
+                    float tyTop = baseY - treeH * (0.58f + tierFrac * 0.22f);
+                    float tw = treeW * (1.0f - tier * 0.22f);
+                    float txCenter = baseX + sway * (0.5f + tier * 0.25f);
+                    float txApex = baseX + sway * (0.75f + tier * 0.30f);
+
+                    Color leftFacet  = Color.FromArgb((int)(46 + dScale * 34f), c1.R / 2, (c1.G * 2) / 3, c1.B / 2);
+                    Color rightFacet = Color.FromArgb((int)(42 + dScale * 28f), c3.R / 3, c3.G / 2, c3.B / 2);
+                    Color edgeCol    = Color.FromArgb((int)(65 + dScale * 50f), c1.R, c1.G, c1.B);
+
+                    // Left facet triangle
+                    GpuGl.FillTriangle(txCenter - tw, tyBot, txCenter, tyBot + 6f * dScale, txApex, tyTop, leftFacet);
+                    GpuGl.DrawTriangle(txCenter - tw, tyBot, txCenter, tyBot + 6f * dScale, txApex, tyTop, edgeCol, 1.0f);
+                    // Right facet triangle
+                    GpuGl.FillTriangle(txCenter, tyBot + 6f * dScale, txCenter + tw, tyBot, txApex, tyTop, rightFacet);
+                    GpuGl.DrawTriangle(txCenter, tyBot + 6f * dScale, txCenter + tw, tyBot, txApex, tyTop, edgeCol, 1.0f);
+                }
+            }
+
+            // 1E. Hanging Polygonal Canopy Liana Vines with Bioluminescent Nodes from Upper Ceiling
+            int vineCount = 8;
+            for (int v = 0; v < vineCount; v++) {
+                float vxBase = m.Left + m.Width * (0.05f + 0.90f * (v / (float)(vineCount - 1)));
+                if (Math.Abs(vxBase - vanishX) < m.Width * 0.18f && (v == 3 || v == 4)) continue;
+                float vineLen = ceilSpan * (0.32f + (v % 3) * 0.14f);
+                int segs = 5;
+                float prevX = vxBase;
+                float prevY = m.Top;
+                for (int s = 1; s <= segs; s++) {
+                    float st = s / (float)segs;
+                    float curX = vxBase + (float)Math.Sin(phase * 0.8f + v * 1.1f + s * 0.7f) * (8.0f * st);
+                    float curY = m.Top + st * vineLen;
+                    int vAlpha = (int)(75 * (1.0f - st * 0.35f));
+                    GpuGl.DrawLine(prevX, prevY, curX, curY, Color.FromArgb(vAlpha, c1.R, c1.G, c1.B), 1.2f);
+                    Color spCol = (s == segs) ? Color.FromArgb(145, c2.R, c2.G, c2.B) : Color.FromArgb(95, c1.R, c1.G, c1.B);
+                    GpuGl.FillRect(curX - 2.0f, curY - 2.0f, 4.0f, 4.0f, spCol);
+                    prevX = curX;
+                    prevY = curY;
+                }
+            }
+        } else if (mode == 1) {
+            // =========================================================================
+            // MODE 1 (TOPO+MESH): TERRENO DE OSCILADOR VECTORIAL + BÓVEDA DE TRIÁNGULOS DELAUNAY
+            // =========================================================================
+            // 2A. Upper Geodesic Delaunay Triangle Vault (4 rows x 9 cols of 3D oscillating vertices)
+            int dRows = 4;
+            int dCols = 9;
+            float[,] dx = new float[dRows, dCols];
+            float[,] dy = new float[dRows, dCols];
+            for (int r = 0; r < dRows; r++) {
+                float rt = r / (float)(dRows - 1);
+                float baseY = m.Top + 14f + rt * (ceilSpan * 0.86f);
+                for (int c = 0; c < dCols; c++) {
+                    float ct = c / (float)(dCols - 1);
+                    float baseX = m.Left + 24f + ct * (m.Width - 48f);
+                    float ox = (float)Math.Sin(phase * 0.75f + r * 1.3f + c * 0.9f) * 14.0f;
+                    float oy = (float)Math.Cos(phase * 0.65f + c * 1.1f - r * 0.8f) * 9.0f;
+                    dx[r, c] = baseX + ox;
+                    dy[r, c] = baseY + oy;
+                }
+            }
+            for (int r = 0; r < dRows - 1; r++) {
+                for (int c = 0; c < dCols - 1; c++) {
+                    int triAlpha = 14 + ((r + c) % 3) * 8;
+                    Color f1 = Color.FromArgb(triAlpha, c3.R / 2, c3.G / 2, c3.B / 2);
+                    Color f2 = Color.FromArgb(triAlpha + 6, c1.R / 3, c1.G / 2, c1.B / 2);
+                    Color wCol = Color.FromArgb(56, c1.R, c1.G, c1.B);
+
+                    GpuGl.FillTriangle(dx[r, c], dy[r, c], dx[r, c + 1], dy[r, c + 1], dx[r + 1, c], dy[r + 1, c], f1);
+                    GpuGl.DrawTriangle(dx[r, c], dy[r, c], dx[r, c + 1], dy[r, c + 1], dx[r + 1, c], dy[r + 1, c], wCol, 0.85f);
+
+                    GpuGl.FillTriangle(dx[r, c + 1], dy[r, c + 1], dx[r + 1, c + 1], dy[r + 1, c + 1], dx[r + 1, c], dy[r + 1, c], f2);
+                    GpuGl.DrawTriangle(dx[r, c + 1], dy[r, c + 1], dx[r + 1, c + 1], dy[r + 1, c + 1], dx[r + 1, c], dy[r + 1, c], wCol, 0.85f);
+
+                    Color vCol = ((r + c) % 2 == 0) ? Color.FromArgb(115, c2.R, c2.G, c2.B) : Color.FromArgb(105, c1.R, c1.G, c1.B);
+                    GpuGl.FillRect(dx[r, c] - 2.0f, dy[r, c] - 2.0f, 4.0f, 4.0f, vCol);
+                }
+            }
+
+            // 2B. Lower Multi-Band Vector Oscilloscope Topographic Ridges (Unknown Pleasures 3D Occluding Polygon Ridges)
+            int tRows = 9;
+            int tCols = 20;
+            float[,] tx = new float[tRows, tCols + 1];
+            float[,] ty = new float[tRows, tCols + 1];
+            for (int r = 0; r < tRows; r++) {
+                float rt = (r + 0.25f) / (float)tRows;
+                float persp = (float)Math.Pow(rt, 1.45);
+                float baseY = horizonY - 8f + persp * (floorSpan + 4f);
+                for (int j = 0; j <= tCols; j++) {
+                    float u = (j / (float)tCols) * 2.0f - 1.0f; // -1..+1
+                    float x = m.Left + (j / (float)tCols) * m.Width;
+                    float bellCenter = (float)Math.Exp(-(u * u) * 5.5f);
+                    float bellFlank  = (float)Math.Exp(-((Math.Abs(u) - 0.58f) * (Math.Abs(u) - 0.58f)) * 14.0f);
+                    float harmonic   = (float)(Math.Sin(j * 0.95f + phase * 1.4f + r * 0.8f) * 0.6f
+                                             + Math.Cos(j * 1.75f - phase * 1.1f + r * 1.3f) * 0.4f);
+                    float ridgeH = (bellCenter * 38.0f + bellFlank * 24.0f) * (0.45f + 0.55f * Math.Abs(harmonic)) * (0.55f + 0.65f * persp) * netMod;
+                    tx[r, j] = x;
+                    ty[r, j] = Math.Max(m.Top + 40f, Math.Min(m.Bottom - 2f, baseY - ridgeH));
+                }
+
+                // Solid Matte Obsidian Polygon Occlusion under each topographic ridge
+                Color occlCol = Color.FromArgb(88, 4, 10, 9);
+                GpuGl.SetColor(occlCol);
+                GpuGl.glBegin(GpuGl.GL_TRIANGLES);
+                for (int j = 0; j < tCols; j++) {
+                    float yBot = Math.Min(m.Bottom, baseY + 28f);
+                    GpuGl.glVertex2f(tx[r, j], ty[r, j]);
+                    GpuGl.glVertex2f(tx[r, j + 1], ty[r, j + 1]);
+                    GpuGl.glVertex2f(tx[r, j], yBot);
+
+                    GpuGl.glVertex2f(tx[r, j + 1], ty[r, j + 1]);
+                    GpuGl.glVertex2f(tx[r, j + 1], yBot);
+                    GpuGl.glVertex2f(tx[r, j], yBot);
+                }
+                GpuGl.glEnd();
+
+                if (r > 0) {
+                    int meshAlpha = (int)(18 + persp * 42f);
+                    GpuGl.glLineWidth(0.85f);
+                    GpuGl.SetColor(Color.FromArgb(meshAlpha, c3.R, c3.G, c3.B));
+                    GpuGl.glBegin(GpuGl.GL_LINES);
+                    for (int j = 0; j <= tCols; j++) {
+                        GpuGl.glVertex2f(tx[r - 1, j], ty[r - 1, j]);
+                        GpuGl.glVertex2f(tx[r, j], ty[r, j]);
+                    }
+                    GpuGl.glEnd();
+                }
+
+                int ridgeAlpha = (int)(52 + persp * 96f);
+                Color rCol = (r % 3 == 0) ? Color.FromArgb(ridgeAlpha, c2.R, c2.G, c2.B) : Color.FromArgb(ridgeAlpha, c1.R, c1.G, c1.B);
+                GpuGl.glLineWidth(1.1f + persp * 1.1f);
+                GpuGl.SetColor(rCol);
+                GpuGl.glBegin(GpuGl.GL_LINE_STRIP);
+                for (int j = 0; j <= tCols; j++) {
+                    GpuGl.glVertex2f(tx[r, j], ty[r, j]);
+                }
+                GpuGl.glEnd();
+            }
+        } else {
+            // =========================================================================
+            // MODE 2 (MYCELIUM): BOSQUE MICELIAL POLIGONAL (BIOLUMINESCENT FOREST MESH)
+            // =========================================================================
+            int arborCount = 6;
+            for (int a = 0; a < arborCount; a++) {
+                float u = (a + 0.5f) / (float)arborCount;
+                float rootX = m.Left + m.Width * (0.07f + 0.86f * u);
+                float sway = (float)Math.Sin(phase * 0.7f + a * 1.2f) * 12.0f;
+                float midX = rootX + (vanishX - rootX) * 0.22f + sway;
+                float midY = horizonY + floorSpan * 0.28f;
+
+                // Lower Polygonal Mycelial Trunk (Tapered Triangle Quad from m.Bottom to midY)
+                float wBot = 16.0f;
+                float wMid = 6.0f;
+                Color trunkFill = Color.FromArgb(44, c3.R / 2, c3.G / 2, c3.B / 2);
+                Color trunkEdge = Color.FromArgb(78, c1.R, c1.G, c1.B);
+                GpuGl.FillTriangle(rootX - wBot, m.Bottom, rootX + wBot, m.Bottom, midX, midY, trunkFill);
+                GpuGl.DrawTriangle(rootX - wBot, m.Bottom, rootX + wBot, m.Bottom, midX, midY, trunkEdge, 1.0f);
+
+                // Upper Canopy Counter-Trunk descending from m.Top toward horizon
+                float ceilX = rootX + (float)Math.Cos(phase * 0.5f + a) * 10.0f;
+                float cMidY = m.Top + ceilSpan * 0.52f;
+                GpuGl.FillTriangle(ceilX - 12f, m.Top, ceilX + 12f, m.Top, midX, cMidY, trunkFill);
+                GpuGl.DrawTriangle(ceilX - 12f, m.Top, ceilX + 12f, m.Top, midX, cMidY, Color.FromArgb(62, c3.R, c3.G, c3.B), 0.9f);
+
+                // Bifurcating Polygonal Branches & Crystalline Low-Poly Foliage Clusters at Horizon
+                for (int b = -1; b <= 1; b++) {
+                    float brAngle = b * 0.52f + (float)Math.Sin(phase * 0.8f + a + b) * 0.12f;
+                    float tipX = midX + (float)Math.Sin(brAngle) * (m.Width * 0.065f);
+                    float tipY = horizonY + b * 14.0f - 8.0f;
+
+                    GpuGl.FillTriangle(midX - wMid, midY, midX + wMid, midY, tipX, tipY, Color.FromArgb(38, c1.R / 2, c1.G / 2, c1.B / 2));
+                    GpuGl.DrawLine(midX, midY, tipX, tipY, Color.FromArgb(88, c1.R, c1.G, c1.B), 1.3f);
+                    GpuGl.DrawLine(midX, cMidY, tipX, tipY, Color.FromArgb(64, c3.R, c3.G, c3.B), 1.0f);
+
+                    // Low-Poly Octahedral Crystal Cluster at (tipX, tipY) (4 Faceted Triangles)
+                    float crW = 14.0f;
+                    float crH = 18.0f;
+                    Color crCol1 = (b == 0) ? Color.FromArgb(68, c2.R, c2.G, c2.B) : Color.FromArgb(58, c1.R, c1.G, c1.B);
+                    Color crCol2 = Color.FromArgb(46, c3.R, c3.G, c3.B);
+                    Color crWire = (b == 0) ? Color.FromArgb(125, c2.R, c2.G, c2.B) : Color.FromArgb(110, c1.R, c1.G, c1.B);
+
+                    GpuGl.FillTriangle(tipX, tipY - crH, tipX - crW, tipY, tipX, tipY, crCol1);
+                    GpuGl.FillTriangle(tipX, tipY - crH, tipX, tipY, tipX + crW, tipY, crCol2);
+                    GpuGl.FillTriangle(tipX, tipY + crH * 0.75f, tipX - crW, tipY, tipX, tipY, crCol2);
+                    GpuGl.FillTriangle(tipX, tipY + crH * 0.75f, tipX, tipY, tipX + crW, tipY, crCol1);
+
+                    GpuGl.DrawTriangle(tipX, tipY - crH, tipX - crW, tipY, tipX + crW, tipY, crWire, 1.0f);
+                    GpuGl.DrawTriangle(tipX, tipY + crH * 0.75f, tipX - crW, tipY, tipX + crW, tipY, crWire, 1.0f);
+
+                    // Travelling Bioluminescent Pulse along the polygonal root
+                    float pulseU = (phase * 0.45f + a * 0.31f + (b + 1) * 0.27f) % 1.0f;
+                    float px = midX + (tipX - midX) * pulseU;
+                    float py = midY + (tipY - midY) * pulseU;
+                    GpuGl.FillRect(px - 2.2f, py - 2.2f, 4.4f, 4.4f, Color.FromArgb(165, c2.R, c2.G, c2.B));
+                }
+            }
+
+            // Gentle Mycelial Ground Wave connecting all root bases
+            int gCols = 16;
+            GpuGl.glLineWidth(1.2f);
+            GpuGl.SetColor(Color.FromArgb(72, c1.R, c1.G, c1.B));
+            GpuGl.glBegin(GpuGl.GL_LINE_STRIP);
+            for (int j = 0; j <= gCols; j++) {
+                float gx = m.Left + (j / (float)gCols) * m.Width;
+                float gy = horizonY + 12f + (float)Math.Sin(j * 0.8f + phase) * 10.0f * netMod;
+                GpuGl.glVertex2f(gx, gy);
+            }
+            GpuGl.glEnd();
+        }
+    }
+
+    public void Render3DProceduralEnvironmentGdi(Graphics g, int mIdx, Rectangle m, Color c1, Color c2, Color c3, int simFrame, int modeOverride) {
+        int mode = Math.Max(0, Math.Min(2, modeOverride));
+        float horizonY = m.Top + m.Height * 0.64f;
+        float vanishX = m.Left + m.Width * 0.50f;
+        float floorSpan = m.Bottom - horizonY;
+        float ceilSpan = (horizonY - 24f) - m.Top;
+        float phase = simFrame * 0.032f + mIdx * 0.85f;
+        float netMod = 0.85f;
+
+        if (mode == 0) {
+            int rows = 7;
+            int cols = 16;
+            PointF[,] pts = new PointF[rows, cols + 1];
+            for (int r = 0; r < rows; r++) {
+                float t = (r + 0.35f) / (float)rows;
+                float persp = (float)Math.Pow(t, 1.55);
+                float baseY = horizonY + persp * floorSpan;
+                float spread = 0.28f + 0.72f * persp;
+                float amp = (6.0f + persp * 26.0f) * netMod;
+                for (int j = 0; j <= cols; j++) {
+                    float u = (j / (float)cols) * 2.0f - 1.0f;
+                    float x = Math.Max(m.Left, Math.Min(m.Right, vanishX + u * (m.Width * 0.54f) * spread));
+                    float w1 = (float)Math.Sin(j * 0.75f + phase * 1.15f + r * 0.65f);
+                    float w2 = (float)Math.Cos(j * 1.35f - phase * 0.85f + r * 0.90f);
+                    float y = Math.Max(horizonY - 18f, Math.Min(m.Bottom - 2f, baseY - (w1 * 0.65f + w2 * 0.35f) * amp));
+                    pts[r, j] = new PointF(x, y);
+                }
+                if (r > 0) {
+                    using (Pen strutPen = new Pen(Color.FromArgb((int)(22 + persp * 45f), c3.R, c3.G, c3.B), 0.9f)) {
+                        for (int j = 0; j <= cols; j++) {
+                            g.DrawLine(strutPen, pts[r - 1, j], pts[r, j]);
+                            if (j < cols) g.DrawLine(strutPen, pts[r - 1, j], pts[r, j + 1]);
+                        }
+                    }
+                }
+                PointF[] rowArr = new PointF[cols + 1];
+                for (int j = 0; j <= cols; j++) rowArr[j] = pts[r, j];
+                int lineAlpha = (int)(48 + persp * 90f);
+                Color waveCol = (r % 2 == 0) ? Color.FromArgb(lineAlpha, c1.R, c1.G, c1.B) : Color.FromArgb(lineAlpha, c2.R, c2.G, c2.B);
+                using (Pen wPen = new Pen(waveCol, 1.1f + persp)) {
+                    g.DrawLines(wPen, rowArr);
+                }
+            }
+            float[] treePosNorm = new float[] { 0.08f, 0.17f, 0.26f, 0.74f, 0.83f, 0.92f };
+            float[] treeDepth   = new float[] { 0.90f, 0.65f, 0.45f, 0.45f, 0.65f, 0.90f };
+            for (int tIdx = 0; tIdx < treePosNorm.Length; tIdx++) {
+                float dScale = treeDepth[tIdx];
+                float baseX = m.Left + m.Width * treePosNorm[tIdx];
+                float baseY = horizonY + (dScale - 0.35f) * floorSpan * 0.55f;
+                float treeH = m.Height * (0.20f + dScale * 0.22f);
+                float treeW = m.Width * (0.032f + dScale * 0.028f);
+                for (int tier = 0; tier < 3; tier++) {
+                    float tierFrac = tier / 3.0f;
+                    float tyBot = baseY - treeH * (0.24f + tierFrac * 0.24f);
+                    float tyTop = baseY - treeH * (0.58f + tierFrac * 0.22f);
+                    float tw = treeW * (1.0f - tier * 0.22f);
+                    PointF[] leftTri = new PointF[] { new PointF(baseX - tw, tyBot), new PointF(baseX, tyBot + 6f), new PointF(baseX, tyTop) };
+                    PointF[] rightTri = new PointF[] { new PointF(baseX, tyBot + 6f), new PointF(baseX + tw, tyBot), new PointF(baseX, tyTop) };
+                    using (SolidBrush lb = new SolidBrush(Color.FromArgb(64, c1.R / 2, (c1.G * 2) / 3, c1.B / 2)))
+                    using (SolidBrush rb = new SolidBrush(Color.FromArgb(52, c3.R / 3, c3.G / 2, c3.B / 2)))
+                    using (Pen ep = new Pen(Color.FromArgb(110, c1.R, c1.G, c1.B), 1.0f)) {
+                        g.FillPolygon(lb, leftTri);
+                        g.DrawPolygon(ep, leftTri);
+                        g.FillPolygon(rb, rightTri);
+                        g.DrawPolygon(ep, rightTri);
+                    }
+                }
+            }
+        } else if (mode == 1) {
+            int dRows = 4, dCols = 9;
+            PointF[,] dPts = new PointF[dRows, dCols];
+            for (int r = 0; r < dRows; r++) {
+                float baseY = m.Top + 14f + (r / (float)(dRows - 1)) * (ceilSpan * 0.85f);
+                for (int c = 0; c < dCols; c++) {
+                    float baseX = m.Left + 20f + (c / (float)(dCols - 1)) * (m.Width - 40f);
+                    dPts[r, c] = new PointF(baseX + (float)Math.Sin(phase + r + c) * 10f, baseY + (float)Math.Cos(phase + c - r) * 7f);
+                }
+            }
+            using (Pen dp = new Pen(Color.FromArgb(72, c1.R, c1.G, c1.B), 0.9f))
+            using (SolidBrush df = new SolidBrush(Color.FromArgb(24, c3.R / 2, c3.G / 2, c3.B / 2))) {
+                for (int r = 0; r < dRows - 1; r++) {
+                    for (int c = 0; c < dCols - 1; c++) {
+                        PointF[] t1 = new PointF[] { dPts[r, c], dPts[r, c + 1], dPts[r + 1, c] };
+                        PointF[] t2 = new PointF[] { dPts[r, c + 1], dPts[r + 1, c + 1], dPts[r + 1, c] };
+                        g.FillPolygon(df, t1); g.DrawPolygon(dp, t1);
+                        g.FillPolygon(df, t2); g.DrawPolygon(dp, t2);
+                    }
+                }
+            }
+            int tRows = 9, tCols = 20;
+            for (int r = 0; r < tRows; r++) {
+                float rt = (r + 0.25f) / (float)tRows;
+                float persp = (float)Math.Pow(rt, 1.45);
+                float baseY = horizonY - 6f + persp * floorSpan;
+                PointF[] rPts = new PointF[tCols + 1];
+                for (int j = 0; j <= tCols; j++) {
+                    float u = (j / (float)tCols) * 2.0f - 1.0f;
+                    float bell = (float)Math.Exp(-(u * u) * 5.5f) * 34f + (float)Math.Exp(-((Math.Abs(u) - 0.58f) * (Math.Abs(u) - 0.58f)) * 14f) * 20f;
+                    float harm = (float)Math.Abs(Math.Sin(j * 0.95f + phase + r * 0.8f));
+                    rPts[j] = new PointF(m.Left + (j / (float)tCols) * m.Width, baseY - bell * (0.4f + 0.6f * harm) * (0.5f + 0.6f * persp));
+                }
+                Color rCol = (r % 3 == 0) ? Color.FromArgb(125, c2.R, c2.G, c2.B) : Color.FromArgb(115, c1.R, c1.G, c1.B);
+                using (Pen rp = new Pen(rCol, 1.2f)) {
+                    g.DrawLines(rp, rPts);
+                }
+            }
+        } else {
+            int arborCount = 6;
+            for (int a = 0; a < arborCount; a++) {
+                float u = (a + 0.5f) / (float)arborCount;
+                float rootX = m.Left + m.Width * (0.08f + 0.84f * u);
+                float midX = rootX + (vanishX - rootX) * 0.20f;
+                float midY = horizonY + floorSpan * 0.28f;
+                PointF[] trk = new PointF[] { new PointF(rootX - 14f, m.Bottom), new PointF(rootX + 14f, m.Bottom), new PointF(midX, midY) };
+                using (SolidBrush tb = new SolidBrush(Color.FromArgb(52, c3.R / 2, c3.G / 2, c3.B / 2)))
+                using (Pen tp = new Pen(Color.FromArgb(92, c1.R, c1.G, c1.B), 1.0f)) {
+                    g.FillPolygon(tb, trk);
+                    g.DrawPolygon(tp, trk);
+                }
+                for (int b = -1; b <= 1; b++) {
+                    float tipX = midX + b * (m.Width * 0.055f);
+                    float tipY = horizonY + b * 12f - 6f;
+                    using (Pen bp = new Pen(Color.FromArgb(95, c1.R, c1.G, c1.B), 1.2f)) {
+                        g.DrawLine(bp, midX, midY, tipX, tipY);
+                    }
+                    PointF[] cryst = new PointF[] { new PointF(tipX, tipY - 16f), new PointF(tipX - 12f, tipY), new PointF(tipX, tipY + 12f), new PointF(tipX + 12f, tipY) };
+                    Color cc = (b == 0) ? c2 : c1;
+                    using (SolidBrush cb = new SolidBrush(Color.FromArgb(68, cc.R, cc.G, cc.B)))
+                    using (Pen cp = new Pen(Color.FromArgb(135, cc.R, cc.G, cc.B), 1.0f)) {
+                        g.FillPolygon(cb, cryst);
+                        g.DrawPolygon(cp, cryst);
+                    }
+                }
+            }
+        }
+    }
+
+    private void RenderOpenGLFrame() {
+        if (!glEnabled || glHdc == IntPtr.Zero || glContext == IntPtr.Zero) return;
+        frameSw.Restart();
+        GpuGl.wglMakeCurrent(glHdc, glContext);
+
+        GpuGl.CanvasW = screenW;
+        GpuGl.CanvasH = screenH;
+        GpuGl.glViewport(0, 0, screenW, screenH);
+        GpuGl.glMatrixMode(GpuGl.GL_PROJECTION);
+        GpuGl.glLoadIdentity();
+        GpuGl.glOrtho(0.0, screenW, screenH, 0.0, -2000.0, 2000.0);
+        GpuGl.glMatrixMode(GpuGl.GL_MODELVIEW);
+        GpuGl.glLoadIdentity();
+
+        GpuGl.glDisable(GpuGl.GL_DEPTH_TEST);
+        GpuGl.glEnable(GpuGl.GL_BLEND);
+        GpuGl.glBlendFunc(GpuGl.GL_SRC_ALPHA, GpuGl.GL_ONE_MINUS_SRC_ALPHA);
+        GpuGl.glEnable(GpuGl.GL_LINE_SMOOTH);
+
+        // 0. Draw 5-Monitor Matte Forest Obsidian Background from VRAM Texture on AMD Radeon RX 9060 XT (0% CPU copy)
+        if (bgTexDirty || bgTexId == 0) {
+            GpuGl.UploadBitmapToTexture(bgBitmap, ref bgTexId, ref bgTexW, ref bgTexH);
+            bgTexDirty = false;
+        }
+        GpuGl.DrawTexturedQuad(bgTexId, 0, 0, screenW, screenH);
+
+        Color c1, c2, c3, headCol;
+        GetThemeColors(out c1, out c2, out c3, out headCol);
+
+        // 0.5. Render Active 3D Procedural Polygon/Vertex Background Scene (Mode 0=Selva+Oscilador, 1=Topo+Delaunay, 2=Bosque Micelial)
+        for (int mIdx = 0; mIdx < monitorRects.Count; mIdx++) {
+            Rectangle m = monitorRects[mIdx];
+            Render3DProceduralEnvironmentOpenGL(mIdx, m, c1, c2, c3);
+        }
+
+        int hudW = 584;
+        int hudH = 228;
+        int hudX = primaryMonRect.Right - hudW - 22;
+        int hudY = primaryMonRect.Top + 22;
+
+        int radPanelW = 246;
+        int radPanelH = 228;
+        int radPanelX = hudX - radPanelW - 14;
+        int radPanelY = primaryMonRect.Top + 22;
+
+        // 1. Multi-Plane 3D Parallax Vertical Log Rain across all 5 monitors (Attenuated by 35% for Eye-Care Visual Comfort!)
+        if (Config.RainSpeed > 0) {
+            for (int layer = 0; layer <= 2; layer++) {
+                for (int i = 0; i < columns.Count; i++) {
+                    RainColumn col = columns[i];
+                    if (col.DepthLayer != layer) continue;
+
+                    bool isPriority = (col.ColorSlot == 0 || col.ColorSlot == 1); // Critical Red or VirusTotal Gold
+                    uint fontList = (layer == 2 || (layer == 1 && isPriority)) ? GpuGl.FONT_LIST_RAIN_FG : GpuGl.FONT_LIST_RAIN_BG;
+                    int cStep = col.CharStep > 0 ? col.CharStep : 16;
+
+                    int maxAlpha;
+                    if (layer == 2) maxAlpha = isPriority ? 176 : 148;
+                    else if (layer == 1) maxAlpha = isPriority ? 132 : 96;
+                    else maxAlpha = isPriority ? 74 : 48;
+
+                    if ((col.X - col.MinX) < 130) maxAlpha = Math.Min(maxAlpha, 38);
+
+                    Color baseCol, colHead;
+                    GetRainSemanticColors(col.ColorSlot, c1, c2, c3, out baseCol, out colHead);
+
+                    // Draw subtle 3D volumetric light-streak behind Near Foreground & Priority Alert streams
+                    if ((layer == 2 || isPriority) && col.Y > col.MinY && col.Y < col.MaxY + 80) {
+                        float streakTop = Math.Max(col.MinY, col.Y - cStep * 5.0f);
+                        float streakBot = Math.Min(col.MaxY, col.Y + 4f);
+                        if (streakBot > streakTop) {
+                            int glowAlpha = isPriority ? 38 : 22;
+                            GpuGl.DrawLine(col.X + 4f, streakTop, col.X + 4f, streakBot,
+                                Color.FromArgb(glowAlpha, baseCol.R, baseCol.G, baseCol.B), isPriority ? 4.2f : 3.0f);
+                        }
+                    }
+
+                    Color headC0 = Color.FromArgb(isPriority ? 205 : 178, colHead.R, colHead.G, colHead.B);
+                    Color headC1 = Color.FromArgb(Math.Min(210, maxAlpha + 22),
+                        (baseCol.R + colHead.R) / 2, (baseCol.G + colHead.G) / 2, (baseCol.B + colHead.B) / 2);
+
+                    for (int c = 0; c < col.Length; c++) {
+                        float cy = col.Y - c * cStep;
+                        if (cy < col.MinY - 12 || cy > col.MaxY + 4) continue;
+
+                        if (c == 0 && (layer >= 1 || isPriority)) {
+                            GpuGl.DrawChar(col.Chars[c], col.X, cy, headC0, fontList);
+                        } else if ((c == 1 || c == 2) && (layer == 2 || isPriority)) {
+                            GpuGl.DrawChar(col.Chars[c], col.X, cy, headC1, fontList);
+                        } else {
+                            float ratio = 1.0f - ((float)c / col.Length);
+                            int alpha = (int)(ratio * ratio * maxAlpha);
+                            if (alpha <= 8) continue;
+                            GpuGl.DrawChar(col.Chars[c], col.X, cy, Color.FromArgb(alpha, baseCol.R, baseCol.G, baseCol.B), fontList);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Render 5 Autonomous 3D Porygons on Hardware GPU + Collapsible Evolutionary Swarm HUD + 3D FlyWire Brain Card
+        if (Config.ShowPorygon) {
+            porygon.RenderOpenGL(Config.PorygonScale, c1, c2);
+
+            int bw = 584;
+            int fullBh = 78 + porygon.Agents.Count * 21;
+            int drawBh = connectomeCollapsed ? 32 : fullBh;
+            int bx = primaryMonRect.Right - bw - 22;
+            int by = primaryMonRect.Bottom - drawBh - 54;
+            if (hudConnectomeBmp == null || hudConnectomeBmp.Width != bw + 4 || hudConnectomeBmp.Height != fullBh + 4) {
+                if (hudConnectomeBmp != null) hudConnectomeBmp.Dispose();
+                hudConnectomeBmp = new Bitmap(bw + 4, fullBh + 4, PixelFormat.Format32bppArgb);
+            }
+            if (frameCount % 8 == 1 || hudConnectomeTexId == 0 || hudConnectomeDirty) {
+                using (Graphics gHud = Graphics.FromImage(hudConnectomeBmp)) {
+                    gHud.Clear(Color.FromArgb(0, 0, 0, 0));
+                    gHud.SmoothingMode = SmoothingMode.AntiAlias;
+                    gHud.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+                    DrawFlyBrainConnectomeHUDAt(gHud, 2, 2, bw, drawBh, c1, c2, c3);
+                }
+                GpuGl.UploadBitmapToTexture(hudConnectomeBmp, ref hudConnectomeTexId, ref hudConnectomeTexW, ref hudConnectomeTexH);
+                hudConnectomeDirty = false;
+            }
+            GpuGl.DrawTexturedQuad(hudConnectomeTexId, bx - 2, by - 2, bw + 4, fullBh + 4);
+
+            // Render 3D FlyWire Drosophila Brain in Card Mode (Throttled to every 6 frames during passive rotation to save GPU/PCIe bandwidth!)
+            if (!brain3DFullscreen || brain3DCollapsed) {
+                int brainW = 356;
+                int fullBrainH = 246;
+                int drawBrainH = brain3DCollapsed ? 32 : fullBrainH;
+                int brainX = bx - brainW - 14;
+                int brainY = primaryMonRect.Bottom - drawBrainH - 54;
+                if (hudBrain3DBmp == null || hudBrain3DBmp.Width != brainW + 4 || hudBrain3DBmp.Height != fullBrainH + 4) {
+                    if (hudBrain3DBmp != null) hudBrain3DBmp.Dispose();
+                    hudBrain3DBmp = new Bitmap(brainW + 4, fullBrainH + 4, PixelFormat.Format32bppArgb);
+                }
+                if ((!brain3DCollapsed && frameCount % 6 == 0) || hudBrain3DTexId == 0 || hudBrain3DDirty) {
+                    using (Graphics gBr = Graphics.FromImage(hudBrain3DBmp)) {
+                        gBr.Clear(Color.FromArgb(0, 0, 0, 0));
+                        gBr.SmoothingMode = SmoothingMode.AntiAlias;
+                        gBr.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+                        DrawFlyBrain3DCardAt(gBr, 2, 2, brainW, drawBrainH, c1, c2, c3);
+                    }
+                    GpuGl.UploadBitmapToTexture(hudBrain3DBmp, ref hudBrain3DTexId, ref hudBrain3DTexW, ref hudBrain3DTexH);
+                    hudBrain3DDirty = false;
+                }
+                GpuGl.DrawTexturedQuad(hudBrain3DTexId, brainX - 2, brainY - 2, brainW + 4, fullBrainH + 4);
+            }
+        }
+
+        // 3. Render Collapsible Network Sonar Radar (50% Transparent, updated every 6 frames)
+        if (Config.ShowRadar) {
+            int rBmpW = 310;
+            int rBmpH = 330;
+            if (hudRadarBmp == null) {
+                hudRadarBmp = new Bitmap(rBmpW, rBmpH, PixelFormat.Format32bppArgb);
+            }
+            if ((!radarCollapsed && frameCount % 6 == 2) || hudRadarTexId == 0 || hudRadarDirty) {
+                using (Graphics gRad = Graphics.FromImage(hudRadarBmp)) {
+                    gRad.Clear(Color.FromArgb(0, 0, 0, 0));
+                    gRad.SmoothingMode = SmoothingMode.AntiAlias;
+                    gRad.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+                    DrawFunctionalRadarAt(gRad, 22, 2, radPanelW, radPanelH, c1, c2, c3, radPanelX - 22, radPanelY - 2);
+                }
+                GpuGl.UploadBitmapToTexture(hudRadarBmp, ref hudRadarTexId, ref hudRadarTexW, ref hudRadarTexH);
+                hudRadarDirty = false;
+            }
+            GpuGl.DrawTexturedQuad(hudRadarTexId, radPanelX - 22, radPanelY - 2, rBmpW, rBmpH);
+        }
+
+        // 4. Render Collapsible System Telemetry HUD (Cached in VRAM Texture) & Secondary Bars
+        if (Config.ShowTelemetry) {
+            if (hudTelemetryBmp == null) {
+                hudTelemetryBmp = new Bitmap(hudW + 4, hudH + 4, PixelFormat.Format32bppArgb);
+            }
+            if (lastHudTelemetryCycle != telemetryCycles || lastHudTheme != Config.ThemeIndex || hudTelemetryTexId == 0 || hudTelemetryDirty) {
+                using (Graphics gTel = Graphics.FromImage(hudTelemetryBmp)) {
+                    gTel.Clear(Color.FromArgb(0, 0, 0, 0));
+                    gTel.SmoothingMode = SmoothingMode.AntiAlias;
+                    gTel.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+                    DrawTelemetryHUD(gTel, 2, 2, hudW, hudH, c1, c2, c3);
+                }
+                GpuGl.UploadBitmapToTexture(hudTelemetryBmp, ref hudTelemetryTexId, ref hudTelemetryTexW, ref hudTelemetryTexH);
+                lastHudTelemetryCycle = telemetryCycles;
+                lastHudTheme = Config.ThemeIndex;
+                hudTelemetryDirty = false;
+            }
+            GpuGl.DrawTexturedQuad(hudTelemetryTexId, hudX - 2, hudY - 2, hudW + 4, hudH + 4);
+            DrawSecondaryMonitorTelemetryBarsOpenGL(c1, c2, c3);
+        }
+
+        // 5. Render Fullscreen 3D FlyWire Drosophila Brain Overlay on Primary Monitor when brain3DFullscreen is Active!
+        if (Config.ShowPorygon && brain3DFullscreen && !brain3DCollapsed) {
+            Rectangle fullRect = GetCurrentBrain3DRect();
+            int fbW = 942;
+            int fbH = 507;
+            if (hudBrain3DFullBmp == null || hudBrain3DFullBmp.Width != fbW + 4 || hudBrain3DFullBmp.Height != fbH + 4) {
+                if (hudBrain3DFullBmp != null) hudBrain3DFullBmp.Dispose();
+                hudBrain3DFullBmp = new Bitmap(fbW + 4, fbH + 4, PixelFormat.Format32bppArgb);
+            }
+            if (frameCount % 5 == 0 || hudBrain3DFullTexId == 0 || hudBrain3DDirty) {
+                using (Graphics gFull = Graphics.FromImage(hudBrain3DFullBmp)) {
+                    gFull.Clear(Color.FromArgb(0, 0, 0, 0));
+                    gFull.SmoothingMode = SmoothingMode.AntiAlias;
+                    gFull.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+                    DrawFlyBrain3DCardAt(gFull, 2, 2, fbW, fbH, c1, c2, c3);
+                }
+                GpuGl.UploadBitmapToTexture(hudBrain3DFullBmp, ref hudBrain3DFullTexId, ref hudBrain3DFullTexW, ref hudBrain3DFullTexH);
+                hudBrain3DDirty = false;
+            }
+            GpuGl.DrawTexturedQuad(hudBrain3DFullTexId, fullRect.X - 2, fullRect.Y - 2, fullRect.Width + 4, fullRect.Height + 4);
+        }
+
+        GpuGl.SwapBuffers(glHdc);
+        frameSw.Stop();
+        float elapsedMs = (float)frameSw.Elapsed.TotalMilliseconds;
+        gpuFrameMs = gpuFrameMs * 0.82f + elapsedMs * 0.18f;
     }
 
     protected override void OnPaintBackground(PaintEventArgs e) { }
 
     protected override void OnPaint(PaintEventArgs e) {
+        if (glEnabled) {
+            RenderOpenGLFrame();
+            return;
+        }
         Graphics g = e.Graphics;
         g.DrawImageUnscaled(bgBitmap, 0, 0);
         g.SmoothingMode = SmoothingMode.AntiAlias;
@@ -2465,49 +6037,57 @@ public class HackerWallpaperForm : Form {
 
         int hudW = 584;
         int hudH = 228;
-        int hudX = screenW - hudW - 22;
-        int hudY = 22;
+        int hudX = primaryMonRect.Right - hudW - 22;
+        int hudY = primaryMonRect.Top + 22;
 
         int radPanelW = 246;
         int radPanelH = 228;
         int radPanelX = hudX - radPanelW - 14;
-        int radPanelY = 22;
+        int radPanelY = primaryMonRect.Top + 22;
 
-        // 1. Falling Hacker Code Rain
+        // 1. Falling Hacker Code Rain across all 5 monitors (100% Strictly Vertical Log Streams + 7 Semantic Log Colors!)
         if (Config.RainSpeed > 0) {
-            int charStep = 16;
-            using (SolidBrush headBrush = new SolidBrush(Color.FromArgb(240, headCol.R, headCol.G, headCol.B))) {
-                for (int i = 0; i < columns.Count; i++) {
-                    RainColumn col = columns[i];
-                    Font f = col.IsForeground ? fontRainFg : fontRainBg;
-                    int maxAlpha = col.IsForeground ? 190 : 80;
-                    if (col.X < 135) maxAlpha = 42;
+            for (int i = 0; i < columns.Count; i++) {
+                RainColumn col = columns[i];
+                int cStep = col.CharStep > 0 ? col.CharStep : 16;
+                Font f = col.IsForeground ? fontRainFg : fontRainBg;
+                int maxAlpha = (col.DepthLayer == 2) ? 245 : (col.DepthLayer == 1 ? 160 : 80);
+                if ((col.X - col.MinX) < 130) maxAlpha = 45;
 
-                    Color baseCol = (col.ColorSlot == 0) ? c1 : (col.ColorSlot == 1 ? c2 : c3);
+                Color baseCol, colHead;
+                GetRainSemanticColors(col.ColorSlot, c1, c2, c3, out baseCol, out colHead);
 
-                    for (int c = 0; c < col.Length; c++) {
-                        float cy = col.Y - c * charStep;
-                        if (cy < -20 || cy > screenH) continue;
+                for (int c = 0; c < col.Length; c++) {
+                    float cy = col.Y - c * cStep;
+                    if (cy < col.MinY - 18 || cy > col.MaxY + 12) continue;
 
-                        if (c == 0 && col.IsForeground) {
+                    if (c == 0 && col.DepthLayer >= 1) {
+                        using (SolidBrush headBrush = new SolidBrush(Color.FromArgb(255, colHead.R, colHead.G, colHead.B))) {
                             g.DrawString(col.Chars[c].ToString(), f, headBrush, col.X, cy);
-                        } else {
-                            float ratio = 1.0f - ((float)c / col.Length);
-                            int alpha = (int)(ratio * maxAlpha);
-                            if (alpha <= 8) continue;
-                            using (SolidBrush tb = new SolidBrush(Color.FromArgb(alpha, baseCol.R, baseCol.G, baseCol.B))) {
-                                g.DrawString(col.Chars[c].ToString(), f, tb, col.X, cy);
-                            }
+                        }
+                    } else {
+                        float ratio = 1.0f - ((float)c / col.Length);
+                        int alpha = (int)(ratio * ratio * maxAlpha);
+                        if (alpha <= 8) continue;
+                        using (SolidBrush tb = new SolidBrush(Color.FromArgb(alpha, baseCol.R, baseCol.G, baseCol.B))) {
+                            g.DrawString(col.Chars[c].ToString(), f, tb, col.X, cy);
                         }
                     }
                 }
             }
         }
 
-        // 2. Render 3 Autonomous 3D Porygon Evolutions, Hover Cards & Multi-Agent IDS Connectome HUD!
+        // 2. Render Autonomous 3D Porygons, Cross-Monitor Synaptic Mesh, Hover Cards, Connectome HUD & 3D Brain Card!
         if (Config.ShowPorygon) {
             porygon.Render(g, Config.PorygonScale, c1, c2, fontHudSmall);
             DrawFlyBrainConnectomeHUD(g, c1, c2, c3);
+            int bw = 584;
+            int bx = primaryMonRect.Right - bw - 22;
+            int brainW = 356;
+            int drawBrainH = brain3DCollapsed ? 32 : 246;
+            int brainX = bx - brainW - 14;
+            int brainY = primaryMonRect.Bottom - drawBrainH - 54;
+            DrawFlyBrain3DCardAt(g, brainX, brainY, brainW, drawBrainH, c1, c2, c3);
         }
 
         // 3. Render Enlarged Functional Network Sonar Radar with Mouse Hover Blip Inspection!
@@ -2515,13 +6095,109 @@ public class HackerWallpaperForm : Form {
             DrawFunctionalRadar(g, radPanelX, radPanelY, radPanelW, radPanelH, c1, c2, c3);
         }
 
-        // 4. Render High-Contrast System Telemetry HUD
+        // 4. Render High-Contrast System Telemetry HUD on Primary Monitor & Secondary Sector Telemetry Bars on Monitors 2..5
         if (Config.ShowTelemetry) {
             DrawTelemetryHUD(g, hudX, hudY, hudW, hudH, c1, c2, c3);
+            DrawSecondaryMonitorTelemetryBars(g, c1, c2, c3);
+        }
+    }
+
+    private void DrawSecondaryMonitorTelemetryBarsOpenGL(Color c1, Color c2, Color c3) {
+        if (monitorRects.Count <= 1) return;
+        string latestLog = "QB-SOC:5080 // NIDS & FORTIGATE TELEMETRY ACTIVE";
+        lock (telemetryLock) {
+            if (liveLogLines.Count > 0) latestLog = liveLogLines[liveLogLines.Count - 1];
+        }
+        Color bgCol = Color.FromArgb(128, 5, 8, 18); // 50% transparency
+        Color borCol = Color.FromArgb(145, c1.R, c1.G, c1.B);
+        Color c2Col = Color.FromArgb(240, c2.R, c2.G, c2.B);
+        Color txtCol = Color.FromArgb(230, 226, 232, 240);
+
+        for (int mIdx = 0; mIdx < monitorRects.Count; mIdx++) {
+            Rectangle m = monitorRects[mIdx];
+            if (m == primaryMonRect) continue;
+
+            int pw = Math.Min(520, m.Width - 180);
+            if (pw < 260) continue;
+            int ph = secondaryBarsCollapsed ? 24 : 46;
+            int px = m.Right - pw - 18;
+            int py = m.Top + 16;
+
+            GpuGl.FillRect(px, py, pw, ph, bgCol);
+            GpuGl.DrawRect(px, py, pw, ph, borCol, 1.2f);
+
+            string agentLoc = "";
+            if (porygon != null) {
+                for (int a = 0; a < porygon.Agents.Count; a++) {
+                    var ag = porygon.Agents[a];
+                    if (m.Contains((int)ag.PosX, (int)ag.PosY)) {
+                        agentLoc += (agentLoc.Length > 0 ? " + " : "") + ag.Name;
+                    }
+                }
+            }
+            if (agentLoc.Length == 0) agentLoc = "MESH_LINKED";
+
+            GpuGl.DrawText(string.Format(">> SOC_NODE // {0} | AI_PRESENCE: {1}", monitorNames[mIdx], agentLoc),
+                px + 10, py + 5, c2Col, GpuGl.FONT_LIST_HUD_SMALL);
+            GpuGl.DrawText(secondaryBarsCollapsed ? "[+]" : "[-]", px + pw - 28, py + 5, borCol, GpuGl.FONT_LIST_HUD_SMALL);
+            if (!secondaryBarsCollapsed) {
+                string clippedLog = latestLog.Length > 68 ? latestLog.Substring(0, 68) : latestLog;
+                GpuGl.DrawText(clippedLog, px + 10, py + 24, txtCol, GpuGl.FONT_LIST_HUD_SMALL);
+            }
+        }
+    }
+
+    private void DrawSecondaryMonitorTelemetryBars(Graphics g, Color c1, Color c2, Color c3) {
+        if (monitorRects.Count <= 1) return;
+        string latestLog = "QB-SOC:5080 // NIDS & FORTIGATE TELEMETRY ACTIVE";
+        lock (telemetryLock) {
+            if (liveLogLines.Count > 0) latestLog = liveLogLines[liveLogLines.Count - 1];
+        }
+        using (SolidBrush panelBg = new SolidBrush(Color.FromArgb(128, 5, 8, 18)))
+        using (Pen borderPen = new Pen(Color.FromArgb(145, c1.R, c1.G, c1.B), 1.2f))
+        using (SolidBrush c1B = new SolidBrush(Color.FromArgb(240, c1.R, c1.G, c1.B)))
+        using (SolidBrush c2B = new SolidBrush(Color.FromArgb(240, c2.R, c2.G, c2.B)))
+        using (SolidBrush txtB = new SolidBrush(Color.FromArgb(230, 226, 232, 240))) {
+            for (int mIdx = 0; mIdx < monitorRects.Count; mIdx++) {
+                Rectangle m = monitorRects[mIdx];
+                if (m == primaryMonRect) continue;
+
+                int pw = Math.Min(520, m.Width - 180);
+                if (pw < 260) continue;
+                int ph = secondaryBarsCollapsed ? 24 : 46;
+                int px = m.Right - pw - 18;
+                int py = m.Top + 16;
+
+                g.FillRectangle(panelBg, px, py, pw, ph);
+                g.DrawRectangle(borderPen, px, py, pw, ph);
+
+                string agentLoc = "";
+                if (porygon != null) {
+                    for (int a = 0; a < porygon.Agents.Count; a++) {
+                        var ag = porygon.Agents[a];
+                        if (m.Contains((int)ag.PosX, (int)ag.PosY)) {
+                            agentLoc += (agentLoc.Length > 0 ? " + " : "") + ag.Name;
+                        }
+                    }
+                }
+                if (agentLoc.Length == 0) agentLoc = "MESH_LINKED";
+
+                g.DrawString(string.Format(">> SOC_NODE // {0} | AI_PRESENCE: {1}", monitorNames[mIdx], agentLoc),
+                    fontHudSmall, c2B, px + 10, py + 5);
+                g.DrawString(secondaryBarsCollapsed ? "[+]" : "[-]", fontHudSmall, c1B, px + pw - 28, py + 5);
+                if (!secondaryBarsCollapsed) {
+                    string clippedLog = latestLog.Length > 68 ? latestLog.Substring(0, 68) : latestLog;
+                    g.DrawString(clippedLog, fontHudSmall, txtB, px + 10, py + 24);
+                }
+            }
         }
     }
 
     private void DrawFunctionalRadar(Graphics g, int px, int py, int pw, int ph, Color c1, Color c2, Color c3) {
+        DrawFunctionalRadarAt(g, px, py, pw, ph, c1, c2, c3, 0, 0);
+    }
+
+    private void DrawFunctionalRadarAt(Graphics g, int px, int py, int pw, int ph, Color c1, Color c2, Color c3, int screenOriginX, int screenOriginY) {
         List<RadarBlip> blipsSnap;
         int tcpCnt;
         lock (telemetryLock) {
@@ -2529,33 +6205,38 @@ public class HackerWallpaperForm : Form {
             tcpCnt = tcpEstablishedCount;
         }
 
-        Point mousePt = Control.MousePosition;
-        int hoveredBlipIdx = -1;
-        float hoveredBlipX = 0f, hoveredBlipY = 0f;
+        int actualH = radarCollapsed ? 32 : ph;
 
-        using (SolidBrush panelBg = new SolidBrush(Color.FromArgb(244, 5, 8, 18)))
+        using (SolidBrush panelBg = new SolidBrush(Color.FromArgb(128, 5, 8, 18)))
         using (Pen borderPen = new Pen(Color.FromArgb(170, c1.R, c1.G, c1.B), 1.4f))
         using (SolidBrush c1B = new SolidBrush(Color.FromArgb(245, c1.R, c1.G, c1.B)))
         using (SolidBrush c2B = new SolidBrush(Color.FromArgb(245, c2.R, c2.G, c2.B)))
         using (SolidBrush txtB = new SolidBrush(Color.FromArgb(230, 226, 232, 240))) {
-            g.FillRectangle(panelBg, px, py, pw, ph);
-            g.DrawRectangle(borderPen, px, py, pw, ph);
+            g.FillRectangle(panelBg, px, py, pw, actualH);
+            g.DrawRectangle(borderPen, px, py, pw, actualH);
 
             using (Pen cornerPen = new Pen(Color.FromArgb(235, c2.R, c2.G, c2.B), 2.5f)) {
-                g.DrawLine(cornerPen, px, py, px + 20, py);
-                g.DrawLine(cornerPen, px, py, px, py + 20);
-                g.DrawLine(cornerPen, px + pw, py + ph, px + pw - 20, py + ph);
-                g.DrawLine(cornerPen, px + pw, py + ph, px + pw, py + ph - 20);
+                g.DrawLine(cornerPen, px, py, px + 18, py);
+                g.DrawLine(cornerPen, px, py, px, py + Math.Min(18, actualH));
+                g.DrawLine(cornerPen, px + pw, py + actualH, px + pw - 18, py + actualH);
+                g.DrawLine(cornerPen, px + pw, py + actualH, px + pw, py + actualH - Math.Min(18, actualH));
             }
 
             g.DrawString(">> NET_SONAR // 360°", fontHudBold, c1B, px + 10, py + 7);
-            g.DrawString(string.Format("NODES:{0}", tcpCnt), fontHudBold, c2B, px + pw - 74, py + 7);
+            g.DrawString(string.Format("N:{0} [{1}]", tcpCnt, radarCollapsed ? "+" : "-"), fontHudBold, c2B, px + pw - 84, py + 7);
+
+            if (radarCollapsed) return;
+
+            Point rawMouse = this.PointToClient(Control.MousePosition);
+            Point mousePt = new Point(rawMouse.X - screenOriginX, rawMouse.Y - screenOriginY);
+            int hoveredBlipIdx = -1;
+            float hoveredBlipX = 0f, hoveredBlipY = 0f;
 
             int radR = 78;
             int radCX = px + pw / 2;
             int radCY = py + 110;
 
-            using (SolidBrush scopeBg = new SolidBrush(Color.FromArgb(255, 3, 6, 14)))
+            using (SolidBrush scopeBg = new SolidBrush(Color.FromArgb(128, 3, 6, 14)))
             using (Pen ringOuter = new Pen(Color.FromArgb(180, c1.R, c1.G, c1.B), 1.6f))
             using (Pen ringGrid = new Pen(Color.FromArgb(55, c1.R, c1.G, c1.B), 1f))
             using (Pen sweepPen = new Pen(Color.FromArgb(240, c2.R, c2.G, c2.B), 2.2f)) {
@@ -2633,7 +6314,7 @@ public class HackerWallpaperForm : Form {
             }
 
             g.DrawString("LOCK: " + lastScannedTarget, fontHudSmall, c1B, px + 10, py + ph - 34);
-            g.DrawString("HOVER BLIPS OR NODES TO INSPECT", fontHudSmall, txtB, px + 10, py + ph - 18);
+            g.DrawString("CLICK CARD TO FOLD // HOVER BLIPS", fontHudSmall, txtB, px + 10, py + ph - 18);
 
             // If user is hovering a Radar Blip, draw an interactive Radar Node Telemetry Card below the radar!
             if (hoveredBlipIdx >= 0) {
@@ -2643,7 +6324,7 @@ public class HackerWallpaperForm : Form {
                 int cardX = px - 20;
                 int cardY = py + ph + 8;
                 Color accent = hb.IsAnomaly ? Color.FromArgb(255, 42, 85) : c1;
-                using (SolidBrush cBg = new SolidBrush(Color.FromArgb(248, 5, 9, 20)))
+                using (SolidBrush cBg = new SolidBrush(Color.FromArgb(140, 5, 9, 20)))
                 using (Pen cBor = new Pen(accent, 1.6f))
                 using (SolidBrush accB = new SolidBrush(accent)) {
                     g.FillRectangle(cBg, cardX, cardY, cardW, cardH);
@@ -2659,14 +6340,19 @@ public class HackerWallpaperForm : Form {
     }
 
     private void DrawTelemetryHUD(Graphics g, int hudX, int hudY, int hudW, int hudH, Color c1, Color c2, Color c3) {
-        float locCpu, locRamUsed, locRamTot, locDown, locUp, locDlZ;
-        int locRamPct, locPing, locTcp;
+        float locCpu, locGpu, locGpuMs, locRamUsed, locRamTot, locDown, locUp, locDlZ;
+        int locRamPct, locPing, locTcp, locFps;
+        bool locEco;
         string locNic, locIp;
         string[] logsSnap;
         float[] pingSnap = new float[pingHistory.Length];
 
         lock (telemetryLock) {
             locCpu = cpuUsage;
+            locGpu = gpuUsagePct;
+            locGpuMs = gpuFrameMs;
+            locFps = currentFps;
+            locEco = gpuEcoMode;
             locRamUsed = ramUsedGB;
             locRamTot = ramTotalGB;
             locRamPct = ramPercent;
@@ -2681,114 +6367,534 @@ public class HackerWallpaperForm : Form {
             Array.Copy(pingHistory, pingSnap, pingHistory.Length);
         }
 
-        using (SolidBrush hudBg = new SolidBrush(Color.FromArgb(244, 5, 8, 18)))
-        using (Pen hudBorder = new Pen(Color.FromArgb(170, c1.R, c1.G, c1.B), 1.4f))
-        using (SolidBrush c1Brush = new SolidBrush(Color.FromArgb(250, c1.R, c1.G, c1.B)))
-        using (SolidBrush c2Brush = new SolidBrush(Color.FromArgb(250, c2.R, c2.G, c2.B)))
-        using (SolidBrush c3Brush = new SolidBrush(Color.FromArgb(250, c3.R, c3.G, c3.B)))
-        using (SolidBrush txtBrush = new SolidBrush(Color.FromArgb(245, 235, 242, 250)))
-        using (SolidBrush barBg = new SolidBrush(Color.FromArgb(45, 255, 255, 255))) {
-            g.FillRectangle(hudBg, hudX, hudY, hudW, hudH);
-            g.DrawRectangle(hudBorder, hudX, hudY, hudW, hudH);
+        int actualH = telemetryCollapsed ? 32 : hudH;
 
-            using (Pen cornerPen = new Pen(Color.FromArgb(235, c2.R, c2.G, c2.B), 2.5f)) {
-                g.DrawLine(cornerPen, hudX, hudY, hudX + 24, hudY);
-                g.DrawLine(cornerPen, hudX, hudY, hudX, hudY + 24);
-                g.DrawLine(cornerPen, hudX + hudW, hudY + hudH, hudX + hudW - 24, hudY + hudH);
-                g.DrawLine(cornerPen, hudX + hudW, hudY + hudH, hudX + hudW, hudY + hudH - 24);
+        string shortNic = (locNic ?? "NIC")
+            .Replace("VMware Network Adapter ", "")
+            .Replace("Virtual Ethernet Adapter", "VETH")
+            .Replace("Ethernet Adapter ", "")
+            .Trim().ToUpper();
+        if (shortNic.Length > 8) shortNic = shortNic.Substring(0, 8);
+
+        string shortGpu = (gpuRendererName ?? "GPU").Replace("Radeon ", "").Trim();
+        if (shortGpu.Length > 10) shortGpu = shortGpu.Substring(0, 10);
+
+        // Eye-Care Matte Terminal HUD Background (alpha = 128, attenuated border & corners -35%)
+        using (SolidBrush hudBg = new SolidBrush(Color.FromArgb(132, 4, 9, 8)))
+        using (Pen hudBorder = new Pen(Color.FromArgb(118, c1.R, c1.G, c1.B), 1.2f))
+        using (SolidBrush c1Brush = new SolidBrush(Color.FromArgb(225, c1.R, c1.G, c1.B)))
+        using (SolidBrush c2Brush = new SolidBrush(Color.FromArgb(225, c2.R, c2.G, c2.B)))
+        using (SolidBrush c3Brush = new SolidBrush(Color.FromArgb(225, c3.R, c3.G, c3.B)))
+        using (SolidBrush txtBrush = new SolidBrush(Color.FromArgb(215, 206, 218, 214)))
+        using (SolidBrush barBg = new SolidBrush(Color.FromArgb(36, 255, 255, 255))) {
+            g.FillRectangle(hudBg, hudX, hudY, hudW, actualH);
+            g.DrawRectangle(hudBorder, hudX, hudY, hudW, actualH);
+
+            using (Pen cornerPen = new Pen(Color.FromArgb(165, c2.R, c2.G, c2.B), 2.0f)) {
+                g.DrawLine(cornerPen, hudX, hudY, hudX + 20, hudY);
+                g.DrawLine(cornerPen, hudX, hudY, hudX, hudY + Math.Min(20, actualH));
+                g.DrawLine(cornerPen, hudX + hudW, hudY + actualH, hudX + hudW - 20, hudY + actualH);
+                g.DrawLine(cornerPen, hudX + hudW, hudY + actualH, hudX + hudW, hudY + actualH - Math.Min(20, actualH));
             }
 
-            // Row 1: Header
-            g.DrawString(">> SYS_TELEMETRY // " + locNic.ToUpper() + " [" + locIp + "]", fontHudTitle, c1Brush, hudX + 14, hudY + 10);
-            g.DrawString(string.Format("PING: {0}ms  |  TCP: {1}", locPing, locTcp), fontHudBold, c2Brush, hudX + hudW - 195, hudY + 10);
+            // Row 1: Non-overlapping Header with GPU Model, [BG:1/2/3] Scene Button, Terminal Opacity Controls & Fold Button
+            g.DrawString(string.Format(">> SYS_TELEMETRY // {0} [{1}] | {2}", shortNic, locIp, shortGpu),
+                fontHudBold, c1Brush, hudX + 10, hudY + 7);
+            g.DrawString(string.Format("TRM:{0}%", terminalOpacityPct),
+                fontHudSmall, c3Brush, hudX + hudW - 194, hudY + 8);
+            using (SolidBrush opBtnBg = new SolidBrush(Color.FromArgb(135, 10, 22, 18)))
+            using (Pen opBtnBor = new Pen(Color.FromArgb(140, c1.R, c1.G, c1.B), 1.0f)) {
+                // [BG:1/2/3] Clickable 3D Scene Switcher Button (Ctrl+Alt+M)
+                g.FillRectangle(opBtnBg, hudX + hudW - 140, hudY + 5, 42, 18);
+                g.DrawRectangle(opBtnBor, hudX + hudW - 140, hudY + 5, 42, 18);
+                g.DrawString(string.Format("BG:{0}/3", Config.BgSceneMode + 1), fontHudSmall, c2Brush, hudX + hudW - 137, hudY + 7);
 
-            // Row 2: CPU Bar, RAM Bar, and NON-OVERLAPPING Latency Sparkline Box!
+                g.FillRectangle(opBtnBg, hudX + hudW - 94, hudY + 5, 28, 18);
+                g.DrawRectangle(opBtnBor, hudX + hudW - 94, hudY + 5, 28, 18);
+                g.DrawString("OP-", fontHudSmall, c2Brush, hudX + hudW - 91, hudY + 7);
+
+                g.FillRectangle(opBtnBg, hudX + hudW - 62, hudY + 5, 28, 18);
+                g.DrawRectangle(opBtnBor, hudX + hudW - 62, hudY + 5, 28, 18);
+                g.DrawString("OP+", fontHudSmall, c1Brush, hudX + hudW - 59, hudY + 7);
+
+                g.FillRectangle(opBtnBg, hudX + hudW - 30, hudY + 5, 22, 18);
+                g.DrawRectangle(opBtnBor, hudX + hudW - 30, hudY + 5, 22, 18);
+                g.DrawString(telemetryCollapsed ? "+" : "-", fontHudBold, c2Brush, hudX + hudW - 24, hudY + 5);
+            }
+
+            if (telemetryCollapsed) return;
+
+            // Row 2: CPU Bar, GPU Bar (Load % + Frame ms + FPS), RAM Bar, and Latency Sparkline Box!
             int rowY = hudY + 38;
-            g.DrawString(string.Format("CPU_LOAD : {0:0.0}%", locCpu), fontHudBold, txtBrush, hudX + 14, rowY);
-            g.FillRectangle(barBg, hudX + 14, rowY + 20, 155, 7);
-            g.FillRectangle(c1Brush, hudX + 14, rowY + 20, (int)(1.55f * Math.Min(100f, locCpu)), 7);
+            g.DrawString(string.Format("CPU: {0:0.0}%", locCpu), fontHudBold, txtBrush, hudX + 12, rowY);
+            g.FillRectangle(barBg, hudX + 12, rowY + 20, 112, 7);
+            g.FillRectangle(c1Brush, hudX + 12, rowY + 20, (int)(1.12f * Math.Min(100f, locCpu)), 7);
 
-            g.DrawString(string.Format("MEM_USED : {0:0.0}/{1:0.0} GB ({2}%)", locRamUsed, locRamTot, locRamPct), fontHudBold, txtBrush, hudX + 186, rowY);
-            g.FillRectangle(barBg, hudX + 186, rowY + 20, 195, 7);
-            g.FillRectangle(c2Brush, hudX + 186, rowY + 20, (int)(1.95f * Math.Min(100, locRamPct)), 7);
+            string fpsTag = locEco ? (locFps + "eco") : (locFps + "fps");
+            g.DrawString(string.Format("GPU:{0:0.0}% ({1:0.0}ms|{2})", locGpu, locGpuMs, fpsTag), fontHudSmall, c2Brush, hudX + 134, rowY + 1);
+            g.FillRectangle(barBg, hudX + 134, rowY + 20, 148, 7);
+            g.FillRectangle(c2Brush, hudX + 134, rowY + 20, (int)(1.48f * Math.Min(100f, locGpu)), 7);
 
-            int spX = hudX + 402;
-            int spW = 164;
-            g.DrawString(string.Format("PING_GRAPH ({0}ms)", locPing), fontHudSmall, c3Brush, spX, rowY + 1);
+            g.DrawString(string.Format("RAM:{0:0.0}/{1:0}G({2}%)", locRamUsed, locRamTot, locRamPct), fontHudSmall, txtBrush, hudX + 294, rowY + 1);
+            g.FillRectangle(barBg, hudX + 294, rowY + 20, 128, 7);
+            g.FillRectangle(c3Brush, hudX + 294, rowY + 20, (int)(1.28f * Math.Min(100, locRamPct)), 7);
+
+            int spX = hudX + 434;
+            int spW = 136;
+            g.DrawString(string.Format("PING ({0}ms)", locPing), fontHudSmall, c1Brush, spX, rowY + 1);
             g.FillRectangle(barBg, spX, rowY + 17, spW, 15);
-            for (int i = 0; i < pingSnap.Length; i++) {
-                int bh = (int)Math.Min(13f, Math.Max(2f, pingSnap[i] * 0.22f));
-                Brush sb = (pingSnap[i] > 60f) ? c2Brush : c1Brush;
+            int barCnt = Math.Min(16, pingSnap.Length);
+            for (int i = 0; i < barCnt; i++) {
+                float pVal = pingSnap[pingSnap.Length - barCnt + i];
+                int bh = (int)Math.Min(13f, Math.Max(2f, pVal * 0.22f));
+                Brush sb = (pVal > 60f) ? c2Brush : c1Brush;
                 g.FillRectangle(sb, spX + 3 + i * 8, rowY + 31 - bh, 5, bh);
             }
 
-            // Row 3: Network Live Throughput + Z-Score + Hotkey Hints
+            // Row 3: Network Live Throughput + Active 3D Background Scene + CPU Evolutionary Rate
             int netY = hudY + 76;
-            g.DrawString(string.Format("NET_IO // DL:{0:0.0}KB/s ({1:+0.0;-0.0;0.0}σ) | UL:{2:0.0}KB/s | CTRL+ALT+P: TEST IDS | CTRL+ALT+W: MENU",
-                locDown, locDlZ, locUp), fontHudBold, c3Brush, hudX + 14, netY);
+            int evoRate = (porygon != null) ? porygon.CpuTrainingStepsPerSec : 18750;
+            string bgName = GetBgSceneModeShortName(Config.BgSceneMode);
+            g.DrawString(string.Format("NET // DL:{0:0.0}KB/s | UL:{1:0.0}KB/s | 3D_BG:{2} [{3}/3] | EVO:{4:0.0}k/s",
+                locDown, locUp, bgName, Config.BgSceneMode + 1, evoRate / 1000.0), fontHudBold, c3Brush, hudX + 12, netY);
 
-            using (Pen divPen = new Pen(Color.FromArgb(55, c1.R, c1.G, c1.B), 1f)) {
-                g.DrawLine(divPen, hudX + 14, netY + 20, hudX + hudW - 14, netY + 20);
+            using (Pen divPen = new Pen(Color.FromArgb(45, c1.R, c1.G, c1.B), 1f)) {
+                g.DrawLine(divPen, hudX + 12, netY + 20, hudX + hudW - 12, netY + 20);
             }
 
             // Row 4: Crisp Live Packet / Anomaly Feed
             for (int i = 0; i < logsSnap.Length; i++) {
                 Brush lb = logsSnap[i].Contains("IDS_DETECT") ? c2Brush : ((i == logsSnap.Length - 1) ? c1Brush : txtBrush);
-                g.DrawString(logsSnap[i], fontHud, lb, hudX + 14, netY + 26 + i * 19);
+                string cleanLine = logsSnap[i].Length > 76 ? logsSnap[i].Substring(0, 76) : logsSnap[i];
+                g.DrawString(cleanLine, fontHud, lb, hudX + 12, netY + 26 + i * 19);
             }
         }
     }
 
     private void DrawFlyBrainConnectomeHUD(Graphics g, Color c1, Color c2, Color c3) {
         int bw = 584;
-        int bh = 128;
-        int bx = screenW - bw - 22;
-        int by = screenH - bh - 54;
+        int bh = connectomeCollapsed ? 32 : (78 + porygon.Agents.Count * 21);
+        int bx = primaryMonRect.Right - bw - 22;
+        int by = primaryMonRect.Bottom - bh - 54;
+        DrawFlyBrainConnectomeHUDAt(g, bx, by, bw, bh, c1, c2, c3);
+    }
 
-        using (SolidBrush bg = new SolidBrush(Color.FromArgb(244, 5, 8, 18)))
-        using (Pen border = new Pen(Color.FromArgb(165, c1.R, c1.G, c1.B), 1.3f))
-        using (SolidBrush c1B = new SolidBrush(Color.FromArgb(245, c1.R, c1.G, c1.B)))
-        using (SolidBrush c2B = new SolidBrush(Color.FromArgb(245, c2.R, c2.G, c2.B)))
-        using (SolidBrush goldB = new SolidBrush(Color.FromArgb(250, 204, 21)))
-        using (SolidBrush txtB = new SolidBrush(Color.FromArgb(238, 226, 232, 240))) {
-            g.FillRectangle(bg, bx, by, bw, bh);
-            g.DrawRectangle(border, bx, by, bw, bh);
+    private void DrawFlyBrainConnectomeHUDAt(Graphics g, int bx, int by, int bw, int bh, Color c1, Color c2, Color c3) {
+        int actualH = connectomeCollapsed ? 32 : bh;
+
+        // Eye-Care Matte Connectome Terminal Background (alpha = 132, attenuated border -35%)
+        using (SolidBrush bg = new SolidBrush(Color.FromArgb(132, 4, 9, 8)))
+        using (Pen border = new Pen(Color.FromArgb(115, c1.R, c1.G, c1.B), 1.15f))
+        using (SolidBrush c1B = new SolidBrush(Color.FromArgb(220, c1.R, c1.G, c1.B)))
+        using (SolidBrush c2B = new SolidBrush(Color.FromArgb(220, c2.R, c2.G, c2.B)))
+        using (SolidBrush goldB = new SolidBrush(Color.FromArgb(215, 192, 152, 48)))
+        using (SolidBrush txtB = new SolidBrush(Color.FromArgb(210, 204, 216, 212))) {
+            g.FillRectangle(bg, bx, by, bw, actualH);
+            g.DrawRectangle(border, bx, by, bw, actualH);
 
             float anomIdx = currentFeed.AnomalyIndex;
-            g.DrawString(string.Format(">> PORYGON NEURAL IDS SWARM // ANOMALY_INDEX: {0:0}% [{1}]",
-                anomIdx * 100f, currentFeed.LastAnomalySummary ?? "BASELINE_OK"), fontHudSmall, anomIdx > 0.45f ? c2B : c1B, bx + 10, by + 6);
-            g.DrawString("HOVER NODES FOR DETAILS", fontHudSmall, goldB, bx + bw - 162, by + 6);
+            string sumTag = currentFeed.LastAnomalySummary ?? "BASELINE_OK";
+            if (sumTag.Length > 15) sumTag = sumTag.Substring(0, 15);
+            int evoRate = (porygon != null) ? porygon.CpuTrainingStepsPerSec : 18750;
+
+            g.DrawString(string.Format(">> PORYGON EVO-IDS SWARM // ANOMALY:{0:0}% [{1}]",
+                anomIdx * 100f, sumTag), fontHudSmall, anomIdx > 0.45f ? c2B : c1B, bx + 10, by + 8);
+            g.DrawString(string.Format("CPU_EVO:{0:0.0}k/s [{1}]", evoRate / 1000.0, connectomeCollapsed ? "+" : "-"),
+                fontHudSmall, goldB, bx + bw - 148, by + 8);
+
+            if (connectomeCollapsed) return;
 
             for (int i = 0; i < porygon.Agents.Count; i++) {
                 Porygon3DAvatar.PorygonAgent ag = porygon.Agents[i];
                 FlyBrainConnectome br = ag.Brain;
                 int ry = by + 24 + i * 21;
 
-                using (SolidBrush agB = new SolidBrush(ag.AuraColor)) {
-                    string line = string.Format("[{0,-9}] LVL:{1} XP:{2,3}/{3,3} | PURGED:{4,2} | {5}",
-                        ag.Name, br.Level, br.XP, br.NextLevelXP, br.AnomaliesCleared, br.ActiveStateName);
+                string stShort = br.ActiveStateName ?? "PATROL";
+                if (stShort.Length > 9) stShort = stShort.Substring(0, 9);
+
+                using (SolidBrush agB = new SolidBrush(Color.FromArgb(215, ag.AuraColor.R, ag.AuraColor.G, ag.AuraColor.B))) {
+                    string line = string.Format("[{0,-11}] G{1} {2,-9} AGE:{3,2:0}% | F2:{4,4:0.0}% FN:{5} FIT:{6,4:0.0} {7}",
+                        ag.Name, br.Generation, br.GetLifeStageLabel(), br.LifeAge, br.F2Score, br.FalseNegatives, br.FitnessScore, stShort);
+                    if (line.Length > 64) line = line.Substring(0, 64);
                     g.DrawString(line, fontHudSmall, agB, bx + 10, ry);
                 }
 
-                int stripX = bx + bw - 136;
-                for (int n = 0; n < 16; n++) {
+                int stripX = bx + bw - 126;
+                for (int n = 0; n < 15; n++) {
                     float glow = br.SpikeGlow[n * 4];
                     Color nc = (glow > 0.35f)
-                        ? Color.FromArgb((int)(110 + glow * 145), ag.AuraColor.R, ag.AuraColor.G, ag.AuraColor.B)
-                        : Color.FromArgb(60, c1.R, c1.G, c1.B);
+                        ? Color.FromArgb((int)(95 + glow * 120), ag.AuraColor.R, ag.AuraColor.G, ag.AuraColor.B)
+                        : Color.FromArgb(48, c1.R, c1.G, c1.B);
                     using (SolidBrush nb = new SolidBrush(nc)) {
                         g.FillEllipse(nb, stripX + n * 8, ry + 3, 6f, 6f);
                     }
                 }
             }
 
-            string lastIdsLog = (porygon.IdsDetectionLog.Count > 0)
-                ? porygon.IdsDetectionLog[porygon.IdsDetectionLog.Count - 1]
-                : "IDS_LOG // Monitoring live TCP sockets & bandwidth Z-Score...";
-            g.DrawString(lastIdsLog, fontHudSmall, goldB, bx + 10, by + bh - 34);
+            string auditLine = (porygon != null && !string.IsNullOrEmpty(porygon.LastLineageAuditSummary))
+                ? ("AUDIT // " + porygon.LastLineageAuditSummary)
+                : "AUDIT // Anti-Negative-Trait Pruner & FN Penalty (3.5x) Active";
+            if (auditLine.Length > 84) auditLine = auditLine.Substring(0, 84);
+            g.DrawString(auditLine, fontHudSmall, goldB, bx + 10, by + bh - 49);
 
-            string footer = "SKILLS: [L1]BEAM [L2]HEX-SHIELD [L3]P2P-SYNC [L4]TRI-ATTACK [L5]QUANTUM-BLINK [L6]DEEP-SONAR";
+            string vtLine = (porygon != null && !string.IsNullOrEmpty(porygon.LastVtVerdict))
+                ? ("VT_API // " + porygon.LastVtVerdict + " | LOG: porygon_lineage_audit.log")
+                : "VT_API // http://192.168.2.222:5080/ (VirusTotal v3 Linked)";
+            if (vtLine.Length > 84) vtLine = vtLine.Substring(0, 84);
+            g.DrawString(vtLine, fontHudSmall, c1B, bx + 10, by + bh - 33);
+
+            string footer = "NATURAL_SEL: [FN_LOSS 3.5x] + [TRAIT_PRUNING] + [ELITE_CROSSOVER] // CLICK TO FOLD";
             g.DrawString(footer, fontHudSmall, txtB, bx + 10, by + bh - 17);
+        }
+    }
+
+    private struct Neuron3DProj {
+        public int Index;
+        public int Region;
+        public float SX;
+        public float SY;
+        public float SZ;
+        public float Scale;
+        public float Glow;
+    }
+
+    private void DrawFlyBrain3DCardAt(Graphics g, int px, int py, int pw, int ph, Color c1, Color c2, Color c3) {
+        if (porygon == null || porygon.Agents.Count == 0) return;
+
+        bool isFull = (pw > 500);
+        int actualH = brain3DCollapsed ? 32 : ph;
+        int selIdx = porygon.SelectedBrainAgentIndex % porygon.Agents.Count;
+        Porygon3DAvatar.PorygonAgent ag = porygon.Agents[selIdx];
+        FlyBrainConnectome br = ag.Brain;
+
+        // Deep matte forest-obsidian background with attenuated border (-35%) so the 3D FlyWire brain stands out cleanly without eye strain
+        using (SolidBrush panelBg = new SolidBrush(Color.FromArgb(isFull ? 224 : 188, 3, 7, 6)))
+        using (Pen borderPen = new Pen(Color.FromArgb(135, c1.R, c1.G, c1.B), isFull ? 1.7f : 1.2f))
+        using (SolidBrush c1B = new SolidBrush(Color.FromArgb(225, c1.R, c1.G, c1.B)))
+        using (SolidBrush c2B = new SolidBrush(Color.FromArgb(225, c2.R, c2.G, c2.B)))
+        using (SolidBrush goldB = new SolidBrush(Color.FromArgb(225, 196, 156, 48)))
+        using (SolidBrush txtB = new SolidBrush(Color.FromArgb(215, 206, 218, 214)))
+        using (SolidBrush btnBg = new SolidBrush(Color.FromArgb(135, 10, 22, 18)))
+        using (Pen btnBor = new Pen(Color.FromArgb(145, c1.R, c1.G, c1.B), 1.0f)) {
+            g.FillRectangle(panelBg, px, py, pw, actualH);
+            g.DrawRectangle(borderPen, px, py, pw, actualH);
+
+            using (Pen cornerPen = new Pen(Color.FromArgb(170, c2.R, c2.G, c2.B), 2.0f)) {
+                g.DrawLine(cornerPen, px, py, px + 18, py);
+                g.DrawLine(cornerPen, px, py, px, py + Math.Min(18, actualH));
+                g.DrawLine(cornerPen, px + pw, py + actualH, px + pw - 18, py + actualH);
+                g.DrawLine(cornerPen, px + pw, py + actualH, px + pw, py + actualH - Math.Min(18, actualH));
+            }
+
+            string headerTitle = isFull
+                ? ">> FLYWIRE_3D // DROSOPHILA BRAIN CONNECTOME [FULLSCREEN 3D INSPECTOR // CTRL+ALT+B]"
+                : ">> FLYWIRE_3D // DROSOPHILA BRAIN";
+            g.DrawString(headerTitle, fontHudBold, c1B, px + 10, py + 7);
+
+            // Top-Right Header Interactive Buttons: [FULL / EXIT] + [- / +]
+            if (!brain3DCollapsed) {
+                int fullBtnW = isFull ? 66 : 44;
+                int fullBtnX = px + pw - 30 - fullBtnW - 4;
+                g.FillRectangle(btnBg, fullBtnX, py + 5, fullBtnW, 18);
+                g.DrawRectangle(btnBor, fullBtnX, py + 5, fullBtnW, 18);
+                g.DrawString(isFull ? "[EXIT]" : "[FULL]", fontHudSmall, goldB, fullBtnX + 4, py + 7);
+            }
+            int foldBtnX = px + pw - 28;
+            g.FillRectangle(btnBg, foldBtnX, py + 5, 22, 18);
+            g.DrawRectangle(btnBor, foldBtnX, py + 5, 22, 18);
+            g.DrawString(brain3DCollapsed ? "+" : "-", fontHudBold, goldB, foldBtnX + 6, py + 5);
+
+            if (brain3DCollapsed) return;
+
+            string focusMode = porygon.BrainAutoFocusedOnThreat ? "AUTO-INTERCEPT" : "MANUAL_SELECT";
+            using (SolidBrush agB = new SolidBrush(ag.AuraColor)) {
+                string subLine = isFull
+                    ? string.Format("AGENT: [{0}] G{1} ({2}) | F2:{3:0.0}% | ACC:{4:0.0}% | FN:{5} | XYZ:[{6:0},{7:0},{8:+0;-0;0}] | MODE:{9}",
+                        ag.Name, br.Generation, br.GetLifeStageLabel(), br.F2Score, br.DetectionAccuracy, br.FalseNegatives, ag.PosX, ag.PosY, ag.PosZ, focusMode)
+                    : string.Format("[{0}] G{1} {2} | F2:{3:0.0}% | FN:{4} | {5}",
+                        ag.Name, br.Generation, br.GetLifeStageLabel(), br.F2Score, br.FalseNegatives, focusMode);
+                g.DrawString(subLine, fontHudSmall, agB, px + 10, py + 24);
+            }
+
+            int cx = px + pw / 2;
+            int cy = py + (int)(ph * 0.50f);
+
+            // Interactive 3D Rotation (Mouse Wheel + Drag + Toolbar) or Smooth Orbital Oscillation
+            float effYaw = GetEffectiveBrainYaw();
+            float effPitch = GetEffectiveBrainPitch();
+            float cosY = (float)Math.Cos(effYaw);
+            float sinY = (float)Math.Sin(effYaw);
+            float cosP = (float)Math.Cos(effPitch);
+            float sinP = (float)Math.Sin(effPitch);
+
+            float sizeRatio = Math.Min((float)pw / 356.0f, (float)ph / 246.0f);
+            float modelScale = 1.22f * sizeRatio * brain3DZoom;
+
+            // Project static 3D FlyWire Cortical Wireframe Mesh + Cobalt-Blue Mushroom Body Mesh
+            int vCount = (FlyBrainConnectome.ShellVX != null) ? FlyBrainConnectome.ShellVX.Length : 0;
+            PointF[] shellPts = new PointF[vCount];
+            float[] shellRZ = new float[vCount];
+            for (int v = 0; v < vCount; v++) {
+                float vx = FlyBrainConnectome.ShellVX[v];
+                float vy = FlyBrainConnectome.ShellVY[v];
+                float vz = FlyBrainConnectome.ShellVZ[v];
+
+                float rx = vx * cosY - vz * sinY;
+                float rz1 = vx * sinY + vz * cosY;
+                float ry = vy * cosP - rz1 * sinP;
+                float rz = vy * sinP + rz1 * cosP;
+
+                float persp = 260f / Math.Max(110f, 260f - rz);
+                shellPts[v] = new PointF(cx + rx * modelScale * persp, cy - ry * modelScale * persp);
+                shellRZ[v] = rz;
+            }
+
+            // Pass 1: Back-Hemisphere 3D Triangulated Cortical Wireframe Shell (Dark Silver-Gray 3D Mesh Cradle + Inner Amber Antennal Lobes)
+            using (SolidBrush backFill = new SolidBrush(Color.FromArgb(24, 82, 94, 112)))
+            using (Pen backWire = new Pen(Color.FromArgb(52, 122, 132, 148), isFull ? 0.90f : 0.70f))
+            using (Pen amberWire = new Pen(Color.FromArgb(48, 218, 156, 32), isFull ? 0.85f : 0.65f)) {
+                for (int t = 0; t < FlyBrainConnectome.ShellTris.Count; t++) {
+                    FlyBrainConnectome.BrainTri3D tri = FlyBrainConnectome.ShellTris[t];
+                    if (tri.PartKind == 3) continue; // Mushroom body rendered in Pass 2
+                    if (tri.PartKind == 4) {
+                        PointF[] apoly = new PointF[] { shellPts[tri.I0], shellPts[tri.I1], shellPts[tri.I2] };
+                        g.DrawPolygon(amberWire, apoly);
+                        continue;
+                    }
+                    float avgZ = (shellRZ[tri.I0] + shellRZ[tri.I1] + shellRZ[tri.I2]) * 0.3333f;
+                    if (avgZ > 2.0f) continue;
+                    PointF p0 = shellPts[tri.I0], p1 = shellPts[tri.I1], p2 = shellPts[tri.I2];
+                    PointF[] poly = new PointF[] { p0, p1, p2 };
+                    g.FillPolygon(backFill, poly);
+                    g.DrawPolygon(backWire, poly);
+                }
+            }
+
+            // Pass 2: Central 3D Cobalt-Blue Mushroom Body Lobes (Pedunculus, Bulbous Alpha Cap & Medial Lobes)
+            using (SolidBrush mbFill = new SolidBrush(Color.FromArgb(118, 14, 86, 198)))
+            using (Pen mbWire = new Pen(Color.FromArgb(195, 42, 148, 248), isFull ? 1.20f : 0.85f)) {
+                for (int t = 0; t < FlyBrainConnectome.ShellTris.Count; t++) {
+                    FlyBrainConnectome.BrainTri3D tri = FlyBrainConnectome.ShellTris[t];
+                    if (tri.PartKind != 3) continue;
+                    PointF p0 = shellPts[tri.I0], p1 = shellPts[tri.I1], p2 = shellPts[tri.I2];
+                    PointF[] poly = new PointF[] { p0, p1, p2 };
+                    g.FillPolygon(mbFill, poly);
+                    g.DrawPolygon(mbWire, poly);
+                }
+            }
+
+            // Project all 64 Spiking Neurons in 1:1 Anatomical Coordinates
+            Neuron3DProj[] proj = new Neuron3DProj[FlyBrainConnectome.N];
+            int activeSpikes = 0;
+            for (int i = 0; i < FlyBrainConnectome.N; i++) {
+                float nx = br.NeuronX[i];
+                float ny = br.NeuronY[i];
+                float nz = br.NeuronZ[i];
+
+                float rx = nx * cosY - nz * sinY;
+                float rz1 = nx * sinY + nz * cosY;
+                float ry = ny * cosP - rz1 * sinP;
+                float rz = ny * sinP + rz1 * cosP;
+
+                float persp = 260f / Math.Max(110f, 260f - rz);
+                proj[i].Index = i;
+                proj[i].Region = br.NeuronRegion[i];
+                proj[i].SX = cx + rx * modelScale * persp;
+                proj[i].SY = cy - ry * modelScale * persp;
+                proj[i].SZ = rz;
+                proj[i].Scale = persp * Math.Max(1.0f, sizeRatio * 0.65f);
+                proj[i].Glow = br.SpikeGlow[i];
+                if (br.SpikeGlow[i] > 0.25f) activeSpikes++;
+            }
+
+            // Pass 3: Dense Multi-Color 3D Dendritic Arborizations & Curved Optic Tracts Strictly Inside the Brain Shell!
+            float lineScale = isFull ? 1.35f : 0.95f;
+            for (int d = 0; d < br.DendriteBranches.Count; d++) {
+                FlyBrainConnectome.DendriteSeg3D seg = br.DendriteBranches[d];
+                float glow = br.SpikeGlow[seg.NeuronIdx];
+
+                float rx0 = seg.X0 * cosY - seg.Z0 * sinY;
+                float rz0_1 = seg.X0 * sinY + seg.Z0 * cosY;
+                float ry0 = seg.Y0 * cosP - rz0_1 * sinP;
+                float rz0 = seg.Y0 * sinP + rz0_1 * cosP;
+                float p0Scale = 260f / Math.Max(110f, 260f - rz0);
+                float sx0 = cx + rx0 * modelScale * p0Scale;
+                float sy0 = cy - ry0 * modelScale * p0Scale;
+
+                float rx1 = seg.X1 * cosY - seg.Z1 * sinY;
+                float rz1_1 = seg.X1 * sinY + seg.Z1 * cosY;
+                float ry1 = seg.Y1 * cosP - rz1_1 * sinP;
+                float rz1 = seg.Y1 * sinP + rz1_1 * cosP;
+                float p1Scale = 260f / Math.Max(110f, 260f - rz1);
+                float sx1 = cx + rx1 * modelScale * p1Scale;
+                float sy1 = cy - ry1 * modelScale * p1Scale;
+
+                int alpha = (int)Math.Min(248f, 112f + glow * 136f);
+                float pwLine = seg.Thickness * (0.80f + glow * 0.55f) * lineScale;
+                using (Pen arborPen = new Pen(Color.FromArgb(alpha, seg.R, seg.G, seg.B), pwLine)) {
+                    g.DrawLine(arborPen, sx0, sy0, sx1, sy1);
+                }
+                if (seg.IsTip && (glow > 0.28f || (d % 2 == 0))) {
+                    float tipR = ((glow > 0.45f) ? 1.65f : 1.05f) * lineScale;
+                    using (SolidBrush tipB = new SolidBrush(Color.FromArgb(Math.Min(255, alpha + 25), seg.R, seg.G, seg.B))) {
+                        g.FillEllipse(tipB, sx1 - tipR, sy1 - tipR, tipR * 2f, tipR * 2f);
+                    }
+                }
+            }
+
+            // Pass 4: Internal Curved Synaptic Axons (routed through Central Commissure / Optic Peduncle) + 64 Neural Somata
+            int synIdx = 0;
+            for (int pre = 0; pre < FlyBrainConnectome.N; pre++) {
+                for (int post = 0; post < FlyBrainConnectome.N; post++) {
+                    float w = br.W[pre, post];
+                    if (Math.Abs(w) < 0.16f) continue;
+                    synIdx++;
+                    float gPre = proj[pre].Glow;
+                    float gPost = proj[post].Glow;
+                    float act = Math.Max(gPre, gPost * 0.85f);
+                    if (act < 0.30f && (synIdx % 11 != 0)) continue;
+
+                    // Compute internal 3D anatomical waypoint inside the central protocerebrum / peduncle so tracts NEVER cut outside the shell
+                    float mx3 = (br.NeuronX[pre] + br.NeuronX[post]) * 0.36f;
+                    float my3 = (br.NeuronY[pre] + br.NeuronY[post]) * 0.42f + 1.5f;
+                    float mz3 = (br.NeuronZ[pre] + br.NeuronZ[post]) * 0.45f + 2.5f;
+                    mx3 = Math.Max(-34f, Math.Min(34f, mx3));
+                    my3 = Math.Max(-18f, Math.Min(18f, my3));
+
+                    float mrx = mx3 * cosY - mz3 * sinY;
+                    float mrz1 = mx3 * sinY + mz3 * cosY;
+                    float mry = my3 * cosP - mrz1 * sinP;
+                    float mrz = my3 * sinP + mrz1 * cosP;
+                    float mPersp = 260f / Math.Max(110f, 260f - mrz);
+                    float msx = cx + mrx * modelScale * mPersp;
+                    float msy = cy - mry * modelScale * mPersp;
+
+                    int alpha = (int)Math.Min(210f, 26f + act * 175f);
+                    Color synCol;
+                    if (pre == 11 || post == 11) {
+                        synCol = Color.FromArgb(alpha, 250, 208, 28); // VirusTotal Sensory Pathway in Gold
+                    } else if (proj[post].Region == 3 && act > 0.35f) {
+                        synCol = Color.FromArgb(alpha, 48, 245, 92);  // Ventrolateral Motor Pathway in Emerald-Lime
+                    } else if (w >= 0f) {
+                        synCol = Color.FromArgb(alpha, 45, 238, 188); // Excitatory Pathway in Mint-Cyan
+                    } else {
+                        synCol = Color.FromArgb(alpha, 178, 95, 255); // Inhibitory Pathway in Violet
+                    }
+
+                    using (Pen synPen = new Pen(synCol, (act > 0.5f ? 1.25f : 0.78f) * lineScale)) {
+                        g.DrawLine(synPen, proj[pre].SX, proj[pre].SY, msx, msy);
+                        g.DrawLine(synPen, msx, msy, proj[post].SX, proj[post].SY);
+                    }
+
+                    if (gPre > 0.42f && (synIdx % 2 == 0)) {
+                        float tPulse = ((frameCount * 0.14f + synIdx * 0.19f) % 1.0f);
+                        float pxp, pyp;
+                        if (tPulse < 0.5f) {
+                            float u = tPulse * 2.0f;
+                            pxp = proj[pre].SX + (msx - proj[pre].SX) * u;
+                            pyp = proj[pre].SY + (msy - proj[pre].SY) * u;
+                        } else {
+                            float u = (tPulse - 0.5f) * 2.0f;
+                            pxp = msx + (proj[post].SX - msx) * u;
+                            pyp = msy + (proj[post].SY - msy) * u;
+                        }
+                        float pr = 1.45f * lineScale;
+                        using (SolidBrush pb = new SolidBrush(Color.FromArgb(245, 255, 255, 255))) {
+                            g.FillEllipse(pb, pxp - pr, pyp - pr, pr * 2f, pr * 2f);
+                        }
+                    }
+                }
+            }
+
+            Neuron3DProj[] sorted = new Neuron3DProj[FlyBrainConnectome.N];
+            Array.Copy(proj, sorted, FlyBrainConnectome.N);
+            Array.Sort(sorted, (a, b) => a.SZ.CompareTo(b.SZ)); // Back-to-front by Z
+
+            for (int i = 0; i < sorted.Length; i++) {
+                Neuron3DProj np = sorted[i];
+                Color nCol;
+                if (np.Index == 0 || np.Index == 8 || np.Index == 11 || (np.Region == 0 && (np.Index % 8) < 4)) {
+                    nCol = Color.FromArgb(255, 252, 212, 32); // Golden-Yellow PI & Lateral Protocerebrum + VT Sensor
+                } else if (np.Region == 0) {
+                    nCol = Color.FromArgb(255, 248, 52, 122); // Lateral Horn & Optic Projection Crimson-Pink
+                } else if (np.Region == 1) {
+                    nCol = Color.FromArgb(255, 42, 242, 178); // Dorsal Calyx Kenyon Cell Mint-Cyan
+                } else if (np.Region == 2) {
+                    nCol = Color.FromArgb(255, 56, 168, 252); // Central Complex Cobalt-Cyan
+                } else {
+                    nCol = Color.FromArgb(255, 52, 246, 86);  // Ventrolateral / SEZ Motor Emerald-Lime
+                }
+
+                float baseR = (1.35f + np.Glow * 1.65f) * np.Scale;
+                int coreAlpha = (int)Math.Min(255f, 155f + np.Glow * 100f);
+
+                if (np.Glow > 0.25f || np.Index == 11) {
+                    float haloR = baseR * 1.85f;
+                    int haloAlpha = (int)Math.Min(115f, 32f + np.Glow * 80f);
+                    using (SolidBrush haloB = new SolidBrush(Color.FromArgb(haloAlpha, nCol.R, nCol.G, nCol.B))) {
+                        g.FillEllipse(haloB, np.SX - haloR, np.SY - haloR, haloR * 2f, haloR * 2f);
+                    }
+                }
+
+                using (SolidBrush coreB = new SolidBrush(Color.FromArgb(coreAlpha, nCol.R, nCol.G, nCol.B))) {
+                    g.FillEllipse(coreB, np.SX - baseR, np.SY - baseR, baseR * 2f, baseR * 2f);
+                }
+                if (np.Glow > 0.55f) {
+                    float spR = 0.95f * lineScale;
+                    using (SolidBrush sparkB = new SolidBrush(Color.FromArgb(250, 255, 255, 255))) {
+                        g.FillEllipse(sparkB, np.SX - spR, np.SY - spR, spR * 2f, spR * 2f);
+                    }
+                }
+            }
+
+            // Pass 5: Front-Hemisphere 3D Triangulated Silver-Gray Cortical Wireframe Shell (Encases the Arbors in 3D!)
+            using (Pen frontWire = new Pen(Color.FromArgb(68, 154, 166, 184), isFull ? 0.95f : 0.72f))
+            using (Pen rimWire = new Pen(Color.FromArgb(124, 194, 206, 224), isFull ? 1.25f : 0.92f)) {
+                for (int t = 0; t < FlyBrainConnectome.ShellTris.Count; t++) {
+                    FlyBrainConnectome.BrainTri3D tri = FlyBrainConnectome.ShellTris[t];
+                    if (tri.PartKind == 3 || tri.PartKind == 4) continue;
+                    float avgZ = (shellRZ[tri.I0] + shellRZ[tri.I1] + shellRZ[tri.I2]) * 0.3333f;
+                    if (avgZ <= 2.0f) continue;
+                    PointF p0 = shellPts[tri.I0], p1 = shellPts[tri.I1], p2 = shellPts[tri.I2];
+                    PointF[] poly = new PointF[] { p0, p1, p2 };
+                    g.DrawPolygon((avgZ < 10.0f) ? rimWire : frontWire, poly);
+                }
+            }
+
+            // Anatomical Labels & Live 3D Orientation Readout
+            g.DrawString("OPTIC_LOBE_L", fontHudSmall, c1B, px + 10, py + 42);
+            g.DrawString("OPTIC_LOBE_R", fontHudSmall, c1B, px + pw - 86, py + 42);
+            g.DrawString("SEZ_MOTOR", fontHudSmall, c2B, px + pw - 72, py + ph - 58);
+            g.DrawString(string.Format("VT_N[11]:{0:0}%", proj[11].Glow * 100f), fontHudSmall, goldB, px + 10, py + ph - 58);
+
+            int yawDeg = (int)Math.Round(effYaw * 180.0 / Math.PI);
+            int pitchDeg = (int)Math.Round(effPitch * 180.0 / Math.PI);
+            string statusLine = isFull
+                ? string.Format("SPIKES:{0}/64 | 3D_ROTATION: YAW {1:+000;-000;000}° PITCH {2:+00;-00;00}° ZOOM {3:0.00}x | MOUSE WHEEL OR DRAG TO ROTATE 3D",
+                    activeSpikes, yawDeg, pitchDeg, brain3DZoom)
+                : string.Format("SPIKES:{0}/64 | YAW:{1:+000;-000;000}° | WHEEL/DRAG: ROTATE 3D",
+                    activeSpikes, yawDeg);
+            g.DrawString(statusLine, fontHudSmall, c1B, px + 10, py + ph - 41);
+
+            // Bottom Interactive 3D Control Toolbar Buttons: [< ROT] [ROT >] [ZOOM] [AUTO/FREE] [NEXT]
+            string[] btnLabels = new string[] {
+                "< ROT",
+                "ROT >",
+                string.Format("ZM {0:0.0}x", brain3DZoom),
+                brain3DAutoRotate ? "AUTO:ON" : "FREE:3D",
+                "NEXT >>"
+            };
+            float[] zoneStarts = new float[] { 0.02f, 0.19f, 0.37f, 0.57f, 0.77f };
+            float[] zoneWidths = new float[] { 0.15f, 0.16f, 0.18f, 0.18f, 0.21f };
+            int barY = py + ph - 23;
+            for (int b = 0; b < 5; b++) {
+                int bxBtn = px + (int)(pw * zoneStarts[b]);
+                int bwBtn = (int)(pw * zoneWidths[b]);
+                g.FillRectangle(btnBg, bxBtn, barY, bwBtn, 18);
+                g.DrawRectangle(btnBor, bxBtn, barY, bwBtn, 18);
+                Brush bTxt = (b == 3 && !brain3DAutoRotate) ? goldB : (b == 4 ? c2B : txtB);
+                g.DrawString(btnLabels[b], fontHudSmall, bTxt, bxBtn + 4, barY + 2);
+            }
         }
     }
 
@@ -2812,7 +6918,7 @@ public class HackerWallpaperForm : Form {
         Label title = new Label {
             Text = "PANEL DE CONTROL // PORYGON NEURAL IDS SWARM",
             Font = new Font("Consolas", 11f, FontStyle.Bold),
-            ForeColor = Color.FromArgb(0, 240, 255),
+            ForeColor = Color.FromArgb(52, 168, 138),
             Location = new Point(22, 12),
             AutoSize = true
         };
@@ -2821,7 +6927,7 @@ public class HackerWallpaperForm : Form {
         // --- SECCIÓN DE DETECCIÓN DE ANOMALÍAS DE RED Y ENTRENAMIENTO ---
         Label lblSwarm = new Label {
             Text = "Detección de Anomalías de Red (Porygon, Porygon2 y Porygon-Z):",
-            ForeColor = Color.FromArgb(236, 72, 153),
+            ForeColor = Color.FromArgb(186, 138, 56),
             Font = new Font("Segoe UI", 9.2f, FontStyle.Bold),
             Location = new Point(22, 38),
             AutoSize = true
@@ -2830,8 +6936,8 @@ public class HackerWallpaperForm : Form {
             Location = new Point(22, 58),
             Size = new Size(450, 40),
             Font = new Font("Consolas", 8.5f, FontStyle.Regular),
-            ForeColor = Color.FromArgb(250, 204, 21),
-            BackColor = Color.FromArgb(18, 25, 44)
+            ForeColor = Color.FromArgb(224, 212, 176),
+            BackColor = Color.FromArgb(14, 24, 20)
         };
         Action updateSwarmLabel = () => {
             if (porygon == null || porygon.Agents.Count < 3) return;
@@ -2840,22 +6946,22 @@ public class HackerWallpaperForm : Form {
             var a2 = porygon.Agents[2];
             lblSwarmStatus.Text = string.Format(
                 " PORYGON: LVL {0} ({1}XP) | PORYGON2: LVL {2} ({3}XP) | PORYGON-Z: LVL {4} ({5}XP)\n" +
-                " Flujos Auditados: {6} | Anomalías Purgadas: {7} | Hosts Conocidos: {8}",
+                " Flujos Auditados: {6} | Anomalías Purgadas: {7} | Escena 3D: [{8}/3] {9}",
                 a0.Brain.Level, a0.Brain.XP, a1.Brain.Level, a1.Brain.XP, a2.Brain.Level, a2.Brain.XP,
                 a0.Brain.PacketsCollected + a1.Brain.PacketsCollected + a2.Brain.PacketsCollected,
                 a0.Brain.AnomaliesCleared + a1.Brain.AnomaliesCleared + a2.Brain.AnomaliesCleared,
-                knownRemoteHosts.Count);
+                Config.BgSceneMode + 1, GetBgSceneModeShortName(Config.BgSceneMode));
         };
         updateSwarmLabel();
 
         Button btnTrainWave = new Button {
             Text = "⚡ Simular Anomalía IDS (Ctrl+Alt+P)",
             Location = new Point(22, 104),
-            Size = new Size(242, 30),
+            Size = new Size(228, 30),
             FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(30, 41, 68),
-            ForeColor = Color.FromArgb(0, 240, 255),
-            Font = new Font("Segoe UI", 8.8f, FontStyle.Bold)
+            BackColor = Color.FromArgb(20, 36, 30),
+            ForeColor = Color.FromArgb(52, 168, 138),
+            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold)
         };
         btnTrainWave.Click += (s, ev) => {
             porygon.TriggerTrainingWave(screenW, screenH);
@@ -2863,17 +6969,17 @@ public class HackerWallpaperForm : Form {
             this.Invalidate();
         };
 
-        Button btnBoostLvl = new Button {
-            Text = "★ Subir +1 LVL / Habilidad",
-            Location = new Point(272, 104),
-            Size = new Size(200, 30),
+        Button btnCycleScene = new Button {
+            Text = "🌲 Entorno 3D [1/3..3/3] (Ctrl+Alt+M)",
+            Location = new Point(256, 104),
+            Size = new Size(216, 30),
             FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(48, 30, 68),
-            ForeColor = Color.FromArgb(250, 204, 21),
-            Font = new Font("Segoe UI", 8.8f, FontStyle.Bold)
+            BackColor = Color.FromArgb(28, 36, 24),
+            ForeColor = Color.FromArgb(186, 138, 56),
+            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold)
         };
-        btnBoostLvl.Click += (s, ev) => {
-            porygon.BoostAllLevels();
+        btnCycleScene.Click += (s, ev) => {
+            CycleBgSceneMode();
             updateSwarmLabel();
             this.Invalidate();
         };
@@ -2881,22 +6987,22 @@ public class HackerWallpaperForm : Form {
         configForm.Controls.Add(lblSwarm);
         configForm.Controls.Add(lblSwarmStatus);
         configForm.Controls.Add(btnTrainWave);
-        configForm.Controls.Add(btnBoostLvl);
+        configForm.Controls.Add(btnCycleScene);
 
         // --- PALETA DE COLORES ---
-        Label lblTheme = new Label { Text = "Paleta de Colores:", Location = new Point(22, 144), AutoSize = true };
+        Label lblTheme = new Label { Text = "Paleta de Colores (Descanso Visual / Eye-Care Mate):", Location = new Point(22, 144), AutoSize = true };
         ComboBox cbTheme = new ComboBox {
             Location = new Point(22, 165),
             Width = 450,
             DropDownStyle = ComboBoxStyle.DropDownList,
-            BackColor = Color.FromArgb(22, 30, 50),
+            BackColor = Color.FromArgb(16, 28, 24),
             ForeColor = Color.White
         };
         cbTheme.Items.AddRange(new object[] {
-            "Cyberpunk Neón (Cian Eléctrico + Magenta + Violeta)",
-            "Hacker Clásico / Matrix (Verde Fosforescente #00FF66)",
-            "Red Team / Alerta Cibernética (Rojo Carmesí + Ámbar)",
-            "Stealth / Azul Hielo Minimalista"
+            "Bio-Selva & Oscilador Mate (Salvia Fósforo + Ámbar + Petróleo // Sin Púrpura)",
+            "Matrix Esmeralda Mate (Verde Bosque Suave)",
+            "Red Team Terracota Mate (Carmesí Atenuado + Ocre)",
+            "Stealth Azul Petróleo Mate"
         });
         cbTheme.SelectedIndex = Math.Max(0, Math.Min(3, Config.ThemeIndex));
         cbTheme.SelectedIndexChanged += (s, ev) => {
@@ -2980,7 +7086,7 @@ public class HackerWallpaperForm : Form {
         chkFollowMouse.CheckedChanged += (s, ev) => { Config.FollowMouse = chkFollowMouse.Checked; Config.Save(); };
 
         CheckBox chkTel = new CheckBox {
-            Text = "Mostrar Terminal de Telemetría Real (CPU, RAM, Red, Ping)",
+            Text = "Mostrar Terminal de Telemetría Real (CPU, GPU, RAM, Red, Ping)",
             Location = new Point(24, 422),
             AutoSize = true,
             Checked = Config.ShowTelemetry
@@ -3008,8 +7114,8 @@ public class HackerWallpaperForm : Form {
             Location = new Point(24, 518),
             Size = new Size(448, 38),
             FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(0, 180, 216),
-            ForeColor = Color.FromArgb(10, 15, 28),
+            BackColor = Color.FromArgb(52, 168, 138),
+            ForeColor = Color.FromArgb(8, 16, 14),
             Font = new Font("Segoe UI", 9.5f, FontStyle.Bold)
         };
         btnClose.FlatAppearance.BorderSize = 0;
@@ -3036,20 +7142,80 @@ public class HackerWallpaperForm : Form {
         }
         using (Bitmap bmp = new Bitmap(1920, 1080))
         using (Graphics g = Graphics.FromImage(bmp)) {
-            g.Clear(Color.FromArgb(7, 10, 22));
+            g.Clear(Color.FromArgb(4, 9, 8));
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
             Font fSmall = new Font("Consolas", 8f, FontStyle.Regular);
-            av.Render(g, 110f, Color.FromArgb(0, 240, 255), Color.FromArgb(236, 72, 153), fSmall);
+            av.Render(g, 110f, Color.FromArgb(52, 168, 138), Color.FromArgb(186, 138, 56), fSmall);
+            bmp.Save(outPath, ImageFormat.Png);
+        }
+    }
+
+    public static void RenderBrainAndHudPreview(string outPath) {
+        using (HackerWallpaperForm form = new HackerWallpaperForm(null, false))
+        using (Bitmap bmp = new Bitmap(1380, 820, PixelFormat.Format32bppArgb))
+        using (Graphics g = Graphics.FromImage(bmp)) {
+            form.cpuUsage = 22.4f;
+            form.ramPercent = 47;
+            form.ramUsedGB = 15.1f;
+            form.ramTotalGB = 32.0f;
+            form.gpuUsagePct = 4.6f;
+            form.gpuFrameMs = 3.1f;
+            form.currentFps = 24;
+            form.gpuEcoMode = false;
+            g.Clear(Color.FromArgb(3, 7, 6));
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+            Color c1, c2, c3, head;
+            form.GetThemeColors(out c1, out c2, out c3, out head);
+
+            // Top Row: Render all 3 3D Procedural Background Environments side-by-side (Mode 0, Mode 1, Mode 2)
+            string[] modeTitles = new string[] {
+                "MODO 1/3 [BG:1]: SELVA BIO-DIGITAL LOW-POLY + OSCILADOR 3D",
+                "MODO 2/3 [BG:2]: TERRENO OSCILADOR VECTORIAL + BÓVEDA DELAUNAY",
+                "MODO 3/3 [BG:3]: BOSQUE MICELIAL POLIGONAL (BIOLUMINISCENTE)"
+            };
+            for (int m = 0; m < 3; m++) {
+                Rectangle tile = new Rectangle(16 + m * 452, 16, 436, 260);
+                using (LinearGradientBrush bgGrad = new LinearGradientBrush(tile, Color.FromArgb(3, 7, 6), Color.FromArgb(7, 17, 14), LinearGradientMode.Vertical)) {
+                    g.FillRectangle(bgGrad, tile);
+                }
+                form.Render3DProceduralEnvironmentGdi(g, m, tile, c1, c2, c3, 45, m);
+                using (Pen bPen = new Pen(Color.FromArgb(120, c1.R, c1.G, c1.B), 1.2f))
+                using (SolidBrush tBr = new SolidBrush(Color.FromArgb(225, c2.R, c2.G, c2.B))) {
+                    g.DrawRectangle(bPen, tile);
+                    g.DrawString(modeTitles[m], form.fontHudSmall, tBr, tile.X + 8, tile.Y + 6);
+                }
+            }
+
+            // Bottom Row: Anatomical 3D FlyWire Drosophila Brain + Updated SYS_TELEMETRY with GPU_LOAD & [BG:1/3]
+            form.DrawFlyBrain3DCardAt(g, 16, 292, 740, 510, c1, c2, c3);
+            form.DrawTelemetryHUD(g, 776, 292, 584, 228, c1, c2, c3);
+            form.DrawFlyBrainConnectomeHUDAt(g, 776, 536, 584, 204, c1, c2, c3);
             bmp.Save(outPath, ImageFormat.Png);
         }
     }
 
     [STAThread]
     public static void Main(string[] args) {
+        try { SetProcessDpiAwarenessContext(new IntPtr(-4)); } catch { }
+        try { SetProcessDpiAwareness(2); } catch { }
+        try { SetProcessDPIAware(); } catch { }
+
         if (args != null && args.Length > 0 && args[0] == "--preview-models") {
             string p = Path.Combine(Path.GetTempPath(), "verify_3_swarm.png");
             RenderModelsContactSheet(p);
+            Environment.Exit(0);
+            return;
+        }
+        if (args != null && args.Length > 0 && args[0] == "--preview-brain") {
+            string p = (args.Length > 1) ? args[1] : Path.Combine(Path.GetTempPath(), "verify_brain_preview.png");
+            try {
+                RenderBrainAndHudPreview(p);
+            } catch (Exception ex) {
+                File.WriteAllText(p + ".err", ex.ToString());
+            }
+            Environment.Exit(0);
             return;
         }
         bool wantConfig = (args != null && args.Length > 0 && args[0].Contains("config"));

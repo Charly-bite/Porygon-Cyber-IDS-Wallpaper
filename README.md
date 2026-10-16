@@ -4,48 +4,54 @@ Un **Wallpaper Animado Cyberpunk / Hacker ultraligero (~39 MB RAM)** para Window
 
 ![Vista Previa del Enjambre Porygon 3D e Inspector de Nodos](assets/preview_swarm.png)
 
+![Entornos 3D Procedurales, Conectoma FlyWire 3D y Telemetría GPU](assets/preview_3d_brain_and_scenes.png)
+
 ---
 
 ## ✨ Características Principales
 
-### 1. 🧠 Enjambre 3D Autónomo con Conectoma Spiking (`FlyBrainConnectome`)
-* **Renderizador 3D GLB por Software Integrado:** Carga y renderiza simultáneamente los modelos 3D en formato `.glb` (`pokemon_porygon.glb`, `porygon2__johto.glb` y `porygon-z.glb`) directamente sobre la capa `Progman / WorkerW` detrás de los iconos del escritorio.
-* **100% Independientes (`FollowMouse = false` por defecto):** Cada evolución tiene su propia instancia de red neuronal spiking de 64 neuronas divididas en 4 regiones (*Sensory Input*, *Central Complex*, *Mushroom Body / Drives*, *Motor Output*), sus propias rutas de patrullaje y fuerzas de separación espacial.
-* **Especialización por Evolución:**
-  * **PORYGON (`FLOW_BASELINE_AI`):** Recolecta flujos TCP estándar y entrena la línea base estadística ($\mu, \sigma$).
-  * **PORYGON2 (`ENDPOINT_AUDITOR`):** Audita nuevas direcciones IP externas vistas por primera vez y coordina enlaces neuronales P2P.
-  * **PORYGON-Z (`ANOMALY_HUNTER_IDS`):** Caza y neutraliza anomalías reales de tráfico mediante *Salto Cuántico* y *Tri-Ataque Elemental*.
+### 1. 🧠 Enjambre 3D Autónomo (`X, Y, Z`) y Conectoma Anatómico 3D (`FlyWire Drosophila`)
+* **Navegación Espacial 3D Completa (`X, Y, Z`):** Tanto los 3 Porygon (`Porygon`, `Porygon2` y `Porygon-Z`) como los nodos/paquetes de red navegan con coordenadas tridimensionales completas ($Z \in [-240, +240]$), escalado de perspectiva real, sombras proyectadas en el suelo 3D y telemetría `XYZ:[x,y,z]`.
+* **Inspector Anatómico 3D del Conectoma (`>> FLYWIRE_3D // DROSOPHILA BRAIN CONNECTOME`):**
+  * Malla cortical 3D anatómica de alta densidad (~496 triángulos) que modela el cerebro de *Drosophila* (*Central Brain*, *Optic Lobes L/R*, *Mushroom Body Calyx & Pedunculus* en azul eléctrico y *Antennal Lobe Glomeruli* en ámbar).
+  * **64 Neuronas Spiking Confinadas Anatómicamente:** Somas neuronales con arborizaciones dendríticas y tractos sinápticos curvos (Bézier 3D) estrictamente contenidos dentro de la corteza 3D.
+  * **Rotación 3D Interactiva y Pantalla Completa:** Rota la cámara 3D arrastrando con el mouse o con la rueda del ratón (`Yaw` / `Pitch` / `Zoom`), o ábrelo en **Pantalla Completa (`[FULL]` / `Ctrl + Alt + B`)**.
 
-### 2. 🛡️ Detección Real de Anomalías de Tráfico (Network IDS)
-Los 3 modelos se alimentan cada ciclo con telemetría real del stack de red de Windows (`IPGlobalProperties.GetActiveTcpConnections()`, estadísticas IPv4 de tu interfaz activa y latencia ICMP):
-* **Anomalías de Puertos (`NON_STD_PORT`):** Detecta conexiones externas hacia puertos no estándar o sensibles (`21`, `22`, `23`, `445`, `3389`, `4444`, `8080`, etc.).
-* **Picos Estadísticos Z-Score de Ancho de Banda (`DL_ZSCORE_SPIKE` / `UL_EXFIL_SPIKE`):** Calcula media móvil exponencial ($\mu$) y desviación estándar ($\sigma$) para detectar ráfagas anómalas ($> +2.0\sigma$).
-* **Ráfagas Half-Open (`HALF_OPEN_SYN`):** Detecta sockets salientes atascados en estado `SYN_SENT` / `SYN_RECEIVED`.
-* **Anomalías de Jitter / Latencia (`LATENCY_ANOMALY`):** Detecta saltos bruscos de RTT hacia el gateway ($> +2.2\sigma$).
-* **Auditoría de Nuevos Hosts (`NEW_EXTERNAL_HOST`):** Genera Orbes Dorados cuando una IP remota nueva aparece en la sesión.
+### 2. 🌲 3 Entornos 3D Procedurales de Fondo (`Vértices + Polígonos + Oscilador`)
+Construidos en OpenGL con geometría poligonal (`GL_TRIANGLES`, `GL_LINE_STRIP`, `GL_LINES`) y paleta **Eye-Care Mate** (reducción del 35%–40% de fatiga visual, sin líneas púrpuras saturadas). Alternables en vivo con **`Ctrl + Alt + M`** o el botón **`[BG:1/3]`**:
+1. **Modo 1/3 (`[BG:1]` — `SELVA+OSC`):** *Híbrido Selva Bio-Digital Low-Poly + Suelo de Oscilador 3D* (7 bandas de oscilador 3D con oclusión poligonal musgo oscuro + árboles facetados *low-poly* + lianas segmentadas con esporas bioluminiscentes).
+2. **Modo 2/3 (`[BG:2]` — `TOPO+MESH`):** *Terreno de Oscilador Vectorial + Bóveda de Triángulos Delaunay* (9 crestas topográficas de oscilador vectorial moduladas por la red + bóveda superior geodésica 3D de triángulos Delaunay).
+3. **Modo 3/3 (`[BG:3]` — `MYCELIUM`):** *Bosque Micelial Poligonal Bioluminiscente* (Troncos poligonales 3D ramificados desde suelo y techo + racimos de cristales octaédricos facetados y pulsos bioluminiscentes).
 
-### 3. 🎯 Interacción al Pasar el Mouse (Hover Inspector)
-Sin bloquear los clics hacia las carpetas del escritorio (`WS_EX_TRANSPARENT`), al pasar el cursor por encima de cualquier elemento:
-* **Hover sobre Nodos Flotantes / Anomalías:** Congela el nodo en su posición, dibuja una retícula de bloqueo con línea vectorial hacia el Porygon asignado y abre una **Tarjeta Holográfica de Inspección** con `REMOTE_EP`, `LOCAL_SKT`, barra de `% ANOMALY`, diagnóstico y caudal en `KB/s`.
-* **Hover sobre los Blips del Radar Sonar 360°:** Ilumina el punto del radar y despliega su tarjeta de telemetría (`RING1:LAN`, `RING2:WAN_TLS`, `RING3:WAN_CUSTOM`).
-* **Hover sobre cualquiera de los 3 Porygon:** Despliega la tarjeta de su núcleo neuronal con sus entradas Z-Score en vivo (`DL_Z`, `UL_Z`, `PING_Z`), nivel, ganancia sináptica y estadísticas IDS.
+### 3. 🌧️ Lluvia de Logs 100% Vertical con Profundidad 3D y 7 Categorías Semánticas
+* **Texto 100% Vertical Garantizado:** Cada columna renderiza caracteres apilados verticalmente con seguimiento por columna.
+* **3 Planos de Profundidad 3D (`DepthLayer 0, 1, 2`):** Efecto paralaje real con diferentes escalas, velocidades y niveles de contraste sobre fondo obsidiana.
+* **7 Colores Semánticos Mate:**
+  * 🔴 **Carmesí Terracota:** Alertas críticas IDS / Intrusiones (+34% velocidad de caída).
+  * 🟡 **Oro Solar Mate:** Inteligencia de amenazas **VirusTotal v3** (+34% velocidad de caída).
+  * 🟠 **Ámbar Cobre:** Eventos de Firewall **FortiGate** / IPS.
+  * 🌸 **Rosa Coral Mate:** Anomalías estadísticas NIDS / NDR y Z-Score.
+  * 🩵 **Cian Salvia Fósforo:** Flujos activos TCP / TLS / HTTPS / DNS.
+  * 🟢 **Esmeralda Bosque:** Tráfico verificado limpio / Línea base saludable.
+  * 💠 **Verde Azulado Bio-Teal:** Neuro-evolución del enjambre Porygon y poda sináptica.
 
-### 4. ⚡ Sistema de Entrenamiento Hebbiano y 6 Habilidades Desbloqueables
-El progreso de entrenamiento de cada Porygon se guarda automáticamente en `porygon_brains.json`:
-* **LVL 1 — Rayo de Conversión (`CONVERSION_BEAM`):** Muestreo láser de paquetes de datos.
-* **LVL 2 — Escudo Hexagonal Conversion 2 (`CYBER_SHIELD`):** Barrera geométrica hexagonal rotatoria.
-* **LVL 3 — Enlace Neuronal P2P (`NEURAL_SYNC_LINK`):** Sincronización de pesos sinápticos entre dos Porygon cercanos (`+18 XP`).
-* **LVL 4 — Tri-Ataque Elemental (`TRI_ATTACK_MATRIX`):** Triple haz láser (*Hielo Cian + Plasma Magenta + Electricidad Dorada*) que purga anomalías rojas (`+45 XP`).
-* **LVL 5 — Salto Cuántico / Overclock (`QUANTUM_BLINK`):** Teletransporte de alta velocidad hacia anomalías distantes.
-* **LVL 6 — Escaneo Sonar Profundo (`SONAR_DEEP_SCAN`):** Onda expansiva que revela nuevos nodos en el ciberespacio.
+### 4. ⚡ Monitoreo de GPU en Tiempo Real y Gobernador Adaptativo Eco-GPU
+* **Telemetría de Hardware en Vivo (`>> SYS_TELEMETRY`):** Muestra carga de `CPU`, **`GPU: XX.X% (X.Xms | XXfps)`** (muestreando los motores 3D de hardware vía `\GPU Engine(*)\Utilization Percentage`), `RAM` y latencia `PING`.
+* **Gobernador Adaptativo Eco-GPU:** Corre a **24 FPS** cuando interactúas con el escritorio o el cerebro 3D, y reduce automáticamente a **15 FPS (`[15eco]`)** cuando trabajas en cualquier aplicación en primer plano, reduciendo la carga combinada de GPU en más de un **85%** en configuraciones multimonitor.
+
+### 5. 🛡️ Detección Real de Anomalías de Tráfico (Network IDS) + VirusTotal v3
+Los 3 modelos se alimentan cada ciclo con telemetría real del stack de red de Windows (`IPGlobalProperties.GetActiveTcpConnections()`, estadísticas IPv4 de tu interfaz activa y latencia ICMP), además de auditoría automática de IPs públicas en **VirusTotal API v3**.
 
 ---
 
 ## ⌨️ Atajos de Teclado Globales
 | Atajo | Acción |
 | :--- | :--- |
-| **`Ctrl + Alt + W`** | Abre el **Panel de Control en Vivo** (Paletas de color, velocidad de lluvia, tamaño 3D, modo entrenamiento, etc.). |
+| **`Ctrl + Alt + W`** | Abre el **Panel de Configuración en Vivo** (Tema de color, Entorno 3D de fondo, velocidad de lluvia, tamaño 3D, etc.). |
+| **`Ctrl + Alt + M`** | Alterna en vivo entre los **3 Entornos 3D Procedurales de Fondo** (`SELVA+OSC` $\rightarrow$ `TOPO+MESH` $\rightarrow$ `MYCELIUM`). |
+| **`Ctrl + Alt + B`** | Abre / cierra el **Inspector del Conectoma 3D FlyWire en Pantalla Completa**. |
 | **`Ctrl + Alt + P`** | Lanza una **Simulación / Oleada de Anomalías IDS** para entrenar a los 3 Porygon en vivo. |
+| **`Ctrl + Alt + Up / Down`** | Aumenta o disminuye globalmente la **opacidad de Windows Terminal** (±10%, también disponible con `Ctrl + Shift + Up/Down` dentro de la terminal o botones `[OP-]`/`[OP+]` en el HUD). |
 
 ---
 
@@ -59,9 +65,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1
 ```
 
 ## 📁 Estructura del Repositorio
-* `src/HackerWallpaper.cs` — Motor principal del Wallpaper, Renderizador 3D GLB, Conectoma Spiking `FlyBrainConnectome`, Detector Estadístico IDS y Radar 360°.
+* `src/HackerWallpaper.cs` — Motor principal OpenGL + GDI+ del Wallpaper, 3 Entornos 3D Poligonales, Renderizador 3D GLB, Conectoma Anatómico 3D `FlyBrainConnectome`, Detector Estadístico IDS, Integración VirusTotal v3 y Radar 360°.
 * `src/HackerLockScreen.cs` — Protector / Pantalla de bloqueo animada Cyberpunk.
-* `src/TrayAutoHide.cs` — Utilidad ligera para auto-ocultar iconos de la bandeja del sistema al pasar el mouse.
+* `src/TrayAutoHide.cs` — Utilidad ligera para auto-ocultar iconos secundarios de la bandeja del sistema sin alterar la composición DWM (`Shell_TrayWnd`).
 * `Models/` — Modelos 3D `.glb` de `Porygon`, `Porygon2` y `Porygon-Z`.
 * `scripts/` — Scripts de compilación (`build.ps1`), instalación (`install.ps1`) y generación de iconos Fluent Dark (`generate_fluent_icons.py`).
 * `terminal/cyberpunk-neon.omp.json` — Tema Cyberpunk Neón para Windows Terminal + Oh My Posh.

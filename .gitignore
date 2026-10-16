@@ -6,3 +6,6 @@ obj/
 .vs/
 Thumbs.db
 .DS_Store
+desktop.ini
+.folder-icon.ico
+logs/
