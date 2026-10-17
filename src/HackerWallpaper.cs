@@ -9,12 +9,21 @@ using System.Drawing.Text;
 using System.IO;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 using System.Windows.Forms;
+
+[assembly: AssemblyTitle("Porygon 3D Desktop Wallpaper")]
+[assembly: AssemblyDescription("3D OpenGL Multi-Monitor Desktop Wallpaper and Network Visualizer")]
+[assembly: AssemblyCompany("Charly-bite Visual Studio")]
+[assembly: AssemblyProduct("Porygon 3D Wallpaper Suite")]
+[assembly: AssemblyCopyright("Copyright (c) 2026")]
+[assembly: AssemblyVersion("2.4.1.0")]
+[assembly: AssemblyFileVersion("2.4.1.0")]
 
 public class WallpaperConfig {
     public int ThemeIndex = 0;       // 0=Matte Bio-Forest & Amber, 1=Matte Matrix, 2=Matte Red Team, 3=Matte Ice Stealth
@@ -4824,9 +4833,6 @@ public class HackerWallpaperForm : Form {
     public static extern bool IsZoomed(IntPtr hWnd);
 
     [DllImport("user32.dll")]
-    public static extern short GetAsyncKeyState(int vKey);
-
-    [DllImport("user32.dll")]
     public static extern IntPtr WindowFromPoint(Point pt);
 
     [DllImport("user32.dll", CharSet = CharSet.Auto)]
@@ -4837,29 +4843,6 @@ public class HackerWallpaperForm : Form {
 
     [DllImport("user32.dll")]
     public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
-
-    public delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
-
-    [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-    public static extern IntPtr SetWindowsHookEx(int idHook, LowLevelMouseProc lpfn, IntPtr hMod, uint dwThreadId);
-
-    [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-    public static extern bool UnhookWindowsHookEx(IntPtr hhk);
-
-    [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-    public static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-    public static extern IntPtr GetModuleHandle(string lpModuleName);
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct MSLLHOOKSTRUCT {
-        public Point pt;
-        public uint mouseData;
-        public uint flags;
-        public uint time;
-        public IntPtr dwExtraInfo;
-    }
 
     [DllImport("user32.dll")]
     public static extern bool SetProcessDpiAwarenessContext(IntPtr dpiContext);
@@ -4995,8 +4978,6 @@ public class HackerWallpaperForm : Form {
     private Point brain3DDragStartPt;
     private float brain3DDragStartYaw = 0f;
     private float brain3DDragStartPitch = 0.14f;
-    private IntPtr mouseHookHandle = IntPtr.Zero;
-    private LowLevelMouseProc mouseHookProc;
     private HashSet<string> vtAuditedIps = new HashSet<string>();
 
     // Real System Telemetry & Radar Blips with Mouse Hover Metadata
@@ -6020,7 +6001,7 @@ public class HackerWallpaperForm : Form {
         if ((now - lastHotkeyUtc).TotalMilliseconds < 280) return;
         lastHotkeyUtc = now;
 
-        if (hk == HOTKEY_ID) {
+        if (hk == HOTKEY_ID || hk == HOTKEY_GAMER_ID) {
             ShowConfigWindow();
         } else if (hk == HOTKEY_MODEL_ID) {
             TriggerPorygonTrainingWave();
@@ -6034,46 +6015,14 @@ public class HackerWallpaperForm : Form {
             AdjustTerminalOpacity(-10);
         } else if (hk == HOTKEY_BG_MODE_ID) {
             CycleBgSceneMode();
-        } else if (hk == HOTKEY_GAMER_ID) {
-            ToggleGamerMode();
         }
     }
 
-    private void PollGlobalHotkeysFallback() {
+    private void EnsureHotkeysRegistered() {
         try {
-            bool ctrl = (GetAsyncKeyState(0x11) & 0x8000) != 0; // VK_CONTROL
-            bool alt  = (GetAsyncKeyState(0x12) & 0x8000) != 0; // VK_MENU (Alt)
-            if (!ctrl || !alt) {
-                prevHotkeyMask = 0;
-                return;
+            if (hotkeySink == null || hotkeySink.Handle == IntPtr.Zero) {
+                hotkeySink = new HotkeyMessageWindow(this);
             }
-            int mask = 0;
-            if ((GetAsyncKeyState((int)Keys.W) & 0x8000) != 0) mask |= 1;
-            if ((GetAsyncKeyState((int)Keys.G) & 0x8000) != 0) mask |= 2;
-            if ((GetAsyncKeyState((int)Keys.P) & 0x8000) != 0) mask |= 4;
-            if ((GetAsyncKeyState((int)Keys.B) & 0x8000) != 0) mask |= 8;
-            if ((GetAsyncKeyState((int)Keys.M) & 0x8000) != 0) mask |= 16;
-            if ((GetAsyncKeyState((int)Keys.Up) & 0x8000) != 0) mask |= 32;
-            if ((GetAsyncKeyState((int)Keys.Down) & 0x8000) != 0) mask |= 64;
-
-            int newlyPressed = mask & ~prevHotkeyMask;
-            prevHotkeyMask = mask;
-
-            if ((newlyPressed & 1) != 0) HandleHotkeyCommand(HOTKEY_ID);
-            else if ((newlyPressed & 2) != 0) HandleHotkeyCommand(HOTKEY_GAMER_ID);
-            else if ((newlyPressed & 4) != 0) HandleHotkeyCommand(HOTKEY_MODEL_ID);
-            else if ((newlyPressed & 8) != 0) HandleHotkeyCommand(HOTKEY_BRAIN_FULL_ID);
-            else if ((newlyPressed & 16) != 0) HandleHotkeyCommand(HOTKEY_BG_MODE_ID);
-            else if ((newlyPressed & 32) != 0) HandleHotkeyCommand(HOTKEY_OPACITY_UP_ID);
-            else if ((newlyPressed & 64) != 0) HandleHotkeyCommand(HOTKEY_OPACITY_DOWN_ID);
-        } catch { }
-    }
-
-    protected override void OnShown(EventArgs e) {
-        base.OnShown(e);
-        AttachToDesktopWorkerW();
-        try {
-            if (hotkeySink == null) hotkeySink = new HotkeyMessageWindow(this);
             IntPtr hkHwnd = hotkeySink.Handle;
             RegisterHotKey(hkHwnd, HOTKEY_ID, MOD_CONTROL | MOD_ALT, (uint)Keys.W);
             RegisterHotKey(hkHwnd, HOTKEY_MODEL_ID, MOD_CONTROL | MOD_ALT, (uint)Keys.P);
@@ -6083,7 +6032,12 @@ public class HackerWallpaperForm : Form {
             RegisterHotKey(hkHwnd, HOTKEY_BG_MODE_ID, MOD_CONTROL | MOD_ALT, (uint)Keys.M);
             RegisterHotKey(hkHwnd, HOTKEY_GAMER_ID, MOD_CONTROL | MOD_ALT, (uint)Keys.G);
         } catch { }
-        InstallMouseWheelHook();
+    }
+
+    protected override void OnShown(EventArgs e) {
+        base.OnShown(e);
+        AttachToDesktopWorkerW();
+        EnsureHotkeysRegistered();
         renderTimer.Start();
         if (Config.GamerMode) {
             UpdateGamerSuspensionState(true);
@@ -6092,10 +6046,6 @@ public class HackerWallpaperForm : Form {
     }
 
     protected override void OnFormClosing(FormClosingEventArgs e) {
-        if (mouseHookHandle != IntPtr.Zero) {
-            try { UnhookWindowsHookEx(mouseHookHandle); } catch { }
-            mouseHookHandle = IntPtr.Zero;
-        }
         if (hotkeySink != null && hotkeySink.Handle != IntPtr.Zero) {
             IntPtr hkHwnd = hotkeySink.Handle;
             UnregisterHotKey(hkHwnd, HOTKEY_ID);
@@ -6470,10 +6420,6 @@ public class HackerWallpaperForm : Form {
         return brain3DManualPitch;
     }
 
-    private IntPtr MouseWheelHookCallback(int nCode, IntPtr wParam, IntPtr lParam) {
-        return CallNextHookEx(mouseHookHandle, nCode, wParam, lParam);
-    }
-
     private void TriggerPorygonTrainingWave() {
         if (porygon == null) return;
         porygon.TriggerTrainingWave(screenW, screenH);
@@ -6484,31 +6430,8 @@ public class HackerWallpaperForm : Form {
         const int WM_NCHITTEST = 0x0084;
         const int WM_MOUSEACTIVATE = 0x0021;
         if (m.Msg == WM_HOTKEY) {
-            int hk = m.WParam.ToInt32();
-            if (hk == HOTKEY_ID) {
-                ShowConfigWindow();
-                return;
-            } else if (hk == HOTKEY_MODEL_ID) {
-                TriggerPorygonTrainingWave();
-                return;
-            } else if (hk == HOTKEY_BRAIN_FULL_ID) {
-                brain3DCollapsed = false;
-                brain3DFullscreen = !brain3DFullscreen;
-                hudBrain3DDirty = true;
-                return;
-            } else if (hk == HOTKEY_OPACITY_UP_ID) {
-                AdjustTerminalOpacity(10);
-                return;
-            } else if (hk == HOTKEY_OPACITY_DOWN_ID) {
-                AdjustTerminalOpacity(-10);
-                return;
-            } else if (hk == HOTKEY_BG_MODE_ID) {
-                CycleBgSceneMode();
-                return;
-            } else if (hk == HOTKEY_GAMER_ID) {
-                ToggleGamerMode();
-                return;
-            }
+            HandleHotkeyCommand(m.WParam.ToInt32());
+            return;
         }
         const int WM_QUERYENDSESSION = 0x0011;
         const int WM_ENDSESSION = 0x0016;
@@ -6928,9 +6851,11 @@ public class HackerWallpaperForm : Form {
         if (toggleGamerEvent != null && toggleGamerEvent.WaitOne(0)) {
             SetGamerMode(!Config.GamerMode, "ACCESO DIRECTO");
         }
-        PollGlobalHotkeysFallback();
 
         frameCount++;
+        if (frameCount == 25 || frameCount == 90) {
+            EnsureHotkeysRegistered();
+        }
 
         // Throttle disk flag checks to once every 20 ticks (~0.8s) instead of every frame (eliminates 48 disk I/O ops/sec)
         if (frameCount % 20 == 0 || isGamerSuspended) {
@@ -6984,8 +6909,9 @@ public class HackerWallpaperForm : Form {
         }
 
         // Interactive 3D Brain Click-and-Drag Orbit + Single-Click Detection on Desktop HUD Cards
-        bool leftDown = (GetAsyncKeyState(0x01) & 0x8000) != 0;
-        bool rightDown = (GetAsyncKeyState(0x02) & 0x8000) != 0;
+        MouseButtons mb = Control.MouseButtons;
+        bool leftDown = (mb & MouseButtons.Left) != 0;
+        bool rightDown = (mb & MouseButtons.Right) != 0;
         bool anyBrainDragBtn = leftDown || rightDown;
 
         if (!isGamerSuspended && Config.ShowPorygon && !brain3DCollapsed) {

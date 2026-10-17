@@ -22,11 +22,38 @@ Copy-Item "$repoRoot\bin\HackerLockScreen.exe" "$installDir\HackerLockScreen.exe
 Copy-Item "$repoRoot\bin\TrayAutoHide.exe" "$installDir\TrayAutoHide.exe" -Force
 Copy-Item "$repoRoot\Models\*.glb" "$installDir\Models\" -Force
 
-# Register auto-start in HKCU Run and Interactive Scheduled Task
+# Register auto-start in HKCU Run, Startup Folder, Start Menu Hotkeys, and Interactive Scheduled Task
 $runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
 Set-ItemProperty -Path $runKey -Name "HackerWallpaper" -Value "`"$installDir\HackerWallpaper.exe`""
 Set-ItemProperty -Path $runKey -Name "TrayAutoHide" -Value "`"$installDir\TrayAutoHide.exe`""
 Remove-ItemProperty -Path $runKey -Name "TranslucentTB" -ErrorAction SilentlyContinue
+
+try {
+    $wsh = New-Object -ComObject WScript.Shell
+    $startPrograms = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs"
+
+    # Startup folder shortcut
+    $lnkBoot = $wsh.CreateShortcut("$startupDir\PorygonWallpaper.lnk")
+    $lnkBoot.TargetPath = "$installDir\HackerWallpaper.exe"
+    $lnkBoot.WorkingDirectory = $installDir
+    $lnkBoot.Save()
+
+    # Start Menu shortcut for Control Panel (Ctrl+Alt+G)
+    $lnkCtrlG = $wsh.CreateShortcut("$startPrograms\Porygon Control Panel.lnk")
+    $lnkCtrlG.TargetPath = "$installDir\HackerWallpaper.exe"
+    $lnkCtrlG.Arguments = "--config"
+    $lnkCtrlG.WorkingDirectory = $installDir
+    $lnkCtrlG.Hotkey = "Ctrl+Alt+G"
+    $lnkCtrlG.Save()
+
+    # Start Menu shortcut for Control Panel (Ctrl+Alt+W)
+    $lnkCtrlW = $wsh.CreateShortcut("$startPrograms\Porygon Wallpaper Config.lnk")
+    $lnkCtrlW.TargetPath = "$installDir\HackerWallpaper.exe"
+    $lnkCtrlW.Arguments = "--config"
+    $lnkCtrlW.WorkingDirectory = $installDir
+    $lnkCtrlW.Hotkey = "Ctrl+Alt+W"
+    $lnkCtrlW.Save()
+} catch { }
 
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
 $trigger.Delay = "PT4S"

@@ -2,11 +2,20 @@ using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Windows.Forms;
 using Microsoft.Win32;
+
+[assembly: AssemblyTitle("Porygon Tray AutoHide Utility")]
+[assembly: AssemblyDescription("Taskbar System Tray Auto-Hide and Desktop Wallpaper Supervisor")]
+[assembly: AssemblyCompany("Charly-bite Visual Studio")]
+[assembly: AssemblyProduct("Porygon 3D Wallpaper Suite")]
+[assembly: AssemblyCopyright("Copyright (c) 2026")]
+[assembly: AssemblyVersion("2.4.1.0")]
+[assembly: AssemblyFileVersion("2.4.1.0")]
 
 public class TrayAutoHideContext : ApplicationContext {
     [DllImport("user32.dll")] private static extern bool SetProcessDpiAwarenessContext(IntPtr value);
@@ -38,6 +47,7 @@ public class TrayAutoHideContext : ApplicationContext {
         StopOtherTrayAutoHideInstances();
         ConfigureTaskbarRegistrySettings();
         EnsureTranslucentTaskbarClear();
+        EnsureWallpaperRunning();
         EnforceSingleMonitorTaskbars();
 
         IntPtr tray, notifyWnd;
@@ -51,6 +61,20 @@ public class TrayAutoHideContext : ApplicationContext {
         pollTimer.Interval = 45; // 22 Hz responsive clock-hover detection
         pollTimer.Tick += OnPollTick;
         pollTimer.Start();
+    }
+
+    private static void EnsureWallpaperRunning() {
+        try {
+            if (Process.GetProcessesByName("HackerWallpaper").Length == 0) {
+                string wpExe = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "HackerWallpaper.exe");
+                if (File.Exists(wpExe)) {
+                    ProcessStartInfo psi = new ProcessStartInfo(wpExe);
+                    psi.WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory;
+                    psi.UseShellExecute = true;
+                    Process.Start(psi);
+                }
+            }
+        } catch { }
     }
 
     private static void StopOtherTrayAutoHideInstances() {
@@ -203,7 +227,6 @@ public class TrayAutoHideContext : ApplicationContext {
 
     [DllImport("user32.dll")] private static extern bool EnumChildWindows(IntPtr hWndParent, EnumChildProc lpEnumFunc, IntPtr lParam);
     [DllImport("user32.dll")] private static extern bool RedrawWindow(IntPtr hWnd, IntPtr lprcUpdate, IntPtr hrgnUpdate, uint flags);
-    [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int vKey);
     private delegate bool EnumChildProc(IntPtr hWnd, IntPtr lParam);
 
     private const int SW_SHOWNA = 8;
@@ -272,7 +295,8 @@ public class TrayAutoHideContext : ApplicationContext {
         if (tickCount % 30 == 0) {
             EnforceSingleMonitorTaskbars();
         }
-        if (tickCount % 200 == 0) {
+        if (tickCount == 15 || tickCount % 200 == 0) {
+            EnsureWallpaperRunning();
             EnsureTranslucentTaskbarClear();
         }
 
@@ -287,7 +311,7 @@ public class TrayAutoHideContext : ApplicationContext {
 
         bool inHoverZone = (cursor.X >= triggerLeft && cursor.X <= trayW + 8 && cursor.Y >= triggerTop && cursor.Y <= trayTop + trayH + 12);
         bool inKeepAliveZone = (cursor.X >= triggerLeft - 50 && cursor.X <= trayW + 12 && cursor.Y >= triggerTop - 40 && cursor.Y <= trayTop + trayH + 16);
-        bool mousePressed = ((GetAsyncKeyState(0x01) & 0x8000) != 0) || ((GetAsyncKeyState(0x02) & 0x8000) != 0);
+        bool mousePressed = (Control.MouseButtons & (MouseButtons.Left | MouseButtons.Right)) != 0;
 
         if (inHoverZone) {
             lastHoverTime = DateTime.UtcNow;
