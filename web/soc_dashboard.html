@@ -431,6 +431,35 @@
       <div class="log-path">SIEM JSONL: <span id="jsonlPath">C:\Users\Admin\Porygon-Cyber-IDS-Wallpaper\logs\siem_security_events.jsonl</span></div>
     </div>
 
+    <!-- OFFICE-PC SSH PROXY C2 / IDS TELEMETRY BRIDGE BANNER -->
+    <div class="action-banner" style="border-left-color:var(--cyan); margin-bottom:14px; flex-direction:column; align-items:stretch; gap:8px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+        <div>
+          🔗 <strong>PROXY SSH UNIFICADO OFFICE-PC (100.89.1.27 -> :8002 C2/IDS & :5080 QB-NIDS/VT):</strong>
+          <span class="badge b-info" id="officeBadge">CONECTANDO...</span>
+          <span class="badge b-info" style="background:rgba(52,211,153,0.16);color:#34d399;border:1px solid #34d399;margin-left:4px;">🛡️ LISTA BLANCA MUTUA PORYGON ↔ C2 ACTIVA</span>
+          <span style="margin-left:8px;color:var(--txt-main);">
+            Agentes C2 Online: <strong style="color:#34d399" id="offOnlineAgents">0</strong>/<span id="offTotalAgents">0</span> |
+            Logs C2: <strong style="color:var(--gold)" id="offLogsRaw">0</strong> (<span id="offLogsDec">0</span> descifrados) |
+            Creds: <strong style="color:var(--cyan)" id="offCreds">0</strong> |
+            Screenshots: <strong style="color:var(--teal)" id="offScreens">0</strong> |
+            Alertas IDS: <strong style="color:var(--red)" id="offIdsAlerts">0</strong> |
+            Hosts LAN: <strong style="color:var(--gold)" id="offLanHosts">0</strong>
+          </span>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="btn btn-sm btn-gold" onclick="probeOnlineC2Agents()" title="Ejecutar sonda IDS de solo lectura en los agentes actualmente online sin modificar binarios">🧪 Probar Agentes Online (Solo Lectura)</button>
+          <button class="btn btn-sm btn-cyan" onclick="syncOfficePcC2(false)">🔄 Sincronizar C2/IDS</button>
+          <button class="btn btn-sm btn-gold" onclick="triggerOfficeIdsScan()">🔎 Escanear Logs IDS (:8002)</button>
+          <button class="btn btn-sm" onclick="syncOfficePcC2(true)" title="Reiniciar túnel SSH local 127.0.0.1:8002 y :5080">🔌 Reconectar Túnel SSH</button>
+        </div>
+      </div>
+      <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; font-size:11px; color:var(--txt-sub); border-top:1px solid rgba(52,168,138,0.2); padding-top:6px;">
+        <div>🟢 <strong>Dispositivos C2 con Heartbeat en Vivo:</strong> <span id="offOnlineList" style="color:var(--cyan)">Detectando...</span></div>
+        <div id="offProbeReport" style="color:var(--gold);">Listo para probar agentes online (Solo lectura, sin actualizar binarios)</div>
+      </div>
+    </div>
+
     <!-- GLOBAL ENTERPRISE ACTION TOOLBAR -->
     <div class="toolbar">
       <button class="btn" onclick="triggerAudit()">🔍 Auditar Red TCP/PID + Registro + Startup</button>
@@ -875,6 +904,21 @@
   function syncCtiFeeds() {
     showToast('🌐 Descargando Feeds CTI en vivo (Feodo Tracker C2 Botnet + CINS Army)...', false);
     apiPost('/api/sync-cti', {});
+  }
+
+  function syncOfficePcC2(restartTunnel) {
+    showToast('🔗 Sincronizando proxy SSH office-pc (100.89.1.27 -> :8002 C2/IDS & :5080 QB-NIDS/VT)...', false);
+    apiPost('/api/sync-office-c2', { restartTunnel: !!restartTunnel });
+  }
+
+  function triggerOfficeIdsScan() {
+    showToast('🔎 Ejecutando escaneo IDS remoto sobre los logs C2 de office-pc (:8002)...', false);
+    apiPost('/api/trigger-office-ids-scan', {});
+  }
+
+  function probeOnlineC2Agents() {
+    showToast('🧪 Ejecutando prueba IDS unificada (solo lectura, sin tocar binarios) sobre los agentes C2 actualmente online...', false);
+    apiPost('/api/probe-online-c2-agents', {});
   }
 
   function triggerDnsAudit() {
@@ -1350,6 +1394,27 @@
         document.getElementById('ag2Stats').innerHTML =
           `Acciones IPS: <strong>${st.totalIpsActions}</strong> | IPs Bloqueadas: <strong>${(st.blockedIps||[]).length}</strong> | Cuarentena: <strong>${(st.quarantinedFiles||[]).length}</strong><br>` +
           `Candidato Bloqueo IP: <strong style="color:var(--red)">${esc(st.candidateBlockIp || 'Ninguna')}</strong> (${esc(st.candidateBlockProc || '-')})`;
+      }
+
+      if (st.officePc) {
+        const ob = document.getElementById('officeBadge');
+        if (st.officePc.online) {
+          ob.textContent = 'ONLINE (:8002 C2/IDS + :5080 NIDS/VT)';
+          ob.className = 'badge b-info';
+        } else {
+          ob.textContent = 'OFFLINE';
+          ob.className = 'badge b-crit';
+        }
+        document.getElementById('offOnlineAgents').textContent = Number(st.officePc.onlineAgentsCount || 0).toLocaleString();
+        document.getElementById('offTotalAgents').textContent = Number(st.officePc.totalAgentsCount || 0).toLocaleString();
+        document.getElementById('offLogsRaw').textContent = Number(st.officePc.logsRaw || 0).toLocaleString();
+        document.getElementById('offLogsDec').textContent = Number(st.officePc.logsDecrypted || 0).toLocaleString();
+        document.getElementById('offCreds').textContent = Number(st.officePc.credentialsCount || 0).toLocaleString();
+        document.getElementById('offScreens').textContent = Number(st.officePc.screenshotsCount || 0).toLocaleString();
+        document.getElementById('offIdsAlerts').textContent = Number(st.officePc.idsAlertsTotal || 0).toLocaleString();
+        document.getElementById('offLanHosts').textContent = Number(st.officePc.lanHostsTotal || 0).toLocaleString();
+        document.getElementById('offOnlineList').textContent = st.officePc.onlineAgentsSummary || 'Ninguno activo (<120s)';
+        document.getElementById('offProbeReport').textContent = st.officePc.lastLiveProbeReport || 'Listo para probar agentes online';
       }
 
       if (st.soar) {

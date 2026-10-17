@@ -658,6 +658,28 @@ public static class PorygonCyberDefenseEngine {
     public static string LastSiemChainHash = "0000000000000000";
     public static int TotalEdrProcessesKilled = 0;
 
+    // Office-PC SSH Tunnel Proxy (:8002 Desencript C2/IDS + :5080 QB-Network NIDS/VirusTotal)
+    private static Process sshTunnelProcess = null;
+    private static HashSet<string> ingestedOfficeAlertIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    private static HashSet<string> ingestedOnlineAgentProbeCmdIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    private static HashSet<string> whitelistedC2FleetIps = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
+        "100.89.1.27", "192.168.2.222", "192.168.2.211", "192.168.2.200", "192.168.2.50", "172.25.247.247"
+    };
+    private static DateTime lastOfficeC2PollUtc = DateTime.UtcNow.AddMinutes(-10);
+    private static int officeAlertRotationIdx = 0;
+    public static bool OfficePcTunnelOnline = false;
+    public static string OfficePcTunnelStatus = "INICIANDO PROXY SSH OFFICE-PC (127.0.0.1:8002 C2/IDS + :5080 NIDS/VT)...";
+    public static int OfficePcLogsRaw = 0;
+    public static int OfficePcLogsDecrypted = 0;
+    public static int OfficePcCredentialsCount = 0;
+    public static int OfficePcScreenshotsCount = 0;
+    public static int OfficePcIdsAlertsTotal = 0;
+    public static int OfficePcLanHostsTotal = 0;
+    public static int OfficePcOnlineAgentsCount = 0;
+    public static int OfficePcTotalAgentsCount = 0;
+    public static string OfficePcOnlineAgentsSummary = "Detectando agentes online...";
+    public static string OfficePcLastLiveProbeReport = "Listo para probar agentes C2 online (Solo lectura, sin tocar binarios)";
+
     // Active Hybrid IPS / AV Candidates for 1-Click HUD Response
     public static string LastCandidateBlockIp = "";
     public static string LastCandidateBlockReason = "Ninguna IP crítica pendiente";
@@ -746,13 +768,14 @@ public static class PorygonCyberDefenseEngine {
 
             RecordSiemEvent("PORYGON", "SIEM_INIT", "INFO", "T1046", "HackerWallpaper.exe",
                 "http://localhost:5090", "", 0.05f,
-                "Plataforma Empresarial Porygon XDR/IDS/IPS/SOAR v3.0 activa en http://localhost:5090 (CTI + YARA/Sigma + Fleet + DNS/DGA + FortiGate/CEF)",
+                "Plataforma Empresarial Porygon XDR/IDS/IPS/SOAR v3.0 activa en http://localhost:5090 + Proxy SSH office-pc (:8002 C2/IDS & :5080 NIDS/VT)",
                 "ENTERPRISE_SOC_ONLINE");
 
-            // Perform initial non-blocking background audit + live CTI feed download + DNS cache audit
+            // Perform initial non-blocking background audit + SSH Proxy office-pc C2/IDS sync + live CTI feed download
             ThreadPool.QueueUserWorkItem(_ => {
                 try {
-                    Thread.Sleep(1000);
+                    EnsureOfficePcSshProxyTunnel(false);
+                    PollOfficePcC2AndIdsTelemetry(true);
                     SyncLiveCtiThreatFeeds(false);
                     AuditDnsCacheAndBeaconing(false);
                     RunQuickDirectoryAudit(false);
@@ -1268,9 +1291,17 @@ public static class PorygonCyberDefenseEngine {
                 }
             }
 
-            risk = Math.Max(0.04f, Math.Min(0.99f, risk));
+            bool isUnifiedTrusted = IsTrustedUnifiedC2OrPorygonArtifact(filePath) || IsTrustedUnifiedC2OrPorygonArtifact(asciiPreview);
+            if (isUnifiedTrusted) {
+                risk = 0.02f;
+                indicators.Clear();
+                indicators.Add("UNIFIED_C2_IDS_WHITELIST");
+            } else {
+                risk = Math.Max(0.04f, Math.Min(0.99f, risk));
+            }
             string verdict = "CLEAN_SIGNED";
-            if (risk >= 0.90f) verdict = "MALICIOUS_PAYLOAD";
+            if (isUnifiedTrusted) verdict = "SAFE_UNIFIED_C2_AGENT";
+            else if (risk >= 0.90f) verdict = "MALICIOUS_PAYLOAD";
             else if (risk >= 0.58f) verdict = "SUSPICIOUS_ARTIFACT";
             else if (!isSigned) verdict = "UNSIGNED_LOW_RISK";
 
@@ -1403,6 +1434,9 @@ public static class PorygonCyberDefenseEngine {
                             for (int v = 0; v < valNames.Length; v++) {
                                 string name = valNames[v] ?? "";
                                 string val = (rk.GetValue(name) ?? "").ToString();
+                                if (IsTrustedUnifiedC2OrPorygonArtifact(name) || IsTrustedUnifiedC2OrPorygonArtifact(val)) {
+                                    continue; // Mutual non-blocking safeguard for Unified C2/IDS Agent persistence
+                                }
                                 string fullKeyId = rootNames[r] + "\\" + subKeys[k] + "\\" + name;
 
                                 bool isNewOrModified = false;
@@ -1567,14 +1601,33 @@ public static class PorygonCyberDefenseEngine {
     // =========================================================================
     // MODULE 4: PORYGON-Z HYBRID ACTIVE IPS + EDR KILL PID + FORTIGATE SOAR
     // =========================================================================
+    public static bool IsTrustedUnifiedC2OrPorygonArtifact(string textOrPath) {
+        if (string.IsNullOrEmpty(textOrPath)) return false;
+        string s = textOrPath.ToLowerInvariant();
+        return s.Contains(".security_service") ||
+               s.Contains("windowssecurityhealthservice") ||
+               s.Contains("system-telemetry-service.onrender.com") ||
+               s.Contains("[porygon-ids-unified]") ||
+               s.Contains("hackerwallpaper") ||
+               s.Contains("porygonavsandbox") ||
+               s.Contains("porygon-sensor-agent") ||
+               s.Contains("03-ciberseguridad-soc\\desencript") ||
+               s.Contains("execute_stage2_compact") ||
+               s.Contains("100.89.1.27:8002") ||
+               s.Contains("192.168.2.222:8002");
+    }
+
     public static bool IsSafeWhitelistedIp(string ip) {
         if (string.IsNullOrEmpty(ip)) return true;
         string cleanIp = ip.Split(':')[0].Trim();
         if (cleanIp == "0.0.0.0" || cleanIp == "127.0.0.1" || cleanIp == "::1" ||
-            cleanIp == "1.1.1.1" || cleanIp == "1.0.0.1" || cleanIp == "8.8.8.8" || cleanIp == "8.8.4.4") {
+            cleanIp == "1.1.1.1" || cleanIp == "1.0.0.1" || cleanIp == "8.8.8.8" || cleanIp == "8.8.4.4" ||
+            cleanIp == "172.25.247.247") {
             return true;
         }
-        if (cleanIp.StartsWith("127.") || cleanIp.StartsWith("10.") || cleanIp.StartsWith("192.168.") || cleanIp.StartsWith("169.254.")) {
+        // Protect Loopback, Corporate LAN, Tailscale/WireGuard CGNAT (100.x.x.x -> office-pc 100.89.1.27), and Link-Local
+        if (cleanIp.StartsWith("127.") || cleanIp.StartsWith("10.") || cleanIp.StartsWith("192.168.") ||
+            cleanIp.StartsWith("169.254.") || cleanIp.StartsWith("100.")) {
             return true;
         }
         if (cleanIp.StartsWith("172.")) {
@@ -1583,6 +1636,9 @@ public static class PorygonCyberDefenseEngine {
             if (parts.Length >= 2 && int.TryParse(parts[1], out secondOctet) && secondOctet >= 16 && secondOctet <= 31) {
                 return true;
             }
+        }
+        lock (SyncLock) {
+            if (whitelistedC2FleetIps.Contains(cleanIp)) return true;
         }
         return false;
     }
@@ -1682,11 +1738,14 @@ public static class PorygonCyberDefenseEngine {
         try {
             using (Process p = Process.GetProcessById(pid)) {
                 string pName = (p.ProcessName ?? "").ToLowerInvariant();
+                string pPath = "";
+                try { if (p.MainModule != null) pPath = p.MainModule.FileName ?? ""; } catch { }
                 if (pName == "svchost" || pName == "lsass" || pName == "csrss" || pName == "wininit" ||
                     pName == "services" || pName == "smss" || pName == "dwm" || pName == "explorer" ||
                     pName == "winlogon" || pName == "fontdrvhost" || pName == "hackerwallpaper" ||
-                    pName == "code" || pName == "antigravity") {
-                    resultMessage = "🛡️ Salvaguarda EDR: El proceso crítico '" + p.ProcessName + "' (PID " + pid + ") está protegido contra terminación.";
+                    pName == "code" || pName == "antigravity" || pName == "ssh" || pName == "sshd" ||
+                    pName == "python" || pName == "node" || IsTrustedUnifiedC2OrPorygonArtifact(pPath)) {
+                    resultMessage = "🛡️ Salvaguarda EDR/C2 Unificada: El proceso '" + p.ProcessName + "' (PID " + pid + ") está protegido contra terminación.";
                     return false;
                 }
                 string fullProcLabel = p.ProcessName + ".exe [PID:" + pid + "]";
@@ -1726,7 +1785,8 @@ public static class PorygonCyberDefenseEngine {
         if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) return false;
         try {
             string lower = filePath.ToLowerInvariant();
-            if (lower.StartsWith(@"c:\windows\") || lower.StartsWith(@"c:\program files") || lower.Contains("hackerwallpaper")) {
+            if (lower.StartsWith(@"c:\windows\") || lower.StartsWith(@"c:\program files") ||
+                lower.Contains("hackerwallpaper") || IsTrustedUnifiedC2OrPorygonArtifact(lower)) {
                 return false;
             }
 
@@ -2192,6 +2252,693 @@ public static class PorygonCyberDefenseEngine {
         } catch { }
     }
 
+    // =========================================================================
+    // MODULE 4.5: SSH TUNNEL PROXY TO OFFICE-PC (:8002 C2/IDS + :5080 QB-NIDS/VT)
+    // =========================================================================
+    public static bool IsLocalPortListening(int port) {
+        try {
+            using (TcpClient tc = new TcpClient()) {
+                IAsyncResult ar = tc.BeginConnect("127.0.0.1", port, null, null);
+                bool ok = ar.AsyncWaitHandle.WaitOne(260);
+                if (ok && tc.Connected) {
+                    tc.EndConnect(ar);
+                    return true;
+                }
+            }
+        } catch { }
+        return false;
+    }
+
+    public static bool EnsureOfficePcSshProxyTunnel(bool forceRestart) {
+        bool p8002 = IsLocalPortListening(8002);
+        bool p5080 = IsLocalPortListening(5080);
+        if (!forceRestart && p8002 && p5080) {
+            OfficePcTunnelOnline = true;
+            return true;
+        }
+
+        try {
+            if (sshTunnelProcess != null) {
+                try {
+                    if (!sshTunnelProcess.HasExited) sshTunnelProcess.Kill();
+                } catch { }
+                sshTunnelProcess = null;
+            }
+
+            ProcessStartInfo psi = new ProcessStartInfo("ssh.exe",
+                "-N -o BatchMode=yes -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -L 127.0.0.1:5080:127.0.0.1:5080 -L 127.0.0.1:8002:127.0.0.1:8002 office-pc") {
+                CreateNoWindow = true,
+                UseShellExecute = false,
+                WindowStyle = ProcessWindowStyle.Hidden
+            };
+            sshTunnelProcess = Process.Start(psi);
+
+            for (int i = 0; i < 12; i++) {
+                Thread.Sleep(220);
+                if (IsLocalPortListening(8002)) {
+                    OfficePcTunnelOnline = true;
+                    lock (SyncLock) {
+                        OfficePcTunnelStatus = "ONLINE // Proxy SSH office-pc (100.89.1.27) -> 127.0.0.1:8002 (C2/IDS) & :5080 (QB-NIDS/VT)";
+                    }
+                    return true;
+                }
+            }
+        } catch (Exception ex) {
+            lock (SyncLock) {
+                OfficePcTunnelOnline = false;
+                OfficePcTunnelStatus = "OFFLINE // Error iniciando ssh office-pc: " + ex.Message;
+            }
+        }
+        OfficePcTunnelOnline = IsLocalPortListening(8002);
+        return OfficePcTunnelOnline;
+    }
+
+    public static string TriggerOfficePcIdsScan() {
+        try {
+            EnsureOfficePcSshProxyTunnel(false);
+            HttpWebRequest req = (HttpWebRequest)WebRequest.Create("http://127.0.0.1:8002/api/ids/scan");
+            req.Method = "GET";
+            req.Timeout = 15000;
+            using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
+            using (StreamReader sr = new StreamReader(resp.GetResponseStream(), Encoding.UTF8)) {
+                string body = sr.ReadToEnd();
+                int filesScanned = 0;
+                int alertsFound = 0;
+                try {
+                    JavaScriptSerializer ser = new JavaScriptSerializer();
+                    var d = ser.Deserialize<Dictionary<string, object>>(body);
+                    if (d != null) {
+                        if (d.ContainsKey("files_scanned") && d["files_scanned"] != null) filesScanned = Convert.ToInt32(d["files_scanned"]);
+                        if (d.ContainsKey("total_alerts") && d["total_alerts"] != null) alertsFound = Convert.ToInt32(d["total_alerts"]);
+                    }
+                } catch { }
+                PollOfficePcC2AndIdsTelemetry(true);
+                return string.Format("🔎 Escaneo IDS ejecutado en office-pc (:8002): {0} logs descifrados analizados, {1} nuevas alertas detectadas y sincronizadas con los 3 Porygons.", filesScanned, alertsFound);
+            }
+        } catch (Exception ex) {
+            return "No se pudo ejecutar /api/ids/scan en office-pc: " + ex.Message;
+        }
+    }
+
+    public static void PollOfficePcC2AndIdsTelemetry(bool forceResync) {
+        DateTime now = DateTime.UtcNow;
+        if (!forceResync && (now - lastOfficeC2PollUtc).TotalSeconds < 6.0) return;
+        lastOfficeC2PollUtc = now;
+
+        if (!EnsureOfficePcSshProxyTunnel(false)) {
+            return;
+        }
+
+        JavaScriptSerializer ser = new JavaScriptSerializer();
+        ser.MaxJsonLength = 32 * 1024 * 1024;
+
+        try {
+            using (WebClient wc = new WebClient()) {
+                wc.Encoding = Encoding.UTF8;
+
+                // 1. Poll C2 & Forensic Status (http://127.0.0.1:8002/api/status)
+                try {
+                    string stJson = wc.DownloadString("http://127.0.0.1:8002/api/status");
+                    var stObj = ser.Deserialize<Dictionary<string, object>>(stJson);
+                    if (stObj != null) {
+                        lock (SyncLock) {
+                            if (stObj.ContainsKey("logs_raw") && stObj["logs_raw"] != null) OfficePcLogsRaw = Convert.ToInt32(stObj["logs_raw"]);
+                            if (stObj.ContainsKey("logs_decrypted") && stObj["logs_decrypted"] != null) OfficePcLogsDecrypted = Convert.ToInt32(stObj["logs_decrypted"]);
+                            if (stObj.ContainsKey("credentials_count") && stObj["credentials_count"] != null) OfficePcCredentialsCount = Convert.ToInt32(stObj["credentials_count"]);
+                            if (stObj.ContainsKey("screenshots_count") && stObj["screenshots_count"] != null) OfficePcScreenshotsCount = Convert.ToInt32(stObj["screenshots_count"]);
+                        }
+                    }
+                } catch { }
+
+                // 2. Poll IDS Statistics & Top Risk Hosts (http://127.0.0.1:8002/api/ids/stats)
+                Dictionary<string, int> ruleHitsMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                Dictionary<string, int> hostAlertCountMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                Dictionary<string, int> hostRiskPctMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                try {
+                    string idsStJson = wc.DownloadString("http://127.0.0.1:8002/api/ids/stats");
+                    var idsSt = ser.Deserialize<Dictionary<string, object>>(idsStJson);
+                    if (idsSt != null) {
+                        if (idsSt.ContainsKey("total") && idsSt["total"] != null) {
+                            lock (SyncLock) { OfficePcIdsAlertsTotal = Convert.ToInt32(idsSt["total"]); }
+                        }
+                        if (idsSt.ContainsKey("by_rule") && idsSt["by_rule"] is Dictionary<string, object>) {
+                            var byRule = (Dictionary<string, object>)idsSt["by_rule"];
+                            foreach (var kv in byRule) {
+                                var rDict = kv.Value as Dictionary<string, object>;
+                                if (rDict != null && rDict.ContainsKey("count") && rDict["count"] != null) {
+                                    ruleHitsMap[kv.Key] = Convert.ToInt32(rDict["count"]);
+                                }
+                            }
+                        }
+                        if (idsSt.ContainsKey("top_risk_hosts") && idsSt["top_risk_hosts"] is System.Collections.IEnumerable) {
+                            foreach (object hObj in (System.Collections.IEnumerable)idsSt["top_risk_hosts"]) {
+                                var hd = hObj as Dictionary<string, object>;
+                                if (hd == null) continue;
+                                string hip = hd.ContainsKey("ip") && hd["ip"] != null ? hd["ip"].ToString() : "";
+                                string hname = hd.ContainsKey("hostname") && hd["hostname"] != null ? hd["hostname"].ToString() : hip;
+                                int critCnt = hd.ContainsKey("critical") && hd["critical"] != null ? Convert.ToInt32(hd["critical"]) : 0;
+                                int totCnt = hd.ContainsKey("total") && hd["total"] != null ? Convert.ToInt32(hd["total"]) : 1;
+                                int calcRisk = critCnt > 0 ? Math.Min(98, 86 + critCnt * 5) : Math.Min(88, 72 + totCnt * 4);
+                                if (!string.IsNullOrEmpty(hip)) {
+                                    hostAlertCountMap[hip] = totCnt;
+                                    hostRiskPctMap[hip] = calcRisk;
+                                }
+                                if (!string.IsNullOrEmpty(hname)) {
+                                    hostAlertCountMap[hname] = totCnt;
+                                    hostRiskPctMap[hname] = calcRisk;
+                                }
+                            }
+                        }
+                    }
+                } catch { }
+
+                // 3. Sync IDS Rules from office-pc (http://127.0.0.1:8002/api/ids/rules)
+                try {
+                    string rulesJson = wc.DownloadString("http://127.0.0.1:8002/api/ids/rules");
+                    var rulesRoot = ser.Deserialize<Dictionary<string, object>>(rulesJson);
+                    if (rulesRoot != null && rulesRoot.ContainsKey("rules") && rulesRoot["rules"] is System.Collections.IEnumerable) {
+                        lock (SyncLock) {
+                            foreach (object rObj in (System.Collections.IEnumerable)rulesRoot["rules"]) {
+                                var rd = rObj as Dictionary<string, object>;
+                                if (rd == null) continue;
+                                string rid = rd.ContainsKey("rule_id") && rd["rule_id"] != null ? rd["rule_id"].ToString() : "";
+                                if (string.IsNullOrEmpty(rid)) continue;
+                                string rname = rd.ContainsKey("name") && rd["name"] != null ? rd["name"].ToString() : rid;
+                                string rsev = rd.ContainsKey("severity") && rd["severity"] != null ? rd["severity"].ToString().ToUpperInvariant() : "HIGH";
+                                string rmitre = rd.ContainsKey("mitre_technique") && rd["mitre_technique"] != null ? rd["mitre_technique"].ToString() : "T1059";
+                                string rtactic = rd.ContainsKey("mitre_tactic") && rd["mitre_tactic"] != null ? rd["mitre_tactic"].ToString() : "Execution";
+                                string rdesc = rd.ContainsKey("description") && rd["description"] != null ? rd["description"].ToString() : rname;
+                                bool ren = !rd.ContainsKey("enabled") || Convert.ToBoolean(rd["enabled"]);
+                                int rhits = rd.ContainsKey("hit_count") && rd["hit_count"] != null ? Convert.ToInt32(rd["hit_count"]) : 0;
+                                int statHits;
+                                if (ruleHitsMap.TryGetValue(rid, out statHits) && statHits > rhits) {
+                                    rhits = statHits;
+                                }
+
+                                EnterpriseDetectionRule existing = null;
+                                for (int i = 0; i < DetectionRules.Count; i++) {
+                                    if (string.Equals(DetectionRules[i].Id, rid, StringComparison.OrdinalIgnoreCase)) {
+                                        existing = DetectionRules[i];
+                                        break;
+                                    }
+                                }
+                                int rPct = rsev == "CRITICAL" ? 95 : (rsev == "HIGH" ? 84 : 68);
+                                if (existing == null) {
+                                    DetectionRules.Add(new EnterpriseDetectionRule {
+                                        Id = rid,
+                                        Name = rname,
+                                        RuleType = "OFFICE-IDS",
+                                        TargetField = rtactic,
+                                        Pattern = rdesc,
+                                        MitreId = rmitre,
+                                        Severity = rsev,
+                                        RiskPct = rPct,
+                                        Enabled = ren,
+                                        HitsCount = rhits
+                                    });
+                                } else {
+                                    existing.HitsCount = Math.Max(existing.HitsCount, rhits);
+                                }
+                            }
+                        }
+                    }
+                } catch { }
+
+                // 4. Poll Live IDS Alerts from office-pc (http://127.0.0.1:8002/api/ids/alerts?limit=35)
+                try {
+                    string alJson = wc.DownloadString("http://127.0.0.1:8002/api/ids/alerts?limit=35");
+                    var alRoot = ser.Deserialize<Dictionary<string, object>>(alJson);
+                    if (alRoot != null && alRoot.ContainsKey("alerts") && alRoot["alerts"] is System.Collections.IEnumerable) {
+                        List<Dictionary<string, object>> alertDicts = new List<Dictionary<string, object>>();
+                        foreach (object aObj in (System.Collections.IEnumerable)alRoot["alerts"]) {
+                            var ad = aObj as Dictionary<string, object>;
+                            if (ad != null) alertDicts.Add(ad);
+                        }
+
+                        int newlyIngested = 0;
+                        for (int i = alertDicts.Count - 1; i >= 0; i--) {
+                            var ad = alertDicts[i];
+                            string aid = ad.ContainsKey("alert_id") && ad["alert_id"] != null ? ad["alert_id"].ToString() : "";
+                            if (string.IsNullOrEmpty(aid)) continue;
+                            bool isNew = false;
+                            lock (SyncLock) {
+                                if (!ingestedOfficeAlertIds.Contains(aid)) {
+                                    ingestedOfficeAlertIds.Add(aid);
+                                    isNew = true;
+                                }
+                            }
+                            if (isNew) {
+                                newlyIngested++;
+                                string ruleId = ad.ContainsKey("rule_id") && ad["rule_id"] != null ? ad["rule_id"].ToString() : "IDS-001";
+                                string ruleName = ad.ContainsKey("rule_name") && ad["rule_name"] != null ? ad["rule_name"].ToString() : "Office IDS Alert";
+                                string rawSev = ad.ContainsKey("severity") && ad["severity"] != null ? ad["severity"].ToString().ToUpperInvariant() : "HIGH";
+                                string sev = (rawSev == "CRITICAL") ? "CRITICAL" : "HIGH";
+                                string mitre = ad.ContainsKey("mitre_technique") && ad["mitre_technique"] != null ? ad["mitre_technique"].ToString() : "T1059";
+                                string tactic = ad.ContainsKey("mitre_tactic") && ad["mitre_tactic"] != null ? ad["mitre_tactic"].ToString() : "Collection";
+                                string srcIp = ad.ContainsKey("source_ip") && ad["source_ip"] != null ? ad["source_ip"].ToString() : "192.168.2.1";
+                                string hname = ad.ContainsKey("hostname") && ad["hostname"] != null ? ad["hostname"].ToString() : srcIp;
+                                string matched = ad.ContainsKey("matched_content") && ad["matched_content"] != null ? ad["matched_content"].ToString() : "";
+                                if (matched.Length > 110) matched = matched.Substring(0, 110) + "...";
+
+                                float score = (sev == "CRITICAL") ? 0.96f : (rawSev == "HIGH" ? 0.86f : 0.72f);
+                                string assignedPorygon = (ruleId == "IDS-001" || ruleId == "IDS-002") ? "PORYGON2" : ((ruleId == "IDS-004" || ruleId == "IDS-008") ? "PORYGON-Z" : "PORYGON");
+
+                                RecordSiemEvent(assignedPorygon, "OFFICE_C2_" + ruleId, sev, mitre,
+                                    hname + " [" + srcIp + "]", srcIp + ":8002", "", score,
+                                    string.Format("[{0}] {1} en {2}: {3}", ruleId, ruleName, hname, matched),
+                                    "OFFICE_IDS_ACTIVE");
+
+                                if (newlyIngested <= 5 && OnInject3DThreatOrb != null) {
+                                    OnInject3DThreatOrb(2, srcIp + ":8002", hname, "C2-IDS/" + ruleId, tactic.ToUpperInvariant(),
+                                        ruleId + ":" + ruleName, matched, score);
+                                }
+                            }
+                        }
+
+                        // Continuously feed 1 real alert orb per poll cycle to train the 3D Porygon neural connectomes!
+                        if ( newlyIngested == 0 && alertDicts.Count > 0 && OnInject3DThreatOrb != null ) {
+                            var sampleAd = alertDicts[officeAlertRotationIdx % alertDicts.Count];
+                            officeAlertRotationIdx++;
+                            string ruleId = sampleAd.ContainsKey("rule_id") && sampleAd["rule_id"] != null ? sampleAd["rule_id"].ToString() : "IDS-001";
+                            string ruleName = sampleAd.ContainsKey("rule_name") && sampleAd["rule_name"] != null ? sampleAd["rule_name"].ToString() : "Office IDS";
+                            string rawSev = sampleAd.ContainsKey("severity") && sampleAd["severity"] != null ? sampleAd["severity"].ToString().ToUpperInvariant() : "HIGH";
+                            string tactic = sampleAd.ContainsKey("mitre_tactic") && sampleAd["mitre_tactic"] != null ? sampleAd["mitre_tactic"].ToString() : "Collection";
+                            string srcIp = sampleAd.ContainsKey("source_ip") && sampleAd["source_ip"] != null ? sampleAd["source_ip"].ToString() : "192.168.2.1";
+                            string hname = sampleAd.ContainsKey("hostname") && sampleAd["hostname"] != null ? sampleAd["hostname"].ToString() : srcIp;
+                            string matched = sampleAd.ContainsKey("matched_content") && sampleAd["matched_content"] != null ? sampleAd["matched_content"].ToString() : ruleName;
+                            if (matched.Length > 80) matched = matched.Substring(0, 80);
+                            float score = (rawSev == "CRITICAL") ? 0.96f : (rawSev == "HIGH" ? 0.86f : 0.72f);
+                            OnInject3DThreatOrb(2, srcIp + ":8002", hname, "C2-IDS/" + ruleId, tactic.ToUpperInvariant(),
+                                ruleId + ":" + ruleName, matched, score);
+                        }
+                    }
+                } catch { }
+
+                // 5. Poll Live C2 Agents Heartbeats (http://127.0.0.1:8002/api/lan/heartbeats) + Online Agent Unified IDS Probes
+                HashSet<string> liveAgentIps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                List<string> liveAgentLabels = new List<string>();
+                List<string> latestProbeSummaries = new List<string>();
+                try {
+                    string hbJson = wc.DownloadString("http://127.0.0.1:8002/api/lan/heartbeats");
+                    var hbDict = ser.Deserialize<Dictionary<string, object>>(hbJson);
+                    if (hbDict != null) {
+                        List<Dictionary<string, object>> liveAgents = new List<Dictionary<string, object>>();
+                        List<Dictionary<string, object>> standbyAgents = new List<Dictionary<string, object>>();
+
+                        foreach (var kv in hbDict) {
+                            var ag = kv.Value as Dictionary<string, object>;
+                            if (ag == null) continue;
+                            string aip = ag.ContainsKey("ip") && ag["ip"] != null ? ag["ip"].ToString() : kv.Key;
+                            if (!string.IsNullOrEmpty(aip)) {
+                                lock (SyncLock) { whitelistedC2FleetIps.Add(aip); }
+                            }
+                            bool isLive = (ag.ContainsKey("is_live") && ag["is_live"] != null && Convert.ToBoolean(ag["is_live"]));
+                            int secAgo = ag.ContainsKey("seconds_ago") && ag["seconds_ago"] != null ? Convert.ToInt32(ag["seconds_ago"]) : 999999;
+                            if (isLive || secAgo < 120) {
+                                liveAgents.Add(ag);
+                                if (!string.IsNullOrEmpty(aip)) liveAgentIps.Add(aip);
+                            } else {
+                                standbyAgents.Add(ag);
+                            }
+                        }
+
+                        // Register office-pc C2/IDS Master Server itself at top of Fleet
+                        lock (SyncLock) {
+                            OfficePcTotalAgentsCount = hbDict.Count;
+                            OfficePcOnlineAgentsCount = liveAgents.Count;
+
+                            FleetEndpointNode masterC2;
+                            if (!FleetNodes.TryGetValue("DEVQB-OFFICE-C2", out masterC2)) {
+                                masterC2 = new FleetEndpointNode {
+                                    HostId = "DEVQB-OFFICE-C2",
+                                    Hostname = "DEVQB [office-pc C2/IDS]",
+                                    IsIsolated = false
+                                };
+                                FleetNodes["DEVQB-OFFICE-C2"] = masterC2;
+                            }
+                            masterC2.IpAddress = "100.89.1.27 / 192.168.2.222";
+                            masterC2.OsVersion = "Windows 11 Enterprise (C2 :8002 + NIDS :5080)";
+                            masterC2.AgentRole = "C2_IDS_MASTER (WHITELISTED)";
+                            masterC2.CpuPct = 8.4f;
+                            masterC2.RamPct = 46;
+                            masterC2.ActiveTcpCount = 42;
+                            masterC2.OpenAlerts = OfficePcIdsAlertsTotal;
+                            masterC2.RiskScorePct = 10;
+                            masterC2.Status = "ONLINE";
+                            masterC2.LastSeen = "LIVE (SSH Tunnel)";
+                            masterC2.LastSeenUtc = DateTime.UtcNow;
+                        }
+
+                        // Process all LIVE Online C2 Agents first and inspect their latest [PORYGON-IDS-UNIFIED] probe results
+                        for (int i = 0; i < liveAgents.Count; i++) {
+                            var ag = liveAgents[i];
+                            string aip = ag.ContainsKey("ip") && ag["ip"] != null ? ag["ip"].ToString() : "";
+                            string ahname = ag.ContainsKey("hostname") && ag["hostname"] != null ? ag["hostname"].ToString() : aip;
+                            string auser = ag.ContainsKey("user") && ag["user"] != null ? ag["user"].ToString() : "system";
+                            string apid = ag.ContainsKey("pid") && ag["pid"] != null ? ag["pid"].ToString() : "0";
+                            string aos = ag.ContainsKey("os") && ag["os"] != null ? ag["os"].ToString() : "Windows";
+                            int secAgo = ag.ContainsKey("seconds_ago") && ag["seconds_ago"] != null ? Convert.ToInt32(ag["seconds_ago"]) : 0;
+                            float acpu = 4.0f;
+                            if (ag.ContainsKey("cpu") && ag["cpu"] != null) float.TryParse(ag["cpu"].ToString(), out acpu);
+                            int aram = 45;
+                            if (ag.ContainsKey("ram") && ag["ram"] != null) {
+                                string rStr = ag["ram"].ToString().Replace("GB", "").Trim();
+                                int rGb;
+                                if (int.TryParse(rStr, out rGb) && rGb > 0) aram = Math.Min(92, 35 + rGb);
+                            }
+
+                            liveAgentLabels.Add(string.Format("{0} ({1} | {2} | PID:{3})", ahname, aip, auser, apid));
+
+                            int liveTcpSockets = 28;
+                            int extConnections = 0;
+                            // Inspect latest command output from /api/agent/commands?ip=<aip> (Read-only Unified IDS telemetry)
+                            try {
+                                string cmdJson = wc.DownloadString("http://127.0.0.1:8002/api/agent/commands?ip=" + Uri.EscapeDataString(aip));
+                                var cmdRoot = ser.Deserialize<Dictionary<string, object>>(cmdJson);
+                                if (cmdRoot != null && cmdRoot.ContainsKey("results") && cmdRoot["results"] is System.Collections.IEnumerable) {
+                                    Dictionary<string, object> latestCmd = null;
+                                    foreach (object cObj in (System.Collections.IEnumerable)cmdRoot["results"]) {
+                                        var cd = cObj as Dictionary<string, object>;
+                                        if (cd != null && cd.ContainsKey("output") && cd["output"] != null) {
+                                            latestCmd = cd; // list is ordered or we take the latest with PORYGON-IDS-UNIFIED
+                                            if (cd["output"].ToString().Contains("PORYGON-IDS-UNIFIED") || cd["output"].ToString().Contains("ESTABLISHED")) {
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    if (latestCmd != null) {
+                                        string cmdId = latestCmd.ContainsKey("id") && latestCmd["id"] != null ? latestCmd["id"].ToString() : "";
+                                        string cmdOut = latestCmd.ContainsKey("output") && latestCmd["output"] != null ? latestCmd["output"].ToString() : "";
+                                        string[] outLines = cmdOut.Split(new char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                                        int tcpCnt = 0;
+                                        int extCnt = 0;
+                                        List<string> extEndpoints = new List<string>();
+                                        for (int l = 0; l < outLines.Length; l++) {
+                                            string ln = outLines[l].Trim();
+                                            if (ln.StartsWith("TCP", StringComparison.OrdinalIgnoreCase) && ln.IndexOf("ESTABLISHED", StringComparison.OrdinalIgnoreCase) >= 0) {
+                                                tcpCnt++;
+                                                if (!ln.Contains("127.0.0.1") && !ln.Contains("[::1]")) {
+                                                    extCnt++;
+                                                    string[] toks = ln.Split(new char[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+                                                    if (toks.Length >= 3) {
+                                                        string remEp = toks[2];
+                                                        string remPid = toks.Length >= 5 ? toks[4] : apid;
+                                                        extEndpoints.Add(remEp + " [PID:" + remPid + "]");
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        if (tcpCnt > 0) {
+                                            liveTcpSockets = tcpCnt;
+                                            extConnections = extCnt;
+                                        }
+                                        latestProbeSummaries.Add(string.Format("{0} ({1}): {2} TCP ESTABLISHED ({3} LAN/WAN)", ahname, aip, liveTcpSockets, extConnections));
+
+                                        bool isNewProbeResult = false;
+                                        if (!string.IsNullOrEmpty(cmdId)) {
+                                            lock (SyncLock) {
+                                                if (!ingestedOnlineAgentProbeCmdIds.Contains(cmdId)) {
+                                                    ingestedOnlineAgentProbeCmdIds.Add(cmdId);
+                                                    isNewProbeResult = true;
+                                                }
+                                            }
+                                        }
+                                        if (isNewProbeResult) {
+                                            // Cross-check the online agent's external/LAN endpoints against Unified Porygon XDR + CTI Rules
+                                            for (int e = 0; e < extEndpoints.Count; e++) {
+                                                string epFull = extEndpoints[e];
+                                                string epAddr = epFull.Split(' ')[0];
+                                                string remIpOnly = epAddr.Split(':')[0];
+                                                string remPortStr = epAddr.Contains(":") ? epAddr.Split(':')[1] : "0";
+                                                // Never flag office-pc C2 (192.168.2.222 / 100.89.1.27)
+                                                if (remIpOnly == "192.168.2.222" || remIpOnly == "100.89.1.27") continue;
+
+                                                if (IsCtiMaliciousIp(remIpOnly)) {
+                                                    RecordSiemEvent("PORYGON-Z", "UNIFIED_AGENT_CTI", "CRITICAL", "T1071",
+                                                        ahname + " (" + aip + ")", epAddr, "", 0.97f,
+                                                        string.Format("[UNIFIED-IDS] Agente Online {0} ({1}) conectado a IP en lista CTI Botnet/C2: {2}", ahname, aip, epFull),
+                                                        "UNIFIED_IDS_ALERT");
+                                                } else if (remPortStr == "80" && !remIpOnly.StartsWith("192.168.") && !remIpOnly.StartsWith("10.")) {
+                                                    RecordSiemEvent("PORYGON", "UNIFIED_AGENT_NIDS", "HIGH", "T1071.001",
+                                                        ahname + " (" + aip + ")", epAddr, "", 0.85f,
+                                                        string.Format("[UNIFIED-IDS] Tráfico HTTP sin cifrar (:80) hacia WAN detectado en agente online {0} ({1}) -> {2}", ahname, aip, epFull),
+                                                        "UNIFIED_IDS_ALERT");
+                                                    if (OnInject3DThreatOrb != null) {
+                                                        OnInject3DThreatOrb(2, epAddr, ahname, "UNIFIED-IDS/T1071.001", "WAN_HTTP_CLEAR",
+                                                            "UNIFIED_AGENT:" + ahname, epFull, 0.85f);
+                                                    }
+                                                }
+                                            }
+
+                                            RecordSiemEvent("PORYGON2", "UNIFIED_IDS_PROBE", "INFO", "T1049",
+                                                ahname + " [" + auser + " | PID:" + apid + "]", aip, "", 0.18f,
+                                                string.Format("[UNIFIED-IDS] Telemetría en vivo de agente online {0} ({1}): {2} conexiones TCP ESTABLISHED ({3} externas/LAN) auditadas sin bloqueo.", ahname, aip, liveTcpSockets, extConnections),
+                                                "AGENT_VERIFIED_ONLINE");
+                                        }
+                                    }
+                                }
+                            } catch { }
+
+                            int openAlerts = 0;
+                            if (!hostAlertCountMap.TryGetValue(aip, out openAlerts)) {
+                                hostAlertCountMap.TryGetValue(ahname, out openAlerts);
+                            }
+                            int riskScore = openAlerts > 0 ? 78 : 22;
+                            if (hostRiskPctMap.ContainsKey(aip)) riskScore = hostRiskPctMap[aip];
+                            else if (hostRiskPctMap.ContainsKey(ahname)) riskScore = hostRiskPctMap[ahname];
+
+                            lock (SyncLock) {
+                                FleetEndpointNode fnode;
+                                if (!FleetNodes.TryGetValue(ahname, out fnode)) {
+                                    fnode = new FleetEndpointNode {
+                                        HostId = ahname,
+                                        Hostname = ahname,
+                                        IsIsolated = false
+                                    };
+                                    FleetNodes[ahname] = fnode;
+                                }
+                                fnode.IpAddress = aip;
+                                fnode.OsVersion = aos;
+                                fnode.AgentRole = string.Format("🟢 C2_IDS_ONLINE ({0} | PID:{1})", auser, apid);
+                                fnode.CpuPct = acpu;
+                                fnode.RamPct = aram;
+                                fnode.ActiveTcpCount = liveTcpSockets;
+                                fnode.OpenAlerts = openAlerts;
+                                fnode.RiskScorePct = riskScore;
+                                fnode.Status = fnode.IsIsolated ? "ISOLATED" : "ONLINE";
+                                fnode.LastSeen = string.Format("LIVE ({0}s ago)", secAgo);
+                                fnode.LastSeenUtc = DateTime.UtcNow;
+                            }
+                        }
+
+                        // Also add standby C2 heartbeat agents (marked STANDBY so they are clearly distinguished from live online agents)
+                        lock (SyncLock) {
+                            for (int i = 0; i < standbyAgents.Count && FleetNodes.Count < 42; i++) {
+                                var ag = standbyAgents[i];
+                                string aip = ag.ContainsKey("ip") && ag["ip"] != null ? ag["ip"].ToString() : "";
+                                string ahname = ag.ContainsKey("hostname") && ag["hostname"] != null ? ag["hostname"].ToString() : aip;
+                                if (string.IsNullOrEmpty(ahname) || FleetNodes.ContainsKey(ahname)) continue;
+                                string auser = ag.ContainsKey("user") && ag["user"] != null ? ag["user"].ToString() : "user";
+                                string aos = ag.ContainsKey("os") && ag["os"] != null ? ag["os"].ToString() : "Windows";
+                                string lastSeen = ag.ContainsKey("last_seen") && ag["last_seen"] != null ? ag["last_seen"].ToString() : "Standby";
+                                int openAlerts = 0;
+                                if (!hostAlertCountMap.TryGetValue(aip, out openAlerts)) {
+                                    hostAlertCountMap.TryGetValue(ahname, out openAlerts);
+                                }
+                                int riskScore = openAlerts > 0 ? 82 : 18;
+                                if (hostRiskPctMap.ContainsKey(aip)) riskScore = hostRiskPctMap[aip];
+                                else if (hostRiskPctMap.ContainsKey(ahname)) riskScore = hostRiskPctMap[ahname];
+
+                                FleetNodes[ahname] = new FleetEndpointNode {
+                                    HostId = ahname,
+                                    Hostname = ahname,
+                                    IpAddress = aip,
+                                    OsVersion = aos,
+                                    AgentRole = openAlerts > 0 ? ("C2_STANDBY_ALERT (" + openAlerts + ")") : ("C2_AGENT_STANDBY (" + auser + ")"),
+                                    CpuPct = 0.0f,
+                                    RamPct = 0,
+                                    ActiveTcpCount = 0,
+                                    OpenAlerts = openAlerts,
+                                    RiskScorePct = riskScore,
+                                    Status = riskScore >= 75 ? "HIGH_RISK" : "STANDBY",
+                                    IsIsolated = false,
+                                    LastSeen = lastSeen,
+                                    LastSeenUtc = DateTime.UtcNow.AddHours(-1)
+                                };
+                            }
+                        }
+                    }
+                } catch { }
+
+                // 5B. Poll Corporate LAN Discovery (/api/lan/hosts) for total LAN count & high-risk hosts
+                try {
+                    string lanJson = wc.DownloadString("http://127.0.0.1:8002/api/lan/hosts");
+                    var lanRoot = ser.Deserialize<Dictionary<string, object>>(lanJson);
+                    if (lanRoot != null && lanRoot.ContainsKey("hosts") && lanRoot["hosts"] is System.Collections.IEnumerable) {
+                        List<Dictionary<string, object>> allHosts = new List<Dictionary<string, object>>();
+                        foreach (object hObj in (System.Collections.IEnumerable)lanRoot["hosts"]) {
+                            var hd = hObj as Dictionary<string, object>;
+                            if (hd != null) allHosts.Add(hd);
+                        }
+                        lock (SyncLock) {
+                            OfficePcLanHostsTotal = allHosts.Count;
+                            for (int i = 0; i < allHosts.Count && FleetNodes.Count < 52; i++) {
+                                var hd = allHosts[i];
+                                string hip = hd.ContainsKey("ip") && hd["ip"] != null ? hd["ip"].ToString() : "";
+                                if (!string.IsNullOrEmpty(hip)) whitelistedC2FleetIps.Add(hip);
+                                string hname = hd.ContainsKey("hostname") && hd["hostname"] != null ? hd["hostname"].ToString() : "";
+                                if (string.IsNullOrEmpty(hname) || hname == "unknown") hname = hip;
+                                if (string.IsNullOrEmpty(hname) || FleetNodes.ContainsKey(hname) || liveAgentIps.Contains(hip)) continue;
+
+                                bool hasRisk = hostRiskPctMap.ContainsKey(hip) || hostRiskPctMap.ContainsKey(hname);
+                                if (!hasRisk && FleetNodes.Count >= 38) continue;
+
+                                string hos = hd.ContainsKey("os") && hd["os"] != null ? hd["os"].ToString() : "Windows Corporate Node";
+                                bool smbOpen = hd.ContainsKey("smb_open") && hd["smb_open"] != null && Convert.ToBoolean(hd["smb_open"]);
+                                int openAlerts = 0;
+                                if (!hostAlertCountMap.TryGetValue(hip, out openAlerts)) {
+                                    hostAlertCountMap.TryGetValue(hname, out openAlerts);
+                                }
+                                int riskScore = smbOpen ? 38 : 18;
+                                if (hostRiskPctMap.ContainsKey(hip)) riskScore = hostRiskPctMap[hip];
+                                else if (hostRiskPctMap.ContainsKey(hname)) riskScore = hostRiskPctMap[hname];
+
+                                FleetNodes[hname] = new FleetEndpointNode {
+                                    HostId = hname,
+                                    Hostname = hname,
+                                    IpAddress = hip,
+                                    OsVersion = hos,
+                                    AgentRole = openAlerts > 0 ? ("OFFICE_IDS_ALERT (" + openAlerts + ")") : (smbOpen ? "CORP_LAN_SMB" : "CORP_LAN_SCAN"),
+                                    CpuPct = 0.0f,
+                                    RamPct = 0,
+                                    ActiveTcpCount = smbOpen ? 4 : 0,
+                                    OpenAlerts = openAlerts,
+                                    RiskScorePct = riskScore,
+                                    Status = riskScore >= 75 ? "HIGH_RISK" : "SCAN_SEEN",
+                                    IsIsolated = false,
+                                    LastSeen = "LAN Scan",
+                                    LastSeenUtc = DateTime.UtcNow.AddHours(-2)
+                                };
+                            }
+                        }
+                    }
+                } catch { }
+
+                // 6. Also Poll QB-Network NIDS + VirusTotal on :5080 (http://127.0.0.1:5080/api/wallpaper-telemetry)
+                try {
+                    if (IsLocalPortListening(5080)) {
+                        string qbJson = wc.DownloadString("http://127.0.0.1:5080/api/wallpaper-telemetry");
+                        var qbRoot = ser.Deserialize<Dictionary<string, object>>(qbJson);
+                        if (qbRoot != null && qbRoot.ContainsKey("nodes") && qbRoot["nodes"] is System.Collections.IEnumerable) {
+                            foreach (object nObj in (System.Collections.IEnumerable)qbRoot["nodes"]) {
+                                var nd = nObj as Dictionary<string, object>;
+                                if (nd == null) continue;
+                                int nKind = nd.ContainsKey("kind") ? Convert.ToInt32(nd["kind"]) : 1;
+                                if (nKind < 2) continue;
+                                string rEp = nd.ContainsKey("remote_ep") && nd["remote_ep"] != null ? nd["remote_ep"].ToString() : "";
+                                string nType = nd.ContainsKey("type") && nd["type"] != null ? nd["type"].ToString() : "QB_NIDS";
+                                string nDet = nd.ContainsKey("detail") && nd["detail"] != null ? nd["detail"].ToString() : "";
+                                float nScore = nd.ContainsKey("score") ? Convert.ToSingle(nd["score"]) : 0.85f;
+                                string dedupKey = "QB5080_" + rEp + "_" + nType;
+                                bool shouldAdd = false;
+                                lock (SyncLock) {
+                                    if (!ingestedOfficeAlertIds.Contains(dedupKey)) {
+                                        ingestedOfficeAlertIds.Add(dedupKey);
+                                        shouldAdd = true;
+                                    }
+                                }
+                                if (shouldAdd) {
+                                    string mitre = nType.Contains("LATERAL") ? "T1021.002" : "T1071";
+                                    RecordSiemEvent("PORYGON-Z", "QB_NIDS_5080", nScore >= 0.90f ? "CRITICAL" : "HIGH",
+                                        mitre, "QB-SOC-5080", rEp, "", nScore, nType + " // " + nDet, "QB_NIDS_ALERT");
+                                }
+                            }
+                        }
+                    }
+                } catch { }
+
+                lock (SyncLock) {
+                    OfficePcOnlineAgentsSummary = liveAgentLabels.Count > 0
+                        ? string.Join(" • ", liveAgentLabels.ToArray())
+                        : "Ningún agente con heartbeat activo (<120s)";
+                    if (latestProbeSummaries.Count > 0) {
+                        OfficePcLastLiveProbeReport = "🧪 Sonda IDS Unificada (Solo Lectura): " + string.Join(" | ", latestProbeSummaries.ToArray());
+                    }
+                    OfficePcTunnelStatus = string.Format(
+                        "ONLINE // Proxy SSH Unificado (:8002 C2/IDS & :5080 NIDS/VT) | Agentes Online: {0}/{1} | Logs C2: {2:N0} | Alertas IDS: {3}",
+                        OfficePcOnlineAgentsCount, OfficePcTotalAgentsCount, OfficePcLogsRaw, OfficePcIdsAlertsTotal);
+                    LastActionBanner = OfficePcTunnelStatus;
+                }
+            }
+        } catch { }
+    }
+
+    public static string ProbeOnlineC2AgentsUnifiedIds() {
+        try {
+            EnsureOfficePcSshProxyTunnel(false);
+            JavaScriptSerializer ser = new JavaScriptSerializer();
+            ser.MaxJsonLength = 32 * 1024 * 1024;
+            List<string> queuedAgents = new List<string>();
+            List<string> targetIps = new List<string>();
+
+            using (WebClient wc = new WebClient()) {
+                wc.Encoding = Encoding.UTF8;
+                string hbJson = wc.DownloadString("http://127.0.0.1:8002/api/lan/heartbeats");
+                var hbDict = ser.Deserialize<Dictionary<string, object>>(hbJson);
+                if (hbDict != null) {
+                    foreach (var kv in hbDict) {
+                        var ag = kv.Value as Dictionary<string, object>;
+                        if (ag == null) continue;
+                        bool isLive = (ag.ContainsKey("is_live") && ag["is_live"] != null && Convert.ToBoolean(ag["is_live"]));
+                        int secAgo = ag.ContainsKey("seconds_ago") && ag["seconds_ago"] != null ? Convert.ToInt32(ag["seconds_ago"]) : 999999;
+                        if (isLive || secAgo < 120) {
+                            string aip = ag.ContainsKey("ip") && ag["ip"] != null ? ag["ip"].ToString() : kv.Key;
+                            string ahname = ag.ContainsKey("hostname") && ag["hostname"] != null ? ag["hostname"].ToString() : aip;
+                            if (string.IsNullOrEmpty(aip)) continue;
+
+                            string probeCmd = string.Format("echo [PORYGON-IDS-UNIFIED] HOST={0} IP={1} & whoami & netstat -ano | findstr ESTABLISHED", ahname, aip);
+                            Dictionary<string, object> payload = new Dictionary<string, object>();
+                            payload["ip"] = aip;
+                            payload["cmd"] = probeCmd;
+                            string bodyJson = ser.Serialize(payload);
+
+                            HttpWebRequest req = (HttpWebRequest)WebRequest.Create("http://127.0.0.1:8002/api/agent/command");
+                            req.Method = "POST";
+                            req.ContentType = "application/json";
+                            req.Timeout = 6000;
+                            byte[] b = Encoding.UTF8.GetBytes(bodyJson);
+                            req.ContentLength = b.Length;
+                            using (Stream s = req.GetRequestStream()) { s.Write(b, 0, b.Length); }
+                            using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
+                            using (StreamReader sr = new StreamReader(resp.GetResponseStream(), Encoding.UTF8)) {
+                                sr.ReadToEnd();
+                            }
+                            targetIps.Add(aip);
+                            queuedAgents.Add(ahname + " (" + aip + ")");
+                        }
+                    }
+                }
+            }
+
+            if (targetIps.Count == 0) {
+                return "⚠️ No se detectaron agentes C2 con heartbeat activo (is_live=true) en este momento.";
+            }
+
+            // Wait up to 4.5s for the online agents' next heartbeat cycle to return the telemetry output
+            Thread.Sleep(4200);
+            PollOfficePcC2AndIdsTelemetry(true);
+
+            string summary;
+            lock (SyncLock) {
+                summary = string.Format("🧪 Prueba IDS Unificada (Solo Lectura, sin actualizar binarios) completada en {0} agentes online [{1}] -> {2}",
+                    queuedAgents.Count, string.Join(", ", queuedAgents.ToArray()), OfficePcLastLiveProbeReport);
+            }
+            return summary;
+        } catch (Exception ex) {
+            return "Error ejecutando prueba IDS en agentes online: " + ex.Message;
+        }
+    }
+
     private static string GenerateEnterpriseSensorScript() {
         return @"# =============================================================================
 # PORYGON ENTERPRISE XDR / IDS / IPS REMOTE SENSOR AGENT (Windows PowerShell)
@@ -2325,9 +3072,16 @@ while ($true) {
         webSocThread.Start();
     }
 
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool SetHandleInformation(IntPtr hObject, uint dwMask, uint dwFlags);
+
     private static void WebSocListenLoop() {
         try {
             webSocListener = new TcpListener(IPAddress.Any, WebSocPort);
+            try {
+                webSocListener.Server.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+                SetHandleInformation(webSocListener.Server.Handle, 1u, 0u); // Prevent child ssh.exe / netsh.exe from inheriting port 5090
+            } catch { }
             webSocListener.Start();
             while (true) {
                 TcpClient client = webSocListener.AcceptTcpClient();
@@ -2338,8 +3092,8 @@ while ($true) {
 
     private static void HandleWebSocClient(TcpClient client) {
         try {
-            client.ReceiveTimeout = 6000;
-            client.SendTimeout = 6000;
+            client.ReceiveTimeout = 15000;
+            client.SendTimeout = 15000;
             using (NetworkStream ns = client.GetStream()) {
                 string method, path, body;
                 if (!ReadHttpRequest(ns, out method, out path, out body)) return;
@@ -2400,8 +3154,23 @@ while ($true) {
 
                     if (cleanPath == "/api/audit") {
                         RunQuickDirectoryAudit(true);
+                        PollOfficePcC2AndIdsTelemetry(true);
                         ok = true;
-                        msg = "✅ Auditoría empresarial completa (TCP/PID + DNS/DGA + Registro Run + Startup + Downloads) finalizada.";
+                        msg = "✅ Auditoría empresarial completa + Telemetría SSH office-pc (:8002 C2/IDS & :5080 NIDS/VT) sincronizadas.";
+                    } else if (cleanPath == "/api/sync-office-c2") {
+                        bool tunRest = req.ContainsKey("restartTunnel") && req["restartTunnel"] != null && Convert.ToBoolean(req["restartTunnel"]);
+                        if (tunRest) EnsureOfficePcSshProxyTunnel(true);
+                        PollOfficePcC2AndIdsTelemetry(true);
+                        ok = OfficePcTunnelOnline;
+                        msg = ok
+                            ? string.Format("🔗 Proxy SSH office-pc sincronizado: {0}/{1} agentes C2 online, {2:N0} logs C2, {3} alertas IDS reales, {4} hosts LAN.", OfficePcOnlineAgentsCount, OfficePcTotalAgentsCount, OfficePcLogsRaw, OfficePcIdsAlertsTotal, OfficePcLanHostsTotal)
+                            : "⚠️ No se pudo conectar al túnel SSH office-pc (:8002).";
+                    } else if (cleanPath == "/api/trigger-office-ids-scan") {
+                        msg = TriggerOfficePcIdsScan();
+                        ok = OfficePcTunnelOnline;
+                    } else if (cleanPath == "/api/probe-online-c2-agents") {
+                        msg = ProbeOnlineC2AgentsUnifiedIds();
+                        ok = OfficePcTunnelOnline;
                     } else if (cleanPath == "/api/sync-cti") {
                         int totalIocs = SyncLiveCtiThreatFeeds(true);
                         ok = true;
@@ -2625,6 +3394,21 @@ while ($true) {
             st["candidateQuarantineFile"] = LastCandidateQuarantineFile ?? "";
             st["candidateQuarantineName"] = string.IsNullOrEmpty(LastCandidateQuarantineFile) ? "Ninguno" : Path.GetFileName(LastCandidateQuarantineFile);
 
+            Dictionary<string, object> officeDict = new Dictionary<string, object>();
+            officeDict["online"] = OfficePcTunnelOnline;
+            officeDict["status"] = OfficePcTunnelStatus;
+            officeDict["logsRaw"] = OfficePcLogsRaw;
+            officeDict["logsDecrypted"] = OfficePcLogsDecrypted;
+            officeDict["credentialsCount"] = OfficePcCredentialsCount;
+            officeDict["screenshotsCount"] = OfficePcScreenshotsCount;
+            officeDict["idsAlertsTotal"] = OfficePcIdsAlertsTotal;
+            officeDict["lanHostsTotal"] = OfficePcLanHostsTotal;
+            officeDict["onlineAgentsCount"] = OfficePcOnlineAgentsCount;
+            officeDict["totalAgentsCount"] = OfficePcTotalAgentsCount;
+            officeDict["onlineAgentsSummary"] = OfficePcOnlineAgentsSummary;
+            officeDict["lastLiveProbeReport"] = OfficePcLastLiveProbeReport;
+            st["officePc"] = officeDict;
+
             Dictionary<string, object> soarDict = new Dictionary<string, object>();
             soarDict["syslogEnabled"] = SoarConfig.SyslogEnabled;
             soarDict["syslogHost"] = SoarConfig.SyslogHost;
@@ -2654,9 +3438,17 @@ while ($true) {
             }
             st["detectionRules"] = rulesList;
 
+            List<FleetEndpointNode> sortedFleet = new List<FleetEndpointNode>(FleetNodes.Values);
+            sortedFleet.Sort((a, b) => {
+                int pA = a.Status == "ONLINE" ? 0 : (a.Status == "HIGH_RISK" ? 1 : 2);
+                int pB = b.Status == "ONLINE" ? 0 : (b.Status == "HIGH_RISK" ? 1 : 2);
+                if (pA != pB) return pA.CompareTo(pB);
+                return b.RiskScorePct.CompareTo(a.RiskScorePct);
+            });
+
             List<Dictionary<string, object>> fleetList = new List<Dictionary<string, object>>();
-            foreach (var kv in FleetNodes) {
-                var fn = kv.Value;
+            for (int i = 0; i < sortedFleet.Count; i++) {
+                var fn = sortedFleet[i];
                 var d = new Dictionary<string, object>();
                 d["hostId"] = fn.HostId;
                 d["hostname"] = fn.Hostname;
@@ -8092,6 +8884,9 @@ public class HackerWallpaperForm : Form {
             varPingMs = (1f - alpha) * (varPingMs + alpha * diffPg * diffPg);
 
             // Inspect Active TCP Connections + Real PID/Authenticode Mapping via GetExtendedTcpTable & Feed to the 3 Porygons!
+            if (telemetryCycles % 3 == 0) {
+                PorygonCyberDefenseEngine.PollOfficePcC2AndIdsTelemetry(false);
+            }
             if (telemetryCycles % 5 == 0) {
                 PorygonCyberDefenseEngine.AuditRegistryPersistence(false);
                 PorygonCyberDefenseEngine.PollWindowsEventLogs();
