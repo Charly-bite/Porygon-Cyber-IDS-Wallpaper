@@ -7276,9 +7276,14 @@ public class HackerWallpaperForm : Form {
 
     private void RenderDenseCyberForestFloraOpenGL(int mIdx, Rectangle m, float horizonY, float vanishX, float floorSpan, float ceilSpan, float phase, float netMod, Color c1, Color c2, Color c3) {
         // =========================================================================
-        // A. LOW-POLY FACETED ROCKS, BOULDERS & BIOLUMINESCENT CRYSTALS (24 CLUSTERS)
+        // A. BALANCED LOW-POLY ROCKS & BIOLUMINESCENT CRYSTALS (12 CLUSTERS)
+        //    Nestled along the curved riverbanks and near tree bases without clutter
         // =========================================================================
-        int rockCount = 24;
+        float[] rockDepths = new float[] { 0.22f, 0.30f, 0.38f, 0.46f, 0.54f, 0.62f, 0.70f, 0.76f, 0.82f, 0.88f, 0.92f, 0.96f };
+        float[] rockSides  = new float[] { -1.0f,  1.0f, -1.0f,  1.0f, -1.0f,  1.0f, -1.0f,  1.0f, -1.0f,  1.0f, -1.0f,  1.0f };
+        float[] rockBankM  = new float[] { 1.12f, 1.18f, 1.95f, 1.14f, 1.20f, 2.15f, 1.12f, 1.16f, 2.35f, 1.12f, 1.18f, 1.85f };
+        int rockCount = rockDepths.Length;
+
         float[] rkX = new float[rockCount];
         float[] rkY = new float[rockCount];
         float[] rkW = new float[rockCount];
@@ -7286,36 +7291,21 @@ public class HackerWallpaperForm : Form {
         float[] rkPersp = new float[rockCount];
 
         for (int rIdx = 0; rIdx < rockCount; rIdx++) {
-            float t = 0.14f + (rIdx / (float)(rockCount - 1)) * 0.82f;
+            float t = rockDepths[rIdx];
             float rCx, rCy, rHw, persp;
             GetRiverGeometryAt(t, m, horizonY, vanishX, floorSpan, phase, mIdx, out rCx, out rCy, out rHw, out persp);
 
-            float side = (rIdx % 2 == 0) ? -1.0f : 1.0f;
-            int lane = (rIdx / 2) % 4;
-            float hash = (float)Math.Abs(Math.Sin(rIdx * 12.9898f + 4.1414f));
-            float offsetFromCenter;
-            if (lane == 0) {
-                // Riverbank shoreline boulder
-                offsetFromCenter = rHw * (1.08f + 0.34f * hash);
-            } else if (lane == 1) {
-                // Upper canyon rim boulder
-                offsetFromCenter = rHw * (1.45f + 0.55f * hash);
-            } else {
-                // Forest floor outcrop
-                float maxSpan = (side < 0f) ? (rCx - m.Left - 24f) : (m.Right - rCx - 24f);
-                float minSpan = rHw * 1.65f;
-                offsetFromCenter = minSpan + Math.Max(12f, (maxSpan - minSpan) * (0.22f + 0.72f * hash));
-            }
-
-            rkX[rIdx] = Math.Max(m.Left + 18f, Math.Min(m.Right - 18f, rCx + side * offsetFromCenter));
-            rkY[rIdx] = Math.Min(m.Bottom - 3f, rCy + (2.0f + 8.0f * persp) * (lane == 0 ? 0.6f : 0.2f));
-            float sizeScale = 0.32f + 0.68f * persp;
-            rkW[rIdx] = (10.0f + 22.0f * (0.55f + 0.45f * hash)) * sizeScale;
-            rkH[rIdx] = (7.0f + 16.0f * (0.50f + 0.50f * ((rIdx * 7) % 5) / 4.0f)) * sizeScale;
+            float side = rockSides[rIdx];
+            float offsetFromCenter = rHw * rockBankM[rIdx];
+            rkX[rIdx] = Math.Max(m.Left + 24f, Math.Min(m.Right - 24f, rCx + side * offsetFromCenter));
+            rkY[rIdx] = Math.Min(m.Bottom - 3f, rCy + (1.5f + 5.0f * persp));
+            float sizeScale = 0.30f + 0.65f * persp;
+            rkW[rIdx] = (9.0f + (rIdx % 3) * 4.5f) * sizeScale;
+            rkH[rIdx] = (6.0f + ((rIdx + 1) % 3) * 3.5f) * sizeScale;
             rkPersp[rIdx] = persp;
         }
 
-        // Pass A1: Batched GL_TRIANGLES for all rock facets, companion stones & crystal shards
+        // Pass A1: Batched GL_TRIANGLES for low-poly rocks & subtle crystal accents
         GpuGl.glBegin(GpuGl.GL_TRIANGLES);
         for (int rIdx = 0; rIdx < rockCount; rIdx++) {
             float bx = rkX[rIdx];
@@ -7323,80 +7313,55 @@ public class HackerWallpaperForm : Form {
             float rw = rkW[rIdx];
             float rh = rkH[rIdx];
             float pr = rkPersp[rIdx];
-            float tilt = ((rIdx % 3) - 1) * rw * 0.14f;
+            float tilt = ((rIdx % 3) - 1) * rw * 0.12f;
 
-            // 5-vertex angular boulder + interior facet point
-            float blX = bx - rw * 0.95f, blY = by;
-            float tlX = bx - rw * 0.62f + tilt * 0.5f, tlY = by - rh * 0.76f;
-            float pkX = bx + tilt, pkY = by - rh * 1.05f;
-            float trX = bx + rw * 0.66f + tilt * 0.4f, trY = by - rh * 0.68f;
-            float brX = bx + rw * 0.98f, brY = by;
-            float mdX = bx + tilt * 0.35f, mdY = by - rh * 0.42f;
+            float blX = bx - rw * 0.92f, blY = by;
+            float tlX = bx - rw * 0.58f + tilt * 0.5f, tlY = by - rh * 0.74f;
+            float pkX = bx + tilt, pkY = by - rh * 1.02f;
+            float trX = bx + rw * 0.62f + tilt * 0.4f, trY = by - rh * 0.66f;
+            float brX = bx + rw * 0.94f, brY = by;
+            float mdX = bx + tilt * 0.35f, mdY = by - rh * 0.40f;
 
-            byte aLit  = (byte)Math.Min(235, (int)(75 + pr * 115f));
-            byte aMid  = (byte)Math.Min(235, (int)(85 + pr * 120f));
-            byte aDark = (byte)Math.Min(240, (int)(95 + pr * 125f));
+            byte aLit  = (byte)Math.Min(215, (int)(65 + pr * 105f));
+            byte aMid  = (byte)Math.Min(220, (int)(75 + pr * 110f));
+            byte aDark = (byte)Math.Min(225, (int)(85 + pr * 115f));
 
-            // Left-top illuminated slate-moss facet
-            GpuGl.glColor4ub((byte)(16 + c1.R / 5), (byte)(32 + c1.G / 4), (byte)(36 + c1.B / 4), aLit);
-            GpuGl.glVertex2f(blX, blY);
-            GpuGl.glVertex2f(tlX, tlY);
-            GpuGl.glVertex2f(mdX, mdY);
+            GpuGl.glColor4ub((byte)(14 + c1.R / 5), (byte)(28 + c1.G / 4), (byte)(32 + c1.B / 4), aLit);
+            GpuGl.glVertex2f(blX, blY); GpuGl.glVertex2f(tlX, tlY); GpuGl.glVertex2f(mdX, mdY);
+            GpuGl.glVertex2f(tlX, tlY); GpuGl.glVertex2f(pkX, pkY); GpuGl.glVertex2f(mdX, mdY);
 
-            GpuGl.glVertex2f(tlX, tlY);
-            GpuGl.glVertex2f(pkX, pkY);
-            GpuGl.glVertex2f(mdX, mdY);
+            GpuGl.glColor4ub((byte)(10 + c3.R / 6), (byte)(20 + c3.G / 5), (byte)(25 + c3.B / 5), aMid);
+            GpuGl.glVertex2f(pkX, pkY); GpuGl.glVertex2f(trX, trY); GpuGl.glVertex2f(mdX, mdY);
 
-            // Center-right mid-tone facet
-            GpuGl.glColor4ub((byte)(12 + c3.R / 6), (byte)(22 + c3.G / 5), (byte)(28 + c3.B / 5), aMid);
-            GpuGl.glVertex2f(pkX, pkY);
-            GpuGl.glVertex2f(trX, trY);
-            GpuGl.glVertex2f(mdX, mdY);
+            GpuGl.glColor4ub(8, 14, 20, aDark);
+            GpuGl.glVertex2f(trX, trY); GpuGl.glVertex2f(brX, brY); GpuGl.glVertex2f(mdX, mdY);
+            GpuGl.glVertex2f(blX, blY); GpuGl.glVertex2f(mdX, mdY); GpuGl.glVertex2f(brX, brY);
 
-            // Lower-base & right shadow facets
-            GpuGl.glColor4ub(9, 16, 22, aDark);
-            GpuGl.glVertex2f(trX, trY);
-            GpuGl.glVertex2f(brX, brY);
-            GpuGl.glVertex2f(mdX, mdY);
-
-            GpuGl.glVertex2f(blX, blY);
-            GpuGl.glVertex2f(mdX, mdY);
-            GpuGl.glVertex2f(brX, brY);
-
-            // Companion smaller angular stone on one side
+            // Companion smaller stone
             float sSide = (rIdx % 2 == 0) ? 1.0f : -1.0f;
-            float sx = bx + sSide * rw * 0.78f;
-            float sy = by + 1.5f * pr;
-            float sw = rw * 0.48f;
-            float sh = rh * 0.54f;
-            GpuGl.glColor4ub((byte)(14 + c1.R / 6), (byte)(28 + c1.G / 5), (byte)(32 + c1.B / 5), aLit);
-            GpuGl.glVertex2f(sx - sw, sy);
-            GpuGl.glVertex2f(sx - sw * 0.2f, sy - sh);
-            GpuGl.glVertex2f(sx + sw * 0.15f, sy);
+            float sx = bx + sSide * rw * 0.76f;
+            float sy = by + 1.2f * pr;
+            float sw = rw * 0.44f;
+            float sh = rh * 0.48f;
+            GpuGl.glColor4ub((byte)(12 + c1.R / 6), (byte)(24 + c1.G / 5), (byte)(28 + c1.B / 5), aLit);
+            GpuGl.glVertex2f(sx - sw, sy); GpuGl.glVertex2f(sx - sw * 0.2f, sy - sh); GpuGl.glVertex2f(sx + sw * 0.15f, sy);
+            GpuGl.glColor4ub(7, 13, 18, aDark);
+            GpuGl.glVertex2f(sx - sw * 0.2f, sy - sh); GpuGl.glVertex2f(sx + sw, sy); GpuGl.glVertex2f(sx + sw * 0.15f, sy);
 
-            GpuGl.glColor4ub(8, 14, 19, aDark);
-            GpuGl.glVertex2f(sx - sw * 0.2f, sy - sh);
-            GpuGl.glVertex2f(sx + sw, sy);
-            GpuGl.glVertex2f(sx + sw * 0.15f, sy);
-
-            // Bioluminescent cyber-crystal shard emerging from every 2nd boulder
-            if (rIdx % 2 == 0) {
-                Color crCol = (rIdx % 4 == 0) ? c2 : c1;
-                byte cAlpha = (byte)Math.Min(220, (int)(95 + pr * 105f));
-                float cx0 = pkX - rw * 0.16f;
-                float cy0 = pkY + rh * 0.25f;
-                float cxTip = pkX + sSide * rw * 0.34f;
-                float cyTip = pkY - rh * 0.48f;
+            // Subtle glowing crystal shard on every 3rd rock
+            if (rIdx % 3 == 0) {
+                Color crCol = (rIdx % 2 == 0) ? c2 : c1;
+                byte cAlpha = (byte)Math.Min(195, (int)(80 + pr * 95f));
                 GpuGl.glColor4ub(crCol.R, crCol.G, crCol.B, cAlpha);
-                GpuGl.glVertex2f(cx0, cy0);
-                GpuGl.glVertex2f(cxTip, cyTip);
-                GpuGl.glVertex2f(cx0 + rw * 0.22f, cy0 + rh * 0.08f);
+                GpuGl.glVertex2f(pkX - rw * 0.14f, pkY + rh * 0.22f);
+                GpuGl.glVertex2f(pkX + sSide * rw * 0.28f, pkY - rh * 0.40f);
+                GpuGl.glVertex2f(pkX + rw * 0.16f, pkY + rh * 0.10f);
             }
         }
         GpuGl.glEnd();
 
-        // Pass A2: Batched GL_LINES (0.9px) for crisp rock facet edges & glowing circuit veins
-        GpuGl.glLineWidth(0.9f);
+        // Pass A2: Batched GL_LINES (0.85px) for rock facet edges
+        GpuGl.glLineWidth(0.85f);
         GpuGl.glBegin(GpuGl.GL_LINES);
         for (int rIdx = 0; rIdx < rockCount; rIdx++) {
             float bx = rkX[rIdx];
@@ -7404,27 +7369,21 @@ public class HackerWallpaperForm : Form {
             float rw = rkW[rIdx];
             float rh = rkH[rIdx];
             float pr = rkPersp[rIdx];
-            float tilt = ((rIdx % 3) - 1) * rw * 0.14f;
+            float tilt = ((rIdx % 3) - 1) * rw * 0.12f;
 
-            float blX = bx - rw * 0.95f, blY = by;
-            float tlX = bx - rw * 0.62f + tilt * 0.5f, tlY = by - rh * 0.76f;
-            float pkX = bx + tilt, pkY = by - rh * 1.05f;
-            float trX = bx + rw * 0.66f + tilt * 0.4f, trY = by - rh * 0.68f;
-            float brX = bx + rw * 0.98f, brY = by;
-            float mdX = bx + tilt * 0.35f, mdY = by - rh * 0.42f;
+            float blX = bx - rw * 0.92f, blY = by;
+            float tlX = bx - rw * 0.58f + tilt * 0.5f, tlY = by - rh * 0.74f;
+            float pkX = bx + tilt, pkY = by - rh * 1.02f;
+            float trX = bx + rw * 0.62f + tilt * 0.4f, trY = by - rh * 0.66f;
+            float brX = bx + rw * 0.94f, brY = by;
+            float mdX = bx + tilt * 0.35f, mdY = by - rh * 0.40f;
 
-            byte edgeA = (byte)Math.Min(185, (int)(42 + pr * 95f));
+            byte edgeA = (byte)Math.Min(165, (int)(38 + pr * 85f));
             GpuGl.glColor4ub(c1.R, c1.G, c1.B, edgeA);
-            // Outer silhouette
             GpuGl.glVertex2f(blX, blY); GpuGl.glVertex2f(tlX, tlY);
             GpuGl.glVertex2f(tlX, tlY); GpuGl.glVertex2f(pkX, pkY);
             GpuGl.glVertex2f(pkX, pkY); GpuGl.glVertex2f(trX, trY);
             GpuGl.glVertex2f(trX, trY); GpuGl.glVertex2f(brX, brY);
-            GpuGl.glVertex2f(brX, brY); GpuGl.glVertex2f(blX, blY);
-            // Inner ridge seams converging at md
-            Color seamCol = (rIdx % 3 == 0) ? c2 : c1;
-            byte seamA = (byte)Math.Min(210, (int)(55 + pr * 110f));
-            GpuGl.glColor4ub(seamCol.R, seamCol.G, seamCol.B, seamA);
             GpuGl.glVertex2f(tlX, tlY); GpuGl.glVertex2f(mdX, mdY);
             GpuGl.glVertex2f(pkX, pkY); GpuGl.glVertex2f(mdX, mdY);
             GpuGl.glVertex2f(trX, trY); GpuGl.glVertex2f(mdX, mdY);
@@ -7432,275 +7391,236 @@ public class HackerWallpaperForm : Form {
         GpuGl.glEnd();
 
         // =========================================================================
-        // B. DENSE MULTI-SPECIES 3D FOREST (28 TREES SORTED BACK-TO-FRONT, 4 SPECIES)
-        //    Species 0: Giant Cyber-Sequoiadendron (4-5 Tiered Low-Poly Conifer)
-        //    Species 1: Geodesic Bio-Willow / Oak (Forked Trunk + 3 Octahedral Crowns + Hanging Tendrils)
-        //    Species 2: Bioluminescent Crystal Cypress (Slender Rhomboid Spire + Energy Core)
-        //    Species 3: Terraced Cyber-Bonsai Pagoda (Curved Trunk + Cantilevered Canopy Pads)
+        // B. BALANCED MULTI-SPECIES 3D FOREST (14 TREES: 7 LEFT, 7 RIGHT)
+        //    Curated non-overlapping positions with 3 cohesive low-poly species:
+        //      Species 0: Classic Low-Poly Pine (3-4 tiers)
+        //      Species 1: Slender Crystal Cypress Spire (Narrow 4-segment obelisk)
+        //      Species 2: Unified Geodesic Canopy Tree (Faceted hexagonal crown)
         // =========================================================================
-        int treeCount = 28;
-        for (int tIdx = 0; tIdx < treeCount; tIdx++) {
-            // Back-to-front depth progression (0.15 near horizon -> 0.94 in foreground)
-            float dScale = 0.15f + (tIdx / (float)(treeCount - 1)) * 0.79f;
+        float[] treePosNorm = new float[] {
+            0.34f, 0.66f, // Horizon pair flanking the vanishing river
+            0.24f, 0.76f, // Upper-mid pair
+            0.13f, 0.87f, // Outer mid-ground pair (leaves wide clearing for Porygon!)
+            0.30f, 0.70f, // Riverbend mid pair
+            0.19f, 0.81f, // Lower-mid pair
+            0.07f, 0.93f, // Foreground outer pair
+            0.25f, 0.75f  // Foreground riverbank pair
+        };
+        float[] treeDepth = new float[] {
+            0.22f, 0.24f,
+            0.34f, 0.36f,
+            0.46f, 0.48f,
+            0.58f, 0.60f,
+            0.70f, 0.72f,
+            0.82f, 0.84f,
+            0.91f, 0.93f
+        };
+        int[] treeSpecies = new int[] {
+            0, 1,
+            2, 0,
+            1, 2,
+            0, 1,
+            2, 0,
+            0, 2,
+            1, 0
+        };
+
+        for (int tIdx = 0; tIdx < treePosNorm.Length; tIdx++) {
+            float dScale = treeDepth[tIdx];
             float rCx, rCy, rHw, rPersp;
             GetRiverGeometryAt(dScale, m, horizonY, vanishX, floorSpan, phase, mIdx, out rCx, out rCy, out rHw, out rPersp);
 
-            float side = (tIdx % 2 == 0) ? -1.0f : 1.0f;
-            int ring = (tIdx / 2) % 3; // 0 = near riverbank, 1 = mid-grove, 2 = outer deep forest
-            float jitter = (float)Math.Sin(tIdx * 9.173f + 1.618f) * 0.14f;
-            float lateralFrac = (ring == 0) ? (0.12f + Math.Abs(jitter) * 0.5f)
-                              : (ring == 1) ? (0.44f + jitter)
-                              : (0.76f + jitter * 0.8f);
-            lateralFrac = Math.Max(0.06f, Math.Min(0.94f, lateralFrac));
+            float baseX = m.Left + m.Width * treePosNorm[tIdx];
+            float treeH = m.Height * (0.12f + dScale * 0.16f);
+            float treeW = m.Width * (0.017f + dScale * 0.020f);
 
-            float treeH = m.Height * (0.13f + dScale * 0.24f);
-            float treeW = m.Width * (0.020f + dScale * 0.028f);
-            float minClearance = rHw * 1.42f + treeW * 0.65f;
-            float maxBankSpan = (side < 0f)
-                ? Math.Max(minClearance + 16f, (rCx - (m.Left + m.Width * 0.03f)))
-                : Math.Max(minClearance + 16f, ((m.Right - m.Width * 0.03f) - rCx));
+            // Keep trees outside the meandering river channel
+            float minRiverDist = rHw * 1.38f + treeW * 0.65f;
+            if (Math.Abs(baseX - rCx) < minRiverDist) {
+                baseX = (baseX < rCx) ? (rCx - minRiverDist) : (rCx + minRiverDist);
+            }
 
-            float offsetFromRiver = minClearance + (maxBankSpan - minClearance) * lateralFrac;
-            float baseX = rCx + side * offsetFromRiver;
-            baseX = Math.Max(m.Left + treeW * 0.5f, Math.Min(m.Right - treeW * 0.5f, baseX));
-            float baseY = horizonY + rPersp * floorSpan;
-            float sway = (float)Math.Sin(phase * 0.65f + tIdx * 1.37f) * (4.2f * dScale);
-
-            int species = (tIdx * 3 + (tIdx >> 1)) & 3; // 0, 1, 2, or 3
+            float baseY = horizonY + (dScale - 0.18f) * floorSpan * 0.56f;
+            float sway = (float)Math.Sin(phase * 0.65f + tIdx * 1.4f) * (3.5f * dScale);
+            int species = treeSpecies[tIdx];
 
             if (species == 0) {
                 // -----------------------------------------------------------------
-                // SPECIES 0: GIANT CYBER-SEQUOIA / MULTI-TIERED CONIFER (4-5 Tiers)
+                // SPECIES 0: CLASSIC LOW-POLY CONIFER PINE (3-4 Tiers)
                 // -----------------------------------------------------------------
-                float tallH = treeH * 1.12f;
                 float trkW = treeW * 0.16f;
-                float topTrkX = baseX + sway * 0.45f;
-                float topTrkY = baseY - tallH * 0.45f;
-                GpuGl.FillTriangle(baseX - trkW, baseY, baseX + trkW, baseY, topTrkX, topTrkY, Color.FromArgb((int)(65 + dScale * 35f), 22, 36, 28));
-                GpuGl.DrawTriangle(baseX - trkW, baseY, baseX + trkW, baseY, topTrkX, topTrkY, Color.FromArgb((int)(55 + dScale * 40f), c2.R, c2.G, c2.B), 0.85f);
+                float topTrkX = baseX + sway * 0.4f;
+                float topTrkY = baseY - treeH * 0.42f;
+                GpuGl.FillTriangle(baseX - trkW, baseY, baseX + trkW, baseY, topTrkX, topTrkY, Color.FromArgb(74, 22, 36, 28));
+                GpuGl.DrawTriangle(baseX - trkW, baseY, baseX + trkW, baseY, topTrkX, topTrkY, Color.FromArgb(65, c2.R, c2.G, c2.B), 0.85f);
 
-                int tiers = (dScale > 0.45f) ? 5 : 4;
+                int tiers = (dScale > 0.65f) ? 4 : 3;
                 for (int tier = 0; tier < tiers; tier++) {
                     float tierFrac = tier / (float)tiers;
-                    float tyBot = baseY - tallH * (0.20f + tierFrac * 0.62f);
-                    float tyTop = baseY - tallH * (0.46f + tierFrac * 0.56f);
-                    float tw = treeW * (1.06f - tierFrac * 0.68f);
-                    float txCenter = baseX + sway * (0.4f + tierFrac * 0.55f);
-                    float txApex = baseX + sway * (0.65f + tierFrac * 0.65f);
-                    float ridgeDrop = (4.5f + 3.0f * (1.0f - tierFrac)) * dScale;
+                    float tyBot = baseY - treeH * (0.24f + tierFrac * 0.54f);
+                    float tyTop = baseY - treeH * (0.54f + tierFrac * 0.48f);
+                    float tw = treeW * (1.0f - tierFrac * 0.58f);
+                    float txCenter = baseX + sway * (0.45f + tierFrac * 0.45f);
+                    float txApex = baseX + sway * (0.65f + tierFrac * 0.55f);
 
-                    Color leftFacet  = Color.FromArgb((int)(46 + dScale * 38f), c1.R / 2, (c1.G * 2) / 3, c1.B / 2);
-                    Color rightFacet = Color.FromArgb((int)(42 + dScale * 32f), c3.R / 3, c3.G / 2, c3.B / 2);
-                    Color edgeCol    = Color.FromArgb((int)(62 + dScale * 55f), c1.R, c1.G, c1.B);
+                    Color leftFacet  = Color.FromArgb((int)(42 + dScale * 32f), c1.R / 2, (c1.G * 2) / 3, c1.B / 2);
+                    Color rightFacet = Color.FromArgb((int)(38 + dScale * 26f), c3.R / 3, c3.G / 2, c3.B / 2);
+                    Color edgeCol    = Color.FromArgb((int)(58 + dScale * 46f), c1.R, c1.G, c1.B);
 
-                    GpuGl.FillTriangle(txCenter - tw, tyBot, txCenter, tyBot + ridgeDrop, txApex, tyTop, leftFacet);
-                    GpuGl.DrawTriangle(txCenter - tw, tyBot, txCenter, tyBot + ridgeDrop, txApex, tyTop, edgeCol, 0.9f);
-                    GpuGl.FillTriangle(txCenter, tyBot + ridgeDrop, txCenter + tw, tyBot, txApex, tyTop, rightFacet);
-                    GpuGl.DrawTriangle(txCenter, tyBot + ridgeDrop, txCenter + tw, tyBot, txApex, tyTop, edgeCol, 0.9f);
+                    GpuGl.FillTriangle(txCenter - tw, tyBot, txCenter, tyBot + 5f * dScale, txApex, tyTop, leftFacet);
+                    GpuGl.DrawTriangle(txCenter - tw, tyBot, txCenter, tyBot + 5f * dScale, txApex, tyTop, edgeCol, 0.9f);
+                    GpuGl.FillTriangle(txCenter, tyBot + 5f * dScale, txCenter + tw, tyBot, txApex, tyTop, rightFacet);
+                    GpuGl.DrawTriangle(txCenter, tyBot + 5f * dScale, txCenter + tw, tyBot, txApex, tyTop, edgeCol, 0.9f);
                 }
             } else if (species == 1) {
                 // -----------------------------------------------------------------
-                // SPECIES 1: GEODESIC BIO-WILLOW / OCTAHEDRAL CANOPY OAK
+                // SPECIES 1: SLENDER BIOLUMINESCENT CRYSTAL CYPRESS SPIRE
                 // -----------------------------------------------------------------
-                float oakH = treeH * 0.96f;
-                float oakW = treeW * 1.24f;
-                float trkW = oakW * 0.15f;
-                float forkX = baseX + sway * 0.35f;
-                float forkY = baseY - oakH * 0.46f;
-
-                // Main trunk + 3 forked limbs
-                GpuGl.FillTriangle(baseX - trkW, baseY, baseX + trkW, baseY, forkX, forkY, Color.FromArgb((int)(72 + dScale * 35f), 26, 34, 28));
-                Color limbCol = Color.FromArgb((int)(75 + dScale * 55f), c2.R, c2.G, c2.B);
-                GpuGl.DrawLine(baseX, baseY, forkX, forkY, limbCol, 1.1f);
-
-                float[] crownOffX = new float[] { -oakW * 0.62f, 0.0f, oakW * 0.62f };
-                float[] crownOffY = new float[] { -oakH * 0.66f, -oakH * 0.86f, -oakH * 0.64f };
-                float[] crownRadX = new float[] { oakW * 0.62f, oakW * 0.76f, oakW * 0.60f };
-                float[] crownRadY = new float[] { oakH * 0.24f, oakH * 0.30f, oakH * 0.24f };
-
-                for (int cIdx = 0; cIdx < 3; cIdx++) {
-                    float cx = baseX + crownOffX[cIdx] + sway * (0.65f + cIdx * 0.12f);
-                    float cy = baseY + crownOffY[cIdx];
-                    float rx = crownRadX[cIdx];
-                    float ry = crownRadY[cIdx];
-
-                    // Branch strut from fork to crown center
-                    GpuGl.DrawLine(forkX, forkY, cx, cy + ry * 0.3f, limbCol, 1.0f);
-
-                    // 4-triangle octahedral geodesic crown
-                    Color topLit = Color.FromArgb((int)(52 + dScale * 40f), (c1.R + c2.R) / 3, (c1.G * 2) / 3, (c1.B + c2.B) / 3);
-                    Color topRt  = Color.FromArgb((int)(46 + dScale * 34f), c1.R / 3, c1.G / 2, (c1.B * 2) / 3);
-                    Color botLt  = Color.FromArgb((int)(42 + dScale * 30f), c3.R / 3, c3.G / 2, c3.B / 2);
-                    Color botRt  = Color.FromArgb((int)(38 + dScale * 28f), c3.R / 4, c3.G / 3, c3.B / 3);
-                    Color edgeC  = Color.FromArgb((int)(68 + dScale * 52f), c1.R, c1.G, c1.B);
-
-                    GpuGl.FillTriangle(cx - rx, cy, cx, cy - ry, cx, cy + ry * 0.12f, topLit);
-                    GpuGl.FillTriangle(cx, cy - ry, cx + rx, cy, cx, cy + ry * 0.12f, topRt);
-                    GpuGl.FillTriangle(cx - rx, cy, cx, cy + ry * 0.12f, cx, cy + ry * 0.85f, botLt);
-                    GpuGl.FillTriangle(cx, cy + ry * 0.12f, cx + rx, cy, cx, cy + ry * 0.85f, botRt);
-
-                    GpuGl.DrawTriangle(cx - rx, cy, cx, cy - ry, cx, cy + ry * 0.12f, edgeC, 0.85f);
-                    GpuGl.DrawTriangle(cx, cy - ry, cx + rx, cy, cx, cy + ry * 0.12f, edgeC, 0.85f);
-                    GpuGl.DrawTriangle(cx - rx, cy, cx, cy + ry * 0.12f, cx, cy + ry * 0.85f, edgeC, 0.85f);
-                    GpuGl.DrawTriangle(cx, cy + ry * 0.12f, cx + rx, cy, cx, cy + ry * 0.85f, edgeC, 0.85f);
-
-                    // Glowing weeping bio-tendrils hanging from outer lateral crowns
-                    if (cIdx != 1 && dScale > 0.30f) {
-                        float tendrilX = cx + (cIdx == 0 ? -rx * 0.45f : rx * 0.45f);
-                        float tendrilY0 = cy + ry * 0.45f;
-                        float tendrilLen = oakH * (0.22f + 0.08f * cIdx);
-                        float tipX = tendrilX + sway * 0.55f;
-                        float tipY = tendrilY0 + tendrilLen;
-                        GpuGl.DrawLine(tendrilX, tendrilY0, tipX, tipY, Color.FromArgb((int)(70 + dScale * 65f), c2.R, c2.G, c2.B), 0.9f);
-                        GpuGl.FillRect(tipX - 1.5f * dScale, tipY - 1.5f * dScale, 3.0f * dScale, 3.0f * dScale, Color.FromArgb((int)(120 + dScale * 90f), c2.R, c2.G, c2.B));
-                    }
-                }
-            } else if (species == 2) {
-                // -----------------------------------------------------------------
-                // SPECIES 2: BIOLUMINESCENT CRYSTAL CYPRESS / OBELISK SPIRE
-                // -----------------------------------------------------------------
-                float cypH = treeH * 1.18f;
-                float cypW = treeW * 0.68f;
-                float apexX = baseX + sway * 0.85f;
+                float cypH = treeH * 1.10f;
+                float cypW = treeW * 0.64f;
+                float apexX = baseX + sway * 0.75f;
                 float apexY = baseY - cypH;
 
-                // Glowing central energy spine
-                GpuGl.DrawLine(baseX, baseY, apexX, apexY, Color.FromArgb((int)(80 + dScale * 75f), c2.R, c2.G, c2.B), 1.0f);
+                GpuGl.DrawLine(baseX, baseY, apexX, apexY, Color.FromArgb((int)(70 + dScale * 65f), c2.R, c2.G, c2.B), 0.95f);
 
                 int segs = 4;
                 for (int s = 0; s < segs; s++) {
                     float sf = s / (float)segs;
-                    float yBot = baseY - cypH * (0.12f + sf * 0.66f);
-                    float yMid = baseY - cypH * (0.28f + sf * 0.64f);
-                    float yTop = baseY - cypH * (0.48f + sf * 0.52f);
-                    float w = cypW * (1.0f - sf * 0.58f);
-                    float sxMid = baseX + sway * (0.3f + sf * 0.55f);
-                    float sxTop = baseX + sway * (0.45f + sf * 0.60f);
+                    float yBot = baseY - cypH * (0.14f + sf * 0.62f);
+                    float yMid = baseY - cypH * (0.28f + sf * 0.60f);
+                    float yTop = baseY - cypH * (0.48f + sf * 0.50f);
+                    float w = cypW * (1.0f - sf * 0.55f);
+                    float sxMid = baseX + sway * (0.3f + sf * 0.45f);
+                    float sxTop = baseX + sway * (0.45f + sf * 0.50f);
 
-                    Color cLt = Color.FromArgb((int)(48 + dScale * 42f), c2.R / 2, (c1.G + c2.G) / 3, (c1.B + c2.B) / 2);
-                    Color cRt = Color.FromArgb((int)(40 + dScale * 34f), c1.R / 3, c3.G / 2, (c1.B + c3.B) / 3);
-                    Color edg = Color.FromArgb((int)(72 + dScale * 58f), (c1.R + c2.R) / 2, (c1.G + c2.G) / 2, (c1.B + c2.B) / 2);
+                    Color cLt = Color.FromArgb((int)(44 + dScale * 36f), c2.R / 2, (c1.G + c2.G) / 3, (c1.B + c2.B) / 2);
+                    Color cRt = Color.FromArgb((int)(36 + dScale * 30f), c1.R / 3, c3.G / 2, (c1.B + c3.B) / 3);
+                    Color edg = Color.FromArgb((int)(64 + dScale * 50f), (c1.R + c2.R) / 2, (c1.G + c2.G) / 2, (c1.B + c2.B) / 2);
 
                     GpuGl.FillTriangle(sxMid - w, yMid, sxMid, yBot, sxTop, yTop, cLt);
                     GpuGl.DrawTriangle(sxMid - w, yMid, sxMid, yBot, sxTop, yTop, edg, 0.85f);
                     GpuGl.FillTriangle(sxMid, yBot, sxMid + w, yMid, sxTop, yTop, cRt);
                     GpuGl.DrawTriangle(sxMid, yBot, sxMid + w, yMid, sxTop, yTop, edg, 0.85f);
                 }
-                GpuGl.FillRect(apexX - 1.6f * dScale, apexY - 1.6f * dScale, 3.2f * dScale, 3.2f * dScale, Color.FromArgb((int)(135 + dScale * 85f), c2.R, c2.G, c2.B));
             } else {
                 // -----------------------------------------------------------------
-                // SPECIES 3: TERRACED CYBER-BONSAI PAGODA (Curved Trunk + 3 Pads)
+                // SPECIES 2: UNIFIED GEODESIC CANOPY BIO-TREE (Cohesive 6-Facet Crown)
                 // -----------------------------------------------------------------
-                float bonH = treeH * 0.92f;
-                float bonW = treeW * 1.18f;
-                float bendDir = (tIdx % 4 < 2) ? 1.0f : -1.0f;
+                float geoH = treeH * 0.94f;
+                float geoW = treeW * 0.92f;
+                float trkW = geoW * 0.16f;
+                float crCenterX = baseX + sway * 0.55f;
+                float crCenterY = baseY - geoH * 0.62f;
 
-                float p0x = baseX, p0y = baseY;
-                float p1x = baseX + bendDir * bonW * 0.28f + sway * 0.3f, p1y = baseY - bonH * 0.34f;
-                float p2x = baseX - bendDir * bonW * 0.16f + sway * 0.55f, p2y = baseY - bonH * 0.66f;
-                float p3x = baseX + bendDir * bonW * 0.10f + sway * 0.80f, p3y = baseY - bonH * 0.92f;
+                // Trunk + internal Y-branch veins reaching into the geodesic crown
+                GpuGl.FillTriangle(baseX - trkW, baseY, baseX + trkW, baseY, crCenterX, crCenterY + geoH * 0.12f, Color.FromArgb(76, 24, 36, 28));
+                Color limbCol = Color.FromArgb((int)(72 + dScale * 50f), c2.R, c2.G, c2.B);
+                GpuGl.DrawLine(baseX, baseY, crCenterX, crCenterY, limbCol, 1.0f);
+                GpuGl.DrawLine(crCenterX, crCenterY + geoH * 0.16f, crCenterX - geoW * 0.45f, crCenterY - geoH * 0.04f, limbCol, 0.85f);
+                GpuGl.DrawLine(crCenterX, crCenterY + geoH * 0.16f, crCenterX + geoW * 0.45f, crCenterY - geoH * 0.04f, limbCol, 0.85f);
 
-                float trkW = bonW * 0.14f;
-                GpuGl.FillTriangle(p0x - trkW, p0y, p0x + trkW, p0y, p1x, p1y, Color.FromArgb((int)(72 + dScale * 36f), 28, 36, 26));
-                Color veinCol = Color.FromArgb((int)(82 + dScale * 60f), c2.R, c2.G, c2.B);
-                GpuGl.DrawLine(p0x, p0y, p1x, p1y, veinCol, 1.1f);
-                GpuGl.DrawLine(p1x, p1y, p2x, p2y, veinCol, 1.0f);
-                GpuGl.DrawLine(p2x, p2y, p3x, p3y, veinCol, 0.9f);
+                // Cohesive 6-vertex hexagonal/octahedral gem crown centered at (crCenterX, crCenterY)
+                float topX = crCenterX + sway * 0.15f, topY = baseY - geoH;
+                float ulX  = crCenterX - geoW * 0.82f, ulY  = crCenterY - geoH * 0.14f;
+                float urX  = crCenterX + geoW * 0.82f, urY  = crCenterY - geoH * 0.14f;
+                float blX  = crCenterX - geoW * 0.92f, blY  = crCenterY + geoH * 0.16f;
+                float brX  = crCenterX + geoW * 0.92f, brY  = crCenterY + geoH * 0.16f;
+                float botX = crCenterX,                botY = crCenterY + geoH * 0.30f;
 
-                float[] padX = new float[] { p1x + bendDir * bonW * 0.36f, p2x - bendDir * bonW * 0.38f, p3x };
-                float[] padY = new float[] { p1y, p2y, p3y };
-                float[] padW = new float[] { bonW * 0.72f, bonW * 0.66f, bonW * 0.78f };
-                float[] padH = new float[] { bonH * 0.18f, bonH * 0.17f, bonH * 0.21f };
+                Color fTopLt = Color.FromArgb((int)(46 + dScale * 36f), (c1.R + c2.R) / 3, (c1.G * 2) / 3, (c1.B + c2.B) / 3);
+                Color fTopRt = Color.FromArgb((int)(40 + dScale * 30f), c1.R / 3, c1.G / 2, (c1.B * 2) / 3);
+                Color fMidLt = Color.FromArgb((int)(42 + dScale * 32f), c1.R / 2, c1.G / 2, c1.B / 2);
+                Color fMidRt = Color.FromArgb((int)(36 + dScale * 26f), c3.R / 3, c3.G / 2, c3.B / 2);
+                Color edgeG  = Color.FromArgb((int)(62 + dScale * 48f), c1.R, c1.G, c1.B);
 
-                for (int p = 0; p < 3; p++) {
-                    float px = padX[p];
-                    float py = padY[p];
-                    float pw = padW[p];
-                    float ph = padH[p];
+                GpuGl.FillTriangle(ulX, ulY, topX, topY, crCenterX, crCenterY, fTopLt);
+                GpuGl.DrawTriangle(ulX, ulY, topX, topY, crCenterX, crCenterY, edgeG, 0.85f);
 
-                    Color pLt = Color.FromArgb((int)(50 + dScale * 38f), c1.R / 2, (c1.G * 2) / 3, c1.B / 2);
-                    Color pRt = Color.FromArgb((int)(44 + dScale * 32f), c3.R / 3, c3.G / 2, c3.B / 2);
-                    Color pEd = Color.FromArgb((int)(68 + dScale * 52f), c1.R, c1.G, c1.B);
+                GpuGl.FillTriangle(topX, topY, urX, urY, crCenterX, crCenterY, fTopRt);
+                GpuGl.DrawTriangle(topX, topY, urX, urY, crCenterX, crCenterY, edgeG, 0.85f);
 
-                    GpuGl.FillTriangle(px - pw, py + ph * 0.25f, px, py - ph * 0.75f, px, py + ph * 0.48f, pLt);
-                    GpuGl.DrawTriangle(px - pw, py + ph * 0.25f, px, py - ph * 0.75f, px, py + ph * 0.48f, pEd, 0.85f);
-                    GpuGl.FillTriangle(px, py - ph * 0.75f, px + pw, py + ph * 0.25f, px, py + ph * 0.48f, pRt);
-                    GpuGl.DrawTriangle(px, py - ph * 0.75f, px + pw, py + ph * 0.25f, px, py + ph * 0.48f, pEd, 0.85f);
-                }
+                GpuGl.FillTriangle(blX, blY, ulX, ulY, crCenterX, crCenterY, fMidLt);
+                GpuGl.DrawTriangle(blX, blY, ulX, ulY, crCenterX, crCenterY, edgeG, 0.85f);
+
+                GpuGl.FillTriangle(urX, urY, brX, brY, crCenterX, crCenterY, fMidRt);
+                GpuGl.DrawTriangle(urX, urY, brX, brY, crCenterX, crCenterY, edgeG, 0.85f);
+
+                GpuGl.FillTriangle(blX, blY, crCenterX, crCenterY, botX, botY, fMidLt);
+                GpuGl.DrawTriangle(blX, blY, crCenterX, crCenterY, botX, botY, edgeG, 0.85f);
+
+                GpuGl.FillTriangle(crCenterX, crCenterY, brX, brY, botX, botY, fMidRt);
+                GpuGl.DrawTriangle(crCenterX, crCenterY, brX, brY, botX, botY, edgeG, 0.85f);
             }
         }
 
         // =========================================================================
-        // C. ARCHED LOW-POLY CYBER-FERNS & BIOLUMINESCENT UNDERGROWTH (28 ROSETTES)
+        // C. DELICATE ARCHED CYBER-FERNS (14 ROSETTES ALONG RIVERBANKS & ROCK BASES)
         // =========================================================================
-        int fernCount = 28;
+        int fernCount = 14;
         float[] fnX = new float[fernCount];
         float[] fnY = new float[fernCount];
         float[] fnScale = new float[fernCount];
 
         for (int fIdx = 0; fIdx < fernCount; fIdx++) {
-            float t = 0.18f + (fIdx / (float)(fernCount - 1)) * 0.79f;
+            float t = 0.24f + (fIdx / (float)(fernCount - 1)) * 0.72f;
             float rCx, rCy, rHw, persp;
             GetRiverGeometryAt(t, m, horizonY, vanishX, floorSpan, phase, mIdx, out rCx, out rCy, out rHw, out persp);
 
             float side = (fIdx % 2 == 0) ? -1.0f : 1.0f;
             float hsh = (float)Math.Abs(Math.Sin(fIdx * 7.73f + 2.19f));
-            float bankMult = (fIdx % 3 == 0)
-                ? (1.16f + 0.45f * hsh)  // Moist riverbank ferns
-                : (1.68f + 1.85f * hsh); // Forest undergrowth ferns near rocks/trees
+            float bankMult = (fIdx % 3 != 0)
+                ? (1.16f + 0.32f * hsh)  // Moist riverbank edge
+                : (1.75f + 0.85f * hsh); // Near rock/tree bases
 
-            fnX[fIdx] = Math.Max(m.Left + 16f, Math.Min(m.Right - 16f, rCx + side * rHw * bankMult));
-            fnY[fIdx] = Math.Min(m.Bottom - 2f, rCy + 3.0f * persp);
-            fnScale[fIdx] = 0.28f + 0.72f * persp;
+            fnX[fIdx] = Math.Max(m.Left + 20f, Math.Min(m.Right - 20f, rCx + side * rHw * bankMult));
+            fnY[fIdx] = Math.Min(m.Bottom - 2f, rCy + 2.5f * persp);
+            fnScale[fIdx] = 0.26f + 0.64f * persp;
         }
 
-        // Pass C1: Batched GL_TRIANGLES for serrated low-poly fern blades
+        // Pass C1: Batched GL_TRIANGLES for serrated fern blades
         GpuGl.glBegin(GpuGl.GL_TRIANGLES);
         for (int fIdx = 0; fIdx < fernCount; fIdx++) {
             float bx = fnX[fIdx];
             float by = fnY[fIdx];
             float sc = fnScale[fIdx];
-            float frondLen = (11.0f + (fIdx % 3) * 4.5f) * sc;
-            float swayF = (float)Math.Sin(phase * 0.95f + fIdx * 0.85f) * (2.6f * sc);
+            float frondLen = (9.5f + (fIdx % 3) * 3.2f) * sc;
+            float swayF = (float)Math.Sin(phase * 0.95f + fIdx * 0.85f) * (2.2f * sc);
 
-            byte fAlpha = (byte)Math.Min(215, (int)(55 + sc * 115f));
+            byte fAlpha = (byte)Math.Min(195, (int)(50 + sc * 100f));
             Color bladeCol = (fIdx % 2 == 0) ? c1 : c2;
             GpuGl.glColor4ub((byte)(bladeCol.R / 2), (byte)((bladeCol.G * 2) / 3), (byte)(bladeCol.B / 2), fAlpha);
 
-            // 5 radiating arched fronds per fern rosette (-2, -1, 0, +1, +2)
             for (int fr = -2; fr <= 2; fr++) {
                 float dirX = fr * 0.42f;
                 float lift = 1.0f - Math.Abs(fr) * 0.16f;
                 float midX = bx + dirX * frondLen * 0.58f + swayF * 0.5f;
-                float midY = by - frondLen * 0.62f * lift;
-                float tipX = bx + dirX * frondLen * 1.18f + swayF;
-                float tipY = by - frondLen * (0.34f * lift) + Math.Abs(fr) * 2.2f * sc;
-                float wingW = 3.2f * sc;
+                float midY = by - frondLen * 0.60f * lift;
+                float tipX = bx + dirX * frondLen * 1.15f + swayF;
+                float tipY = by - frondLen * (0.32f * lift) + Math.Abs(fr) * 2.0f * sc;
+                float wingW = 2.6f * sc;
 
-                // Lower frond serrated leaflet triangle
-                GpuGl.glVertex2f(bx, by - 1.5f * sc);
+                GpuGl.glVertex2f(bx, by - 1.2f * sc);
                 GpuGl.glVertex2f(midX - wingW * 0.5f, midY - wingW);
                 GpuGl.glVertex2f(midX + wingW * 0.5f, midY + wingW * 0.4f);
 
-                // Outer arched frond blade triangle
-                GpuGl.glVertex2f(midX, midY - wingW * 0.65f);
+                GpuGl.glVertex2f(midX, midY - wingW * 0.6f);
                 GpuGl.glVertex2f(tipX, tipY);
-                GpuGl.glVertex2f(midX + dirX * 2.0f * sc, midY + wingW * 0.65f);
+                GpuGl.glVertex2f(midX + dirX * 1.8f * sc, midY + wingW * 0.6f);
             }
         }
         GpuGl.glEnd();
 
-        // Pass C2: Batched GL_LINES for arched fern stems (rachis) & glowing veins
-        GpuGl.glLineWidth(0.95f);
+        // Pass C2: Batched GL_LINES for arched fern stems
+        GpuGl.glLineWidth(0.9f);
         GpuGl.glBegin(GpuGl.GL_LINES);
         for (int fIdx = 0; fIdx < fernCount; fIdx++) {
             float bx = fnX[fIdx];
             float by = fnY[fIdx];
             float sc = fnScale[fIdx];
-            float frondLen = (11.0f + (fIdx % 3) * 4.5f) * sc;
-            float swayF = (float)Math.Sin(phase * 0.95f + fIdx * 0.85f) * (2.6f * sc);
+            float frondLen = (9.5f + (fIdx % 3) * 3.2f) * sc;
+            float swayF = (float)Math.Sin(phase * 0.95f + fIdx * 0.85f) * (2.2f * sc);
 
-            byte sAlpha = (byte)Math.Min(230, (int)(75 + sc * 130f));
+            byte sAlpha = (byte)Math.Min(210, (int)(65 + sc * 115f));
             Color stemCol = (fIdx % 3 == 0) ? c2 : c1;
             GpuGl.glColor4ub(stemCol.R, stemCol.G, stemCol.B, sAlpha);
 
@@ -7708,14 +7628,12 @@ public class HackerWallpaperForm : Form {
                 float dirX = fr * 0.42f;
                 float lift = 1.0f - Math.Abs(fr) * 0.16f;
                 float midX = bx + dirX * frondLen * 0.58f + swayF * 0.5f;
-                float midY = by - frondLen * 0.62f * lift;
-                float tipX = bx + dirX * frondLen * 1.18f + swayF;
-                float tipY = by - frondLen * (0.34f * lift) + Math.Abs(fr) * 2.2f * sc;
+                float midY = by - frondLen * 0.60f * lift;
+                float tipX = bx + dirX * frondLen * 1.15f + swayF;
+                float tipY = by - frondLen * (0.32f * lift) + Math.Abs(fr) * 2.0f * sc;
 
-                GpuGl.glVertex2f(bx, by);
-                GpuGl.glVertex2f(midX, midY);
-                GpuGl.glVertex2f(midX, midY);
-                GpuGl.glVertex2f(tipX, tipY);
+                GpuGl.glVertex2f(bx, by); GpuGl.glVertex2f(midX, midY);
+                GpuGl.glVertex2f(midX, midY); GpuGl.glVertex2f(tipX, tipY);
             }
         }
         GpuGl.glEnd();
@@ -7726,18 +7644,18 @@ public class HackerWallpaperForm : Form {
             float bx = fnX[fIdx];
             float by = fnY[fIdx];
             float sc = fnScale[fIdx];
-            if (sc < 0.42f) continue;
-            float frondLen = (11.0f + (fIdx % 3) * 4.5f) * sc;
-            float swayF = (float)Math.Sin(phase * 0.95f + fIdx * 0.85f) * (2.6f * sc);
-            byte spA = (byte)Math.Min(235, (int)(95 + sc * 120f));
+            if (sc < 0.45f) continue;
+            float frondLen = (9.5f + (fIdx % 3) * 3.2f) * sc;
+            float swayF = (float)Math.Sin(phase * 0.95f + fIdx * 0.85f) * (2.2f * sc);
+            byte spA = (byte)Math.Min(215, (int)(85 + sc * 110f));
             GpuGl.glColor4ub(c2.R, c2.G, c2.B, spA);
 
             for (int fr = -2; fr <= 2; fr += 2) {
                 float dirX = fr * 0.42f;
                 float lift = 1.0f - Math.Abs(fr) * 0.16f;
-                float tipX = bx + dirX * frondLen * 1.18f + swayF;
-                float tipY = by - frondLen * (0.34f * lift) + Math.Abs(fr) * 2.2f * sc;
-                float r = 1.3f * sc;
+                float tipX = bx + dirX * frondLen * 1.15f + swayF;
+                float tipY = by - frondLen * (0.32f * lift) + Math.Abs(fr) * 2.0f * sc;
+                float r = 1.2f * sc;
                 GpuGl.glVertex2f(tipX - r, tipY - r);
                 GpuGl.glVertex2f(tipX + r, tipY - r);
                 GpuGl.glVertex2f(tipX + r, tipY + r);
@@ -7747,13 +7665,13 @@ public class HackerWallpaperForm : Form {
         GpuGl.glEnd();
 
         // =========================================================================
-        // D. HANGING POLYGONAL CANOPY LIANA VINES WITH LEAF BRACTS (12 VINES)
+        // D. SUBTLE HANGING CANOPY LIANA VINES FROM UPPER CEILING (8 VINES)
         // =========================================================================
-        int vineCount = 12;
+        int vineCount = 8;
         for (int v = 0; v < vineCount; v++) {
-            float vxBase = m.Left + m.Width * (0.04f + 0.92f * (v / (float)(vineCount - 1)));
-            if (Math.Abs(vxBase - vanishX) < m.Width * 0.16f && (v == 5 || v == 6)) continue;
-            float vineLen = ceilSpan * (0.28f + (v % 4) * 0.12f);
+            float vxBase = m.Left + m.Width * (0.05f + 0.90f * (v / (float)(vineCount - 1)));
+            if (Math.Abs(vxBase - vanishX) < m.Width * 0.18f && (v == 3 || v == 4)) continue;
+            float vineLen = ceilSpan * (0.30f + (v % 3) * 0.12f);
             int segs = 5;
             float prevX = vxBase;
             float prevY = m.Top;
@@ -7761,9 +7679,9 @@ public class HackerWallpaperForm : Form {
                 float st = s / (float)segs;
                 float curX = vxBase + (float)Math.Sin(phase * 0.8f + v * 1.1f + s * 0.7f) * (8.0f * st);
                 float curY = m.Top + st * vineLen;
-                int vAlpha = (int)(75 * (1.0f - st * 0.32f));
+                int vAlpha = (int)(70 * (1.0f - st * 0.35f));
                 GpuGl.DrawLine(prevX, prevY, curX, curY, Color.FromArgb(vAlpha, c1.R, c1.G, c1.B), 1.1f);
-                Color spCol = (s == segs) ? Color.FromArgb(145, c2.R, c2.G, c2.B) : Color.FromArgb(95, c1.R, c1.G, c1.B);
+                Color spCol = (s == segs) ? Color.FromArgb(140, c2.R, c2.G, c2.B) : Color.FromArgb(90, c1.R, c1.G, c1.B);
                 GpuGl.FillRect(curX - 1.8f, curY - 1.8f, 3.6f, 3.6f, spCol);
                 prevX = curX;
                 prevY = curY;
