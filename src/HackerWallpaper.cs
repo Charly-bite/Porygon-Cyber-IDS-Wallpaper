@@ -7474,33 +7474,34 @@ public class HackerWallpaperForm : Form {
                 }
             } else if (species == 1) {
                 // -----------------------------------------------------------------
-                // SPECIES 1: SLENDER BIOLUMINESCENT CRYSTAL CYPRESS SPIRE
+                // SPECIES 1: SLENDER 4-TIER LOW-POLY SPRUCE / FIR CONIFER
+                //            (Same cohesive low-poly language, taller & slimmer)
                 // -----------------------------------------------------------------
-                float cypH = treeH * 1.10f;
-                float cypW = treeW * 0.64f;
-                float apexX = baseX + sway * 0.75f;
-                float apexY = baseY - cypH;
+                float sprH = treeH * 1.15f;
+                float sprW = treeW * 0.84f;
+                float trkW = sprW * 0.16f;
+                float topTrkX = baseX + sway * 0.42f;
+                float topTrkY = baseY - sprH * 0.40f;
+                GpuGl.FillTriangle(baseX - trkW, baseY, baseX + trkW, baseY, topTrkX, topTrkY, Color.FromArgb(74, 20, 34, 30));
+                GpuGl.DrawTriangle(baseX - trkW, baseY, baseX + trkW, baseY, topTrkX, topTrkY, Color.FromArgb(65, c2.R, c2.G, c2.B), 0.85f);
 
-                GpuGl.DrawLine(baseX, baseY, apexX, apexY, Color.FromArgb((int)(70 + dScale * 65f), c2.R, c2.G, c2.B), 0.95f);
+                int tiers = 4;
+                for (int tier = 0; tier < tiers; tier++) {
+                    float tierFrac = tier / (float)tiers;
+                    float tyBot = baseY - sprH * (0.22f + tierFrac * 0.56f);
+                    float tyTop = baseY - sprH * (0.48f + tierFrac * 0.52f);
+                    float tw = sprW * (1.0f - tierFrac * 0.60f);
+                    float txCenter = baseX + sway * (0.42f + tierFrac * 0.48f);
+                    float txApex = baseX + sway * (0.60f + tierFrac * 0.58f);
 
-                int segs = 4;
-                for (int s = 0; s < segs; s++) {
-                    float sf = s / (float)segs;
-                    float yBot = baseY - cypH * (0.14f + sf * 0.62f);
-                    float yMid = baseY - cypH * (0.28f + sf * 0.60f);
-                    float yTop = baseY - cypH * (0.48f + sf * 0.50f);
-                    float w = cypW * (1.0f - sf * 0.55f);
-                    float sxMid = baseX + sway * (0.3f + sf * 0.45f);
-                    float sxTop = baseX + sway * (0.45f + sf * 0.50f);
+                    Color leftFacet  = Color.FromArgb((int)(44 + dScale * 34f), (c1.R + c2.R) / 4, (c1.G + c2.G) / 3, (c1.B + c2.B) / 3);
+                    Color rightFacet = Color.FromArgb((int)(38 + dScale * 28f), c3.R / 3, c3.G / 2, (c1.B + c3.B) / 4);
+                    Color edgeCol    = Color.FromArgb((int)(60 + dScale * 48f), (c1.R + c2.R) / 2, (c1.G + c2.G) / 2, (c1.B + c2.B) / 2);
 
-                    Color cLt = Color.FromArgb((int)(44 + dScale * 36f), c2.R / 2, (c1.G + c2.G) / 3, (c1.B + c2.B) / 2);
-                    Color cRt = Color.FromArgb((int)(36 + dScale * 30f), c1.R / 3, c3.G / 2, (c1.B + c3.B) / 3);
-                    Color edg = Color.FromArgb((int)(64 + dScale * 50f), (c1.R + c2.R) / 2, (c1.G + c2.G) / 2, (c1.B + c2.B) / 2);
-
-                    GpuGl.FillTriangle(sxMid - w, yMid, sxMid, yBot, sxTop, yTop, cLt);
-                    GpuGl.DrawTriangle(sxMid - w, yMid, sxMid, yBot, sxTop, yTop, edg, 0.85f);
-                    GpuGl.FillTriangle(sxMid, yBot, sxMid + w, yMid, sxTop, yTop, cRt);
-                    GpuGl.DrawTriangle(sxMid, yBot, sxMid + w, yMid, sxTop, yTop, edg, 0.85f);
+                    GpuGl.FillTriangle(txCenter - tw, tyBot, txCenter, tyBot + 4.5f * dScale, txApex, tyTop, leftFacet);
+                    GpuGl.DrawTriangle(txCenter - tw, tyBot, txCenter, tyBot + 4.5f * dScale, txApex, tyTop, edgeCol, 0.9f);
+                    GpuGl.FillTriangle(txCenter, tyBot + 4.5f * dScale, txCenter + tw, tyBot, txApex, tyTop, rightFacet);
+                    GpuGl.DrawTriangle(txCenter, tyBot + 4.5f * dScale, txCenter + tw, tyBot, txApex, tyTop, edgeCol, 0.9f);
                 }
             } else {
                 // -----------------------------------------------------------------
