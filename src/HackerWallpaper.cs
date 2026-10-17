@@ -28,6 +28,8 @@ public class WallpaperConfig {
     public bool FollowMouse = false; // Strictly FALSE by default!
     public bool TrainingMode = false;// Intensive AI training waves
     public bool AutoPauseMaximized = true;
+    public bool GamerMode = false;   // 0% GPU / 0% CPU Hibernation Mode for Gaming
+    public bool AutoGamerOnFullscreenGame = true; // Auto-activate Gamer Mode when a fullscreen/borderless game runs
 
     // Persistent Single-Click Collapsible HUD Card States
     public bool RadarCollapsed = false;
@@ -46,7 +48,7 @@ public class WallpaperConfig {
     public void Save() {
         try {
             string json = string.Format(
-                "{{\r\n  \"ThemeIndex\": {0},\r\n  \"BgSceneMode\": {15},\r\n  \"RainSpeed\": {1},\r\n  \"RainDensity\": {2},\r\n  \"PorygonScale\": {3},\r\n  \"ShowTelemetry\": {4},\r\n  \"ShowRadar\": {5},\r\n  \"ShowPorygon\": {6},\r\n  \"FollowMouse\": {7},\r\n  \"TrainingMode\": {8},\r\n  \"AutoPauseMaximized\": {9},\r\n  \"RadarCollapsed\": {10},\r\n  \"TelemetryCollapsed\": {11},\r\n  \"ConnectomeCollapsed\": {12},\r\n  \"Brain3DCollapsed\": {13},\r\n  \"SecondaryBarsCollapsed\": {14}\r\n}}",
+                "{{\r\n  \"ThemeIndex\": {0},\r\n  \"BgSceneMode\": {15},\r\n  \"RainSpeed\": {1},\r\n  \"RainDensity\": {2},\r\n  \"PorygonScale\": {3},\r\n  \"ShowTelemetry\": {4},\r\n  \"ShowRadar\": {5},\r\n  \"ShowPorygon\": {6},\r\n  \"FollowMouse\": {7},\r\n  \"TrainingMode\": {8},\r\n  \"AutoPauseMaximized\": {9},\r\n  \"GamerMode\": {16},\r\n  \"AutoGamerOnFullscreenGame\": {17},\r\n  \"RadarCollapsed\": {10},\r\n  \"TelemetryCollapsed\": {11},\r\n  \"ConnectomeCollapsed\": {12},\r\n  \"Brain3DCollapsed\": {13},\r\n  \"SecondaryBarsCollapsed\": {14}\r\n}}",
                 ThemeIndex, RainSpeed, RainDensity, PorygonScale,
                 ShowTelemetry.ToString().ToLower(),
                 ShowRadar.ToString().ToLower(),
@@ -59,7 +61,9 @@ public class WallpaperConfig {
                 ConnectomeCollapsed.ToString().ToLower(),
                 Brain3DCollapsed.ToString().ToLower(),
                 SecondaryBarsCollapsed.ToString().ToLower(),
-                BgSceneMode
+                BgSceneMode,
+                GamerMode.ToString().ToLower(),
+                AutoGamerOnFullscreenGame.ToString().ToLower()
             );
             File.WriteAllText(ConfigPath, json, Encoding.UTF8);
         } catch { }
@@ -81,6 +85,8 @@ public class WallpaperConfig {
                 cfg.FollowMouse = ParseBool(txt, "FollowMouse", false);
                 cfg.TrainingMode = ParseBool(txt, "TrainingMode", false);
                 cfg.AutoPauseMaximized = ParseBool(txt, "AutoPauseMaximized", true);
+                cfg.GamerMode = ParseBool(txt, "GamerMode", false);
+                cfg.AutoGamerOnFullscreenGame = ParseBool(txt, "AutoGamerOnFullscreenGame", true);
                 cfg.RadarCollapsed = ParseBool(txt, "RadarCollapsed", false);
                 cfg.TelemetryCollapsed = ParseBool(txt, "TelemetryCollapsed", false);
                 cfg.ConnectomeCollapsed = ParseBool(txt, "ConnectomeCollapsed", false);
@@ -282,14 +288,34 @@ public static class GpuGl {
         glEnd();
     }
 
+    private const int LUT_SIZE = 64;
+    private static readonly float[] cosLut64 = new float[LUT_SIZE];
+    private static readonly float[] sinLut64 = new float[LUT_SIZE];
+
+    static GpuGl() {
+        for (int i = 0; i < LUT_SIZE; i++) {
+            double a = i * (2.0 * Math.PI / LUT_SIZE);
+            cosLut64[i] = (float)Math.Cos(a);
+            sinLut64[i] = (float)Math.Sin(a);
+        }
+    }
+
     public static void DrawEllipse(float cx, float cy, float rx, float ry, Color c, float width, int segs) {
         glLineWidth(width);
         SetColor(c);
         glBegin(GL_LINE_LOOP);
-        double step = 2.0 * Math.PI / segs;
-        for (int i = 0; i < segs; i++) {
-            double a = i * step;
-            glVertex2f(cx + (float)Math.Cos(a) * rx, cy + (float)Math.Sin(a) * ry);
+        if (segs <= 0) segs = 12;
+        if (LUT_SIZE % segs == 0) {
+            int stride = LUT_SIZE / segs;
+            for (int i = 0; i < LUT_SIZE; i += stride) {
+                glVertex2f(cx + cosLut64[i] * rx, cy + sinLut64[i] * ry);
+            }
+        } else {
+            double step = 2.0 * Math.PI / segs;
+            for (int i = 0; i < segs; i++) {
+                double a = i * step;
+                glVertex2f(cx + (float)Math.Cos(a) * rx, cy + (float)Math.Sin(a) * ry);
+            }
         }
         glEnd();
     }
@@ -298,10 +324,19 @@ public static class GpuGl {
         SetColor(c);
         glBegin(GL_TRIANGLE_FAN);
         glVertex2f(cx, cy);
-        double step = 2.0 * Math.PI / segs;
-        for (int i = 0; i <= segs; i++) {
-            double a = i * step;
-            glVertex2f(cx + (float)Math.Cos(a) * rx, cy + (float)Math.Sin(a) * ry);
+        if (segs <= 0) segs = 12;
+        if (LUT_SIZE % segs == 0) {
+            int stride = LUT_SIZE / segs;
+            for (int i = 0; i < LUT_SIZE; i += stride) {
+                glVertex2f(cx + cosLut64[i] * rx, cy + sinLut64[i] * ry);
+            }
+            glVertex2f(cx + cosLut64[0] * rx, cy + sinLut64[0] * ry);
+        } else {
+            double step = 2.0 * Math.PI / segs;
+            for (int i = 0; i <= segs; i++) {
+                double a = i * step;
+                glVertex2f(cx + (float)Math.Cos(a) * rx, cy + (float)Math.Sin(a) * ry);
+            }
         }
         glEnd();
     }
@@ -312,6 +347,15 @@ public static class GpuGl {
         SetColor(c);
         glRasterPos2f(x, ry);
         glListBase(fontListBase);
+        textBuf[0] = (byte)(ch < 256 ? ch : '?');
+        glCallLists(1, GL_UNSIGNED_BYTE, textBuf);
+    }
+
+    public static void DrawCharFast(char ch, float x, float y, byte r, byte g, byte b, byte a) {
+        float ry = y + 11f;
+        if (x < 2f || x >= CanvasW - 4f || ry < 2f || ry >= CanvasH - 2f) return;
+        glColor4ub(r, g, b, a);
+        glRasterPos2f(x, ry);
         textBuf[0] = (byte)(ch < 256 ? ch : '?');
         glCallLists(1, GL_UNSIGNED_BYTE, textBuf);
     }
@@ -4448,6 +4492,18 @@ public class HackerWallpaperForm : Form {
     [DllImport("psapi.dll")]
     public static extern bool EmptyWorkingSet(IntPtr hProcess);
 
+    [DllImport("shell32.dll")]
+    public static extern int SHQueryUserNotificationState(out int pquns);
+
+    [DllImport("user32.dll")]
+    public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+    [DllImport("user32.dll")]
+    public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct RECT { public int Left, Top, Right, Bottom; }
+
     [StructLayout(LayoutKind.Sequential)]
     public struct FILETIME { public uint dwLowDateTime; public uint dwHighDateTime; }
 
@@ -4483,11 +4539,20 @@ public class HackerWallpaperForm : Form {
     const int HOTKEY_OPACITY_UP_ID = 9004;
     const int HOTKEY_OPACITY_DOWN_ID = 9005;
     const int HOTKEY_BG_MODE_ID = 9006;
+    const int HOTKEY_GAMER_ID = 9007;
     const uint MOD_ALT = 0x0001;
     const uint MOD_CONTROL = 0x0002;
     const int WH_MOUSE_LL = 14;
     const int WM_MOUSEWHEEL = 0x020A;
     private int terminalOpacityPct = 50;
+
+    // Gamer Mode (0.0% GPU / 0.0% CPU Hibernation State)
+    private bool autoGameDetected = false;
+    private string activeGameName = "";
+    private bool isGamerSuspended = false;
+    private bool gamerStaticFrameRendered = false;
+    private bool socPort5080Online = false;
+    private int socPort5080LastCheckCycle = -100;
 
     public WallpaperConfig Config;
     private int screenW;
@@ -4550,8 +4615,6 @@ public class HackerWallpaperForm : Form {
     private int currentFps = 24;
     private bool gpuEcoMode = false;
     private Stopwatch frameSw = new Stopwatch();
-    private List<PerformanceCounter> gpuCounters = null;
-    private bool gpuCountersInitTried = false;
     private float ramUsedGB = 0f, ramTotalGB = 32f;
     private int ramPercent = 0;
     private string activeNicName = "Wi-Fi";
@@ -4845,9 +4908,9 @@ public class HackerWallpaperForm : Form {
         renderTimer.Interval = 42; // Hardware GPU Eco-Balanced target (~24 FPS active desktop / 15 FPS when app focused)
         renderTimer.Tick += OnRenderTick;
 
-        telemetryTimer = new System.Threading.Timer(UpdateRealTelemetry, null, 1200, 1800);
-        // Dedicated Multi-Core CPU Evolutionary Training Timer (runs every 200ms across CPU threads while GPU renders)
-        cpuEvoTimer = new System.Threading.Timer(OnCpuEvolutionTimerTick, null, 600, 200);
+        telemetryTimer = new System.Threading.Timer(UpdateRealTelemetry, null, 1200, 2200);
+        // Dedicated Multi-Core CPU Evolutionary Training Timer (runs every 250ms across CPU threads while GPU renders)
+        cpuEvoTimer = new System.Threading.Timer(OnCpuEvolutionTimerTick, null, 600, 250);
 
         if (openConfigOnStart) {
             System.Windows.Forms.Timer t = new System.Windows.Forms.Timer();
@@ -4858,7 +4921,7 @@ public class HackerWallpaperForm : Form {
     }
 
     private void OnCpuEvolutionTimerTick(object state) {
-        if (porygon == null || !Config.ShowPorygon) return;
+        if (isGamerSuspended || porygon == null || !Config.ShowPorygon) return;
         Porygon3DAvatar.RealTelemetryFeed feedSnap;
         lock (telemetryLock) { feedSnap = currentFeed; }
         porygon.RunCpuEvolutionTick(feedSnap);
@@ -5066,7 +5129,27 @@ public class HackerWallpaperForm : Form {
         return "TCP/PORT-" + port;
     }
 
+    private bool IsLocalSocPortOpen() {
+        if (socPort5080Online && (telemetryCycles - socPort5080LastCheckCycle) < 4) return true;
+        if (!socPort5080Online && (telemetryCycles - socPort5080LastCheckCycle) < 15) return false;
+        socPort5080LastCheckCycle = telemetryCycles;
+        try {
+            using (TcpClient tcp = new TcpClient()) {
+                IAsyncResult ar = tcp.BeginConnect("127.0.0.1", 5080, null, null);
+                bool ok = ar.AsyncWaitHandle.WaitOne(28);
+                if (ok && tcp.Connected) {
+                    try { tcp.EndConnect(ar); } catch { }
+                    socPort5080Online = true;
+                    return true;
+                }
+            }
+        } catch { }
+        socPort5080Online = false;
+        return false;
+    }
+
     private void UpdateRealTelemetry(object state) {
+        if (isGamerSuspended) return;
         try {
             telemetryCycles++;
             FILETIME ftIdle, ftKernel, ftUser;
@@ -5133,7 +5216,7 @@ public class HackerWallpaperForm : Form {
             int newPing = pingMs;
             try {
                 using (Ping p = new Ping()) {
-                    PingReply rep = p.Send("1.1.1.1", 900);
+                    PingReply rep = p.Send("1.1.1.1", 650);
                     if (rep != null && rep.Status == IPStatus.Success) {
                         newPing = (int)Math.Max(1, rep.RoundtripTime);
                     }
@@ -5172,6 +5255,7 @@ public class HackerWallpaperForm : Form {
             int newHostCount = 0;
             string sampleConn = null;
             string anomalyHeadline = "BASELINE_NORMAL";
+            bool socOnline = IsLocalSocPortOpen();
 
             List<RadarBlip> newBlips = new List<RadarBlip>();
             HashSet<string> seenHosts = new HashSet<string>();
@@ -5247,8 +5331,8 @@ public class HackerWallpaperForm : Form {
                         if (anomalyHeadline == "BASELINE_NORMAL") anomalyHeadline = "NEW_HOST: " + remIp;
                     }
 
-                    // If this is a newly seen external IP, let Porygon query QB-Network VirusTotal API (http://192.168.2.222:5080/api/wallpaper-vt-check)
-                    if (!isLan && !vtAuditedIps.Contains(remIp) && vtAuditedIps.Count < 45 && porygon != null) {
+                    // If this is a newly seen external IP and local SOC API is online, let Porygon query VirusTotal API
+                    if (socOnline && !isLan && !vtAuditedIps.Contains(remIp) && vtAuditedIps.Count < 45 && porygon != null) {
                         vtAuditedIps.Add(remIp);
                         try {
                             using (System.Net.WebClient vtWc = new System.Net.WebClient()) {
@@ -5361,10 +5445,10 @@ public class HackerWallpaperForm : Form {
                 LastAnomalySummary = anomalyHeadline
             };
 
-            // Poll QB-Network SOC Unified API + VirusTotal Threat Intel (http://127.0.0.1:5080/api/wallpaper-telemetry)
+            // Poll QB-Network SOC Unified API + VirusTotal Threat Intel (http://127.0.0.1:5080/api/wallpaper-telemetry) only if port 5080 is online
             List<string> fetchedRainTokens = null;
             List<string> fetchedLogLines = null;
-            if (telemetryCycles == 1 || telemetryCycles % 2 == 0) {
+            if (socOnline && (telemetryCycles == 1 || telemetryCycles % 2 == 0)) {
                 try {
                     using (System.Net.WebClient wc = new System.Net.WebClient()) {
                         wc.Encoding = System.Text.Encoding.UTF8;
@@ -5443,50 +5527,18 @@ public class HackerWallpaperForm : Form {
                 } catch { }
             }
 
-            // Sample Real GPU 3D Utilization (Lightweight 3D Engine Counters + OpenGL Frame Duty Fallback)
-            float newGpuPct = gpuUsagePct;
-            try {
-                if (!gpuCountersInitTried && telemetryCycles >= 2) {
-                    gpuCountersInitTried = true;
-                    gpuCounters = new List<PerformanceCounter>();
-                    PerformanceCounterCategory cat = new PerformanceCounterCategory("GPU Engine");
-                    string[] instNames = cat.GetInstanceNames();
-                    int myPid = Process.GetCurrentProcess().Id;
-                    string pidTag = "pid_" + myPid + "_";
-                    for (int i = 0; i < instNames.Length; i++) {
-                        string nm = instNames[i];
-                        if (nm.Contains("engtype_3D") && (nm.Contains(pidTag) || nm.Contains("dwm") || gpuCounters.Count < 6)) {
-                            if (nm.Contains(pidTag)) {
-                                PerformanceCounter pc = new PerformanceCounter("GPU Engine", "Utilization Percentage", nm, true);
-                                pc.NextValue();
-                                gpuCounters.Add(pc);
-                            }
-                        }
-                    }
-                }
-                if (gpuCounters != null && gpuCounters.Count > 0) {
-                    float sumGpu = 0f;
-                    for (int i = 0; i < gpuCounters.Count; i++) {
-                        sumGpu += gpuCounters[i].NextValue();
-                    }
-                    if (sumGpu > 0.1f) {
-                        newGpuPct = Math.Min(100f, sumGpu);
-                    } else {
-                        float dutyPct = (gpuFrameMs * currentFps) / 10.0f;
-                        newGpuPct = Math.Max(3.5f, Math.Min(99f, dutyPct * 1.35f));
-                    }
-                } else {
-                    float dutyPct = (gpuFrameMs * currentFps) / 10.0f;
-                    newGpuPct = Math.Max(4.0f, Math.Min(99f, dutyPct * 1.45f));
-                }
-            } catch {
+            // Zero-Overhead GPU 3D Utilization Calculation from OpenGL Frame Duty (avoids heavy PDH GPU Engine registry stalls)
+            float newGpuPct;
+            if (isGamerSuspended) {
+                newGpuPct = 0.0f;
+            } else {
                 float dutyPct = (gpuFrameMs * currentFps) / 10.0f;
-                newGpuPct = Math.Max(4.0f, Math.Min(99f, dutyPct * 1.45f));
+                newGpuPct = Math.Max(1.6f, Math.Min(99f, dutyPct * 1.15f));
             }
 
             lock (telemetryLock) {
                 cpuUsage = newCpu;
-                gpuUsagePct = gpuUsagePct * 0.45f + newGpuPct * 0.55f;
+                gpuUsagePct = isGamerSuspended ? 0.0f : (gpuUsagePct * 0.45f + newGpuPct * 0.55f);
                 ramUsedGB = newRamUsed;
                 ramTotalGB = newRamTotal;
                 ramPercent = newRamPct;
@@ -5533,8 +5585,12 @@ public class HackerWallpaperForm : Form {
         RegisterHotKey(this.Handle, HOTKEY_OPACITY_UP_ID, MOD_CONTROL | MOD_ALT, (uint)Keys.Up);
         RegisterHotKey(this.Handle, HOTKEY_OPACITY_DOWN_ID, MOD_CONTROL | MOD_ALT, (uint)Keys.Down);
         RegisterHotKey(this.Handle, HOTKEY_BG_MODE_ID, MOD_CONTROL | MOD_ALT, (uint)Keys.M);
+        RegisterHotKey(this.Handle, HOTKEY_GAMER_ID, MOD_CONTROL | MOD_ALT, (uint)Keys.G);
         InstallMouseWheelHook();
         renderTimer.Start();
+        if (Config.GamerMode) {
+            UpdateGamerSuspensionState(true);
+        }
         try { EmptyWorkingSet(Process.GetCurrentProcess().Handle); } catch { }
     }
 
@@ -5549,8 +5605,228 @@ public class HackerWallpaperForm : Form {
         UnregisterHotKey(this.Handle, HOTKEY_OPACITY_UP_ID);
         UnregisterHotKey(this.Handle, HOTKEY_OPACITY_DOWN_ID);
         UnregisterHotKey(this.Handle, HOTKEY_BG_MODE_ID);
+        UnregisterHotKey(this.Handle, HOTKEY_GAMER_ID);
         if (porygon != null) porygon.SaveBrainStates();
         base.OnFormClosing(e);
+    }
+
+    public void ToggleGamerMode() {
+        SetGamerMode(!Config.GamerMode, "MANUAL_TOGGLE");
+    }
+
+    public void SetGamerMode(bool enable, string reasonTag) {
+        Config.GamerMode = enable;
+        Config.Save();
+        UpdateGamerSuspensionState(true);
+    }
+
+    private bool IsFullscreenGameActive(out string detectedName) {
+        detectedName = "";
+        try {
+            int quns = 0;
+            bool isD3DFullscreen = (SHQueryUserNotificationState(out quns) == 0 && quns == 3); // 3 = QUNS_RUNNING_D3D_FULL_SCREEN
+
+            IntPtr fg = GetForegroundWindow();
+            if (fg == IntPtr.Zero || fg == this.Handle || IsDesktopWindowHandle(fg)) {
+                return false;
+            }
+
+            RECT wr;
+            if (!GetWindowRect(fg, out wr)) return false;
+            int w = wr.Right - wr.Left;
+            int h = wr.Bottom - wr.Top;
+            if (w < 800 || h < 600) return false;
+
+            bool coversFullMonitor = false;
+            Screen[] scrs = Screen.AllScreens;
+            for (int i = 0; i < scrs.Length; i++) {
+                Rectangle b = scrs[i].Bounds;
+                if (w >= b.Width && h >= b.Height && Math.Abs(wr.Left - b.Left) <= 2 && Math.Abs(wr.Top - b.Top) <= 2) {
+                    coversFullMonitor = true;
+                    break;
+                }
+            }
+
+            if (!coversFullMonitor && !isD3DFullscreen) return false;
+
+            uint pid = 0;
+            GetWindowThreadProcessId(fg, out pid);
+            if (pid == 0) return false;
+
+            string procName = "";
+            string procPath = "";
+            try {
+                using (Process p = Process.GetProcessById((int)pid)) {
+                    procName = (p.ProcessName ?? "").ToLowerInvariant();
+                    try { procPath = (p.MainModule.FileName ?? "").ToLowerInvariant(); } catch { }
+                }
+            } catch {
+                return isD3DFullscreen;
+            }
+
+            if (string.IsNullOrEmpty(procName)) return isD3DFullscreen;
+
+            // Exclude standard desktop shells, browsers, IDEs, and productivity apps
+            if (procName == "explorer" || procName == "shellexperiencehost" || procName == "searchhost" ||
+                procName == "startmenuexperiencehost" || procName == "applicationframehost" || procName == "taskmgr" ||
+                procName == "hackerwallpaper" || procName == "code" || procName == "devenv" ||
+                procName == "windowsterminal" || procName == "powershell" || procName == "pwsh" || procName == "cmd" ||
+                procName == "chrome" || procName == "msedge" || procName == "firefox" || procName == "brave" || procName == "opera" ||
+                procName == "whatsapp" || procName == "whatsapp.root" || procName == "discord" || procName == "spotify" ||
+                procName == "slack" || procName == "teams" || procName == "notepad" || procName == "antigravity") {
+                return false;
+            }
+
+            if (isD3DFullscreen) {
+                detectedName = procName.ToUpperInvariant();
+                return true;
+            }
+
+            // Check if process belongs to a known game library path or game executable
+            if (procPath.Contains("steamapps") || procPath.Contains("epic games") || procPath.Contains("riot games") ||
+                procPath.Contains("xboxgames") || procPath.Contains("battle.net") || procPath.Contains("ea games") ||
+                procPath.Contains("ubisoft") || procPath.Contains("gog galaxy") || procPath.Contains("games\\") ||
+                procName.Contains("valorant") || procName.Contains("cs2") || procName.Contains("dota2") ||
+                procName.Contains("fortnite") || procName.Contains("overwatch") || procName.Contains("r5apex") ||
+                procName.Contains("eldenring") || procName.Contains("cyberpunk") || procName.Contains("helldivers") ||
+                procName.Contains("genshin") || procName.Contains("minecraft") || procName.Contains("gtav") ||
+                procName.Contains("cod") || procName.Contains("league") || procName.Contains("unreal")) {
+                detectedName = procName.ToUpperInvariant();
+                return true;
+            }
+
+            // Borderless fullscreen window covering entire monitor (including taskbar area) without standard WS_CAPTION
+            int style = GetWindowLong(fg, GWL_STYLE);
+            const int WS_CAPTION = 0x00C00000;
+            if (coversFullMonitor && (style & WS_CAPTION) == 0) {
+                detectedName = procName.ToUpperInvariant();
+                return true;
+            }
+        } catch { }
+        return false;
+    }
+
+    private void RenderGamerHibernationFrameOpenGL() {
+        if (!glEnabled || glHdc == IntPtr.Zero || glContext == IntPtr.Zero) {
+            this.Invalidate();
+            return;
+        }
+        try {
+            GpuGl.wglMakeCurrent(glHdc, glContext);
+            GpuGl.CanvasW = screenW;
+            GpuGl.CanvasH = screenH;
+            GpuGl.glViewport(0, 0, screenW, screenH);
+            GpuGl.glMatrixMode(GpuGl.GL_PROJECTION);
+            GpuGl.glLoadIdentity();
+            GpuGl.glOrtho(0.0, screenW, screenH, 0.0, -2000.0, 2000.0);
+            GpuGl.glMatrixMode(GpuGl.GL_MODELVIEW);
+            GpuGl.glLoadIdentity();
+            GpuGl.glDisable(GpuGl.GL_DEPTH_TEST);
+            GpuGl.glEnable(GpuGl.GL_BLEND);
+            GpuGl.glBlendFunc(GpuGl.GL_SRC_ALPHA, GpuGl.GL_ONE_MINUS_SRC_ALPHA);
+            GpuGl.glDisable(GpuGl.GL_LINE_SMOOTH);
+
+            if (bgTexDirty || bgTexId == 0) {
+                GpuGl.UploadBitmapToTexture(bgBitmap, ref bgTexId, ref bgTexW, ref bgTexH);
+                bgTexDirty = false;
+            }
+            Color c1, c2, c3, headCol;
+            GetThemeColors(out c1, out c2, out c3, out headCol);
+
+            int hudW = 584;
+            int hudH = 228;
+            int hudX = primaryMonRect.Right - hudW - 22;
+            int hudY = primaryMonRect.Top + 22;
+
+            if (Config.ShowTelemetry) {
+                if (hudTelemetryBmp == null) {
+                    hudTelemetryBmp = new Bitmap(hudW + 4, hudH + 4, PixelFormat.Format32bppArgb);
+                }
+                using (Graphics gTel = Graphics.FromImage(hudTelemetryBmp)) {
+                    gTel.Clear(Color.FromArgb(0, 0, 0, 0));
+                    gTel.SmoothingMode = SmoothingMode.AntiAlias;
+                    gTel.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+                    DrawTelemetryHUD(gTel, 2, 2, hudW, hudH, c1, c2, c3);
+                }
+                GpuGl.UploadBitmapToTexture(hudTelemetryBmp, ref hudTelemetryTexId, ref hudTelemetryTexW, ref hudTelemetryTexH);
+                hudTelemetryDirty = false;
+            }
+
+            // Render static dark wallpaper + Gamer Mode HUD to both buffers, then detach OpenGL context completely (0.0% GPU!)
+            for (int pass = 0; pass < 2; pass++) {
+                GpuGl.DrawTexturedQuad(bgTexId, 0, 0, screenW, screenH);
+                if (Config.ShowTelemetry && hudTelemetryTexId != 0) {
+                    GpuGl.DrawTexturedQuad(hudTelemetryTexId, hudX - 2, hudY - 2, hudW + 4, hudH + 4);
+                }
+                GpuGl.SwapBuffers(glHdc);
+            }
+            GpuGl.wglMakeCurrent(IntPtr.Zero, IntPtr.Zero);
+            gamerStaticFrameRendered = true;
+        } catch { }
+    }
+
+    private void UpdateGamerSuspensionState(bool forceRefresh) {
+        bool shouldSuspend = Config.GamerMode || (Config.AutoGamerOnFullscreenGame && autoGameDetected);
+        if (shouldSuspend) {
+            bool wasSuspended = isGamerSuspended;
+            isGamerSuspended = true;
+            lock (telemetryLock) {
+                gpuUsagePct = 0.0f;
+                gpuFrameMs = 0.0f;
+                currentFps = 0;
+                if (!wasSuspended || forceRefresh) {
+                    string ts = DateTime.Now.ToString("HH:mm:ss");
+                    string src = Config.GamerMode ? "MANUAL (Ctrl+Alt+G)" : ("AUTO_GAME: " + activeGameName);
+                    liveLogLines.Add(string.Format("[{0}] [GAMER_MODE] 0.0% GPU HIBERNACIÓN ACTIVA // {1}", ts, src));
+                    while (liveLogLines.Count > 5) liveLogLines.RemoveAt(0);
+                }
+            }
+            if (telemetryTimer != null) {
+                try { telemetryTimer.Change(Timeout.Infinite, Timeout.Infinite); } catch { }
+            }
+            if (cpuEvoTimer != null) {
+                try { cpuEvoTimer.Change(Timeout.Infinite, Timeout.Infinite); } catch { }
+            }
+            if (renderTimer != null && renderTimer.Interval != 120) {
+                renderTimer.Interval = 120;
+            }
+            if (!wasSuspended || forceRefresh || !gamerStaticFrameRendered) {
+                RenderGamerHibernationFrameOpenGL();
+                try { EmptyWorkingSet(Process.GetCurrentProcess().Handle); } catch { }
+            }
+        } else if (isGamerSuspended || forceRefresh) {
+            bool wasSuspended = isGamerSuspended;
+            isGamerSuspended = false;
+            gamerStaticFrameRendered = false;
+            lock (telemetryLock) {
+                currentFps = 24;
+                gpuFrameMs = 2.4f;
+                gpuUsagePct = 3.2f;
+                if (wasSuspended) {
+                    string ts = DateTime.Now.ToString("HH:mm:ss");
+                    liveLogLines.Add(string.Format("[{0}] [GAMER_MODE] Reanudando Renderizado OpenGL 3D (24 FPS)", ts));
+                    while (liveLogLines.Count > 5) liveLogLines.RemoveAt(0);
+                }
+            }
+            hudTelemetryDirty = true;
+            hudRadarDirty = true;
+            hudConnectomeDirty = true;
+            hudBrain3DDirty = true;
+            if (telemetryTimer != null) {
+                try { telemetryTimer.Change(150, 2200); } catch { }
+            }
+            if (cpuEvoTimer != null) {
+                try { cpuEvoTimer.Change(250, 250); } catch { }
+            }
+            if (renderTimer != null) {
+                renderTimer.Interval = 42;
+            }
+            if (glEnabled) {
+                RenderOpenGLFrame();
+            } else {
+                this.Invalidate();
+            }
+        }
     }
 
     private void AdjustTerminalOpacity(int deltaPct) {
@@ -5583,6 +5859,7 @@ public class HackerWallpaperForm : Form {
                 while (liveLogLines.Count > 5) liveLogLines.RemoveAt(0);
             }
             hudTelemetryDirty = true;
+            if (isGamerSuspended) RenderGamerHibernationFrameOpenGL();
         } catch { }
     }
 
@@ -5626,7 +5903,7 @@ public class HackerWallpaperForm : Form {
 
     private IntPtr MouseWheelHookCallback(int nCode, IntPtr wParam, IntPtr lParam) {
         try {
-            if (nCode >= 0 && wParam == (IntPtr)WM_MOUSEWHEEL && Config != null && Config.ShowPorygon && !brain3DCollapsed) {
+            if (!isGamerSuspended && nCode >= 0 && wParam == (IntPtr)WM_MOUSEWHEEL && Config != null && Config.ShowPorygon && !brain3DCollapsed) {
                 MSLLHOOKSTRUCT hs = (MSLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(MSLLHOOKSTRUCT));
                 Point screenPt = hs.pt;
                 IntPtr hHit = WindowFromPoint(screenPt);
@@ -5691,6 +5968,9 @@ public class HackerWallpaperForm : Form {
                 return;
             } else if (hk == HOTKEY_BG_MODE_ID) {
                 CycleBgSceneMode();
+                return;
+            } else if (hk == HOTKEY_GAMER_ID) {
+                ToggleGamerMode();
                 return;
             }
         }
@@ -5846,8 +6126,10 @@ public class HackerWallpaperForm : Form {
         if ((exStyle & WS_EX_LAYERED) == 0) {
             SetWindowLong(this.Handle, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
             SetLayeredWindowAttributes(this.Handle, 0, 255, LWA_ALPHA);
-        }
-        if (cachedDefView != IntPtr.Zero) {
+            if (cachedDefView != IntPtr.Zero) {
+                SetWindowPos(this.Handle, cachedDefView, 0, 0, screenW, screenH, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+            }
+        } else if (frameCount <= 5 && cachedDefView != IntPtr.Zero) {
             SetWindowPos(this.Handle, cachedDefView, 0, 0, screenW, screenH, SWP_NOACTIVATE | SWP_SHOWWINDOW);
         }
     }
@@ -5957,7 +6239,7 @@ public class HackerWallpaperForm : Form {
             Point pt = this.PointToClient(screenPt);
 
             // Priority 1: If 3D Brain is in Fullscreen Mode on Primary Monitor, handle clicks on it first!
-            if (Config.ShowPorygon && porygon != null && brain3DFullscreen && !brain3DCollapsed) {
+            if (!isGamerSuspended && Config.ShowPorygon && porygon != null && brain3DFullscreen && !brain3DCollapsed) {
                 Rectangle fullBrainRect = GetCurrentBrain3DRect();
                 if (fullBrainRect.Contains(pt)) {
                     HandleBrain3DClick(pt, fullBrainRect);
@@ -5975,7 +6257,7 @@ public class HackerWallpaperForm : Form {
             int radPanelX = hudX - radPanelW - 14;
             int radPanelY = primaryMonRect.Top + 22;
 
-            if (Config.ShowRadar) {
+            if (!isGamerSuspended && Config.ShowRadar) {
                 Rectangle radRect = new Rectangle(radPanelX, radPanelY, radPanelW, radPanelH);
                 if (radRect.Contains(pt)) {
                     radarCollapsed = !radarCollapsed;
@@ -5991,8 +6273,12 @@ public class HackerWallpaperForm : Form {
                 if (telRect.Contains(pt)) {
                     int relX = pt.X - hudX;
                     int relY = pt.Y - hudY;
-                    if (relY <= 30 && relX >= hudW - 142 && relX < hudW - 96) {
+                    if (relY <= 30 && relX >= hudW - 204 && relX < hudW - 142) {
+                        ToggleGamerMode();
+                        return;
+                    } else if (relY <= 30 && relX >= hudW - 142 && relX < hudW - 96) {
                         CycleBgSceneMode();
+                        if (isGamerSuspended) RenderGamerHibernationFrameOpenGL();
                         return;
                     } else if (relY <= 30 && relX >= hudW - 96 && relX < hudW - 64) {
                         AdjustTerminalOpacity(-10);
@@ -6005,6 +6291,7 @@ public class HackerWallpaperForm : Form {
                     Config.TelemetryCollapsed = telemetryCollapsed;
                     Config.Save();
                     hudTelemetryDirty = true;
+                    if (isGamerSuspended) RenderGamerHibernationFrameOpenGL();
                     return;
                 }
 
@@ -6025,7 +6312,7 @@ public class HackerWallpaperForm : Form {
                 }
             }
 
-            if (Config.ShowPorygon && porygon != null) {
+            if (!isGamerSuspended && Config.ShowPorygon && porygon != null) {
                 int bw = 584;
                 int bh = connectomeCollapsed ? 32 : (78 + porygon.Agents.Count * 21);
                 int bx = primaryMonRect.Right - bw - 22;
@@ -6053,42 +6340,57 @@ public class HackerWallpaperForm : Form {
             ShowConfigWindow();
         }
 
-        // Check external flag file for instant Fullscreen 3D Brain toggle or 3D Background Scene switch if requested by script/CLI
-        try {
-            string flagPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "brain_fullscreen.flag");
-            if (File.Exists(flagPath)) {
-                string txt = File.ReadAllText(flagPath).Trim();
-                File.Delete(flagPath);
-                brain3DCollapsed = false;
-                brain3DFullscreen = (txt == "1" || txt.Equals("true", StringComparison.OrdinalIgnoreCase) || !brain3DFullscreen);
-                hudBrain3DDirty = true;
-            }
-            string bgFlagPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "bg_scene.flag");
-            if (File.Exists(bgFlagPath)) {
-                string btxt = File.ReadAllText(bgFlagPath).Trim();
-                File.Delete(bgFlagPath);
-                int parsedMode;
-                if (int.TryParse(btxt, out parsedMode)) {
-                    Config.BgSceneMode = Math.Max(0, Math.Min(2, parsedMode));
-                    Config.Save();
-                    RebuildBackground();
-                    hudTelemetryDirty = true;
-                } else {
-                    CycleBgSceneMode();
-                }
-            }
-        } catch { }
+        frameCount++;
 
-        // Adaptive GPU Eco-Governor: 24 FPS (42ms) when Desktop is focused or dragging 3D Brain; 15 FPS (64ms) when another app is focused!
-        if (frameCount % 12 == 0) {
-            IntPtr fgWnd = GetForegroundWindow();
-            bool deskActive = IsDesktopWindowHandle(fgWnd) || brain3DDragging || hudBrain3DDirty;
-            gpuEcoMode = !deskActive;
-            int targetInterval = deskActive ? 42 : 64;
-            if (renderTimer.Interval != targetInterval) {
-                renderTimer.Interval = targetInterval;
+        // Throttle disk flag checks to once every 20 ticks (~0.8s) instead of every frame (eliminates 48 disk I/O ops/sec)
+        if (frameCount % 20 == 0 || isGamerSuspended) {
+            try {
+                string gmFlagPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "gamer_mode.flag");
+                if (File.Exists(gmFlagPath)) {
+                    string gtxt = File.ReadAllText(gmFlagPath).Trim();
+                    File.Delete(gmFlagPath);
+                    if (gtxt == "1" || gtxt.Equals("on", StringComparison.OrdinalIgnoreCase) || gtxt.Equals("true", StringComparison.OrdinalIgnoreCase)) {
+                        SetGamerMode(true, "CLI_FLAG");
+                    } else if (gtxt == "0" || gtxt.Equals("off", StringComparison.OrdinalIgnoreCase) || gtxt.Equals("false", StringComparison.OrdinalIgnoreCase)) {
+                        SetGamerMode(false, "CLI_FLAG");
+                    } else {
+                        ToggleGamerMode();
+                    }
+                }
+                string flagPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "brain_fullscreen.flag");
+                if (File.Exists(flagPath)) {
+                    string txt = File.ReadAllText(flagPath).Trim();
+                    File.Delete(flagPath);
+                    brain3DCollapsed = false;
+                    brain3DFullscreen = (txt == "1" || txt.Equals("true", StringComparison.OrdinalIgnoreCase) || !brain3DFullscreen);
+                    hudBrain3DDirty = true;
+                }
+                string bgFlagPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "bg_scene.flag");
+                if (File.Exists(bgFlagPath)) {
+                    string btxt = File.ReadAllText(bgFlagPath).Trim();
+                    File.Delete(bgFlagPath);
+                    int parsedMode;
+                    if (int.TryParse(btxt, out parsedMode)) {
+                        Config.BgSceneMode = Math.Max(0, Math.Min(2, parsedMode));
+                        Config.Save();
+                        RebuildBackground();
+                        hudTelemetryDirty = true;
+                    } else {
+                        CycleBgSceneMode();
+                    }
+                }
+            } catch { }
+        }
+
+        // Auto-detect Fullscreen / Borderless-Fullscreen Games every ~1.5 seconds
+        if (Config.AutoGamerOnFullscreenGame && (frameCount % 32 == 0 || (isGamerSuspended && frameCount % 12 == 0))) {
+            string detGame;
+            bool gameNow = IsFullscreenGameActive(out detGame);
+            if (gameNow != autoGameDetected) {
+                autoGameDetected = gameNow;
+                activeGameName = detGame;
+                UpdateGamerSuspensionState(true);
             }
-            currentFps = deskActive ? 24 : 15;
         }
 
         // Interactive 3D Brain Click-and-Drag Orbit + Single-Click Detection on Desktop HUD Cards
@@ -6096,7 +6398,7 @@ public class HackerWallpaperForm : Form {
         bool rightDown = (GetAsyncKeyState(0x02) & 0x8000) != 0;
         bool anyBrainDragBtn = leftDown || rightDown;
 
-        if (Config.ShowPorygon && !brain3DCollapsed) {
+        if (!isGamerSuspended && Config.ShowPorygon && !brain3DCollapsed) {
             Point screenPt = Control.MousePosition;
             Point clientPt = this.PointToClient(screenPt);
             Rectangle bRect = GetCurrentBrain3DRect();
@@ -6128,7 +6430,7 @@ public class HackerWallpaperForm : Form {
         }
 
         if (!leftDown && prevLeftMouseDown) {
-            // Fire card click on mouse button release (unless it was a 3D drag orbit gesture)
+            // Fire card click on mouse button release (even in Gamer Mode so clicking [GMR:ON] wakes immediately!)
             if (!brain3DDragMoved) {
                 HandleDesktopCardClick();
             }
@@ -6137,8 +6439,27 @@ public class HackerWallpaperForm : Form {
         prevLeftMouseDown = leftDown;
         prevRightMouseDown = rightDown;
 
-        frameCount++;
-        if (frameCount <= 5 || frameCount % 30 == 0) {
+        // ZERO-GPU HIBERNATION: When Gamer Mode is active, skip all CPU/GPU simulation & OpenGL rendering completely!
+        if (isGamerSuspended) {
+            if (!gamerStaticFrameRendered) {
+                RenderGamerHibernationFrameOpenGL();
+            }
+            return;
+        }
+
+        // Adaptive GPU Eco-Governor: 24 FPS (42ms) when Desktop is focused or dragging 3D Brain; 14 FPS (70ms) when another app is focused!
+        if (frameCount % 12 == 0) {
+            IntPtr fgWnd = GetForegroundWindow();
+            bool deskActive = IsDesktopWindowHandle(fgWnd) || brain3DDragging || hudBrain3DDirty;
+            gpuEcoMode = !deskActive;
+            int targetInterval = deskActive ? 42 : 70;
+            if (renderTimer.Interval != targetInterval) {
+                renderTimer.Interval = targetInterval;
+            }
+            currentFps = deskActive ? 24 : 14;
+        }
+
+        if (frameCount <= 5 || frameCount % 120 == 0) {
             EnsureBehindDesktopIcons();
         }
         if (Config.AutoPauseMaximized && frameCount % 8 == 0 && IsAnotherWindowMaximized()) {
@@ -6637,7 +6958,7 @@ public class HackerWallpaperForm : Form {
     }
 
     private void RenderOpenGLFrame() {
-        if (!glEnabled || glHdc == IntPtr.Zero || glContext == IntPtr.Zero) return;
+        if (isGamerSuspended || !glEnabled || glHdc == IntPtr.Zero || glContext == IntPtr.Zero) return;
         frameSw.Restart();
         GpuGl.wglMakeCurrent(glHdc, glContext);
 
@@ -6653,7 +6974,8 @@ public class HackerWallpaperForm : Form {
         GpuGl.glDisable(GpuGl.GL_DEPTH_TEST);
         GpuGl.glEnable(GpuGl.GL_BLEND);
         GpuGl.glBlendFunc(GpuGl.GL_SRC_ALPHA, GpuGl.GL_ONE_MINUS_SRC_ALPHA);
-        GpuGl.glEnable(GpuGl.GL_LINE_SMOOTH);
+        // Disable expensive fragment-level GL_LINE_SMOOTH during background grid & rain loops to cut GPU fill-rate by ~40%
+        GpuGl.glDisable(GpuGl.GL_LINE_SMOOTH);
 
         // 0. Draw 5-Monitor Matte Forest Obsidian Background from VRAM Texture on AMD Radeon RX 9060 XT (0% CPU copy)
         if (bgTexDirty || bgTexId == 0) {
@@ -6681,15 +7003,21 @@ public class HackerWallpaperForm : Form {
         int radPanelX = hudX - radPanelW - 14;
         int radPanelY = primaryMonRect.Top + 22;
 
-        // 1. Multi-Plane 3D Parallax Vertical Log Rain across all 5 monitors (Attenuated by 35% for Eye-Care Visual Comfort!)
+        // 1. Multi-Plane 3D Parallax Vertical Log Rain across all 5 monitors (Fast Batched Display Lists)
         if (Config.RainSpeed > 0) {
-            for (int layer = 0; layer <= 2; layer++) {
+            uint currentFontList = 0;
+            int startLayer = gpuEcoMode ? 1 : 0; // In Eco Mode (app focused), skip far-plane layer 0 rain to save GPU fillrate
+            for (int layer = startLayer; layer <= 2; layer++) {
                 for (int i = 0; i < columns.Count; i++) {
                     RainColumn col = columns[i];
                     if (col.DepthLayer != layer) continue;
 
                     bool isPriority = (col.ColorSlot == 0 || col.ColorSlot == 1); // Critical Red or VirusTotal Gold
                     uint fontList = (layer == 2 || (layer == 1 && isPriority)) ? GpuGl.FONT_LIST_RAIN_FG : GpuGl.FONT_LIST_RAIN_BG;
+                    if (fontList != currentFontList) {
+                        GpuGl.glListBase(fontList);
+                        currentFontList = fontList;
+                    }
                     int cStep = col.CharStep > 0 ? col.CharStep : 16;
 
                     int maxAlpha;
@@ -6713,32 +7041,38 @@ public class HackerWallpaperForm : Form {
                         }
                     }
 
-                    Color headC0 = Color.FromArgb(isPriority ? 205 : 178, colHead.R, colHead.G, colHead.B);
-                    Color headC1 = Color.FromArgb(Math.Min(210, maxAlpha + 22),
-                        (baseCol.R + colHead.R) / 2, (baseCol.G + colHead.G) / 2, (baseCol.B + colHead.B) / 2);
+                    byte h0A = (byte)(isPriority ? 205 : 178);
+                    byte h1A = (byte)Math.Min(210, maxAlpha + 22);
+                    byte h1R = (byte)((baseCol.R + colHead.R) / 2);
+                    byte h1G = (byte)((baseCol.G + colHead.G) / 2);
+                    byte h1B = (byte)((baseCol.B + colHead.B) / 2);
 
                     for (int c = 0; c < col.Length; c++) {
                         float cy = col.Y - c * cStep;
                         if (cy < col.MinY - 12 || cy > col.MaxY + 4) continue;
 
                         if (c == 0 && (layer >= 1 || isPriority)) {
-                            GpuGl.DrawChar(col.Chars[c], col.X, cy, headC0, fontList);
+                            GpuGl.DrawCharFast(col.Chars[c], col.X, cy, colHead.R, colHead.G, colHead.B, h0A);
                         } else if ((c == 1 || c == 2) && (layer == 2 || isPriority)) {
-                            GpuGl.DrawChar(col.Chars[c], col.X, cy, headC1, fontList);
+                            GpuGl.DrawCharFast(col.Chars[c], col.X, cy, h1R, h1G, h1B, h1A);
                         } else {
                             float ratio = 1.0f - ((float)c / col.Length);
                             int alpha = (int)(ratio * ratio * maxAlpha);
                             if (alpha <= 8) continue;
-                            GpuGl.DrawChar(col.Chars[c], col.X, cy, Color.FromArgb(alpha, baseCol.R, baseCol.G, baseCol.B), fontList);
+                            GpuGl.DrawCharFast(col.Chars[c], col.X, cy, baseCol.R, baseCol.G, baseCol.B, (byte)alpha);
                         }
                     }
                 }
             }
         }
 
-        // 2. Render 5 Autonomous 3D Porygons on Hardware GPU + Collapsible Evolutionary Swarm HUD + 3D FlyWire Brain Card
+        int hudUpdateStride = gpuEcoMode ? 14 : 6;
+
+        // 2. Render Autonomous 3D Porygons on Hardware GPU + Collapsible Evolutionary Swarm HUD + 3D FlyWire Brain Card
         if (Config.ShowPorygon) {
+            GpuGl.glEnable(GpuGl.GL_LINE_SMOOTH);
             porygon.RenderOpenGL(Config.PorygonScale, c1, c2);
+            GpuGl.glDisable(GpuGl.GL_LINE_SMOOTH);
 
             int bw = 584;
             int fullBh = 78 + porygon.Agents.Count * 21;
@@ -6749,7 +7083,7 @@ public class HackerWallpaperForm : Form {
                 if (hudConnectomeBmp != null) hudConnectomeBmp.Dispose();
                 hudConnectomeBmp = new Bitmap(bw + 4, fullBh + 4, PixelFormat.Format32bppArgb);
             }
-            if (frameCount % 8 == 1 || hudConnectomeTexId == 0 || hudConnectomeDirty) {
+            if (frameCount % (hudUpdateStride + 2) == 1 || hudConnectomeTexId == 0 || hudConnectomeDirty) {
                 using (Graphics gHud = Graphics.FromImage(hudConnectomeBmp)) {
                     gHud.Clear(Color.FromArgb(0, 0, 0, 0));
                     gHud.SmoothingMode = SmoothingMode.AntiAlias;
@@ -6761,7 +7095,7 @@ public class HackerWallpaperForm : Form {
             }
             GpuGl.DrawTexturedQuad(hudConnectomeTexId, bx - 2, by - 2, bw + 4, fullBh + 4);
 
-            // Render 3D FlyWire Drosophila Brain in Card Mode (Throttled to every 6 frames during passive rotation to save GPU/PCIe bandwidth!)
+            // Render 3D FlyWire Drosophila Brain in Card Mode (Throttled to save GPU/PCIe bandwidth!)
             if (!brain3DFullscreen || brain3DCollapsed) {
                 int brainW = 356;
                 int fullBrainH = 246;
@@ -6772,7 +7106,7 @@ public class HackerWallpaperForm : Form {
                     if (hudBrain3DBmp != null) hudBrain3DBmp.Dispose();
                     hudBrain3DBmp = new Bitmap(brainW + 4, fullBrainH + 4, PixelFormat.Format32bppArgb);
                 }
-                if ((!brain3DCollapsed && frameCount % 6 == 0) || hudBrain3DTexId == 0 || hudBrain3DDirty) {
+                if ((!brain3DCollapsed && frameCount % hudUpdateStride == 0) || hudBrain3DTexId == 0 || hudBrain3DDirty) {
                     using (Graphics gBr = Graphics.FromImage(hudBrain3DBmp)) {
                         gBr.Clear(Color.FromArgb(0, 0, 0, 0));
                         gBr.SmoothingMode = SmoothingMode.AntiAlias;
@@ -6786,14 +7120,14 @@ public class HackerWallpaperForm : Form {
             }
         }
 
-        // 3. Render Collapsible Network Sonar Radar (50% Transparent, updated every 6 frames)
+        // 3. Render Collapsible Network Sonar Radar (50% Transparent, updated on throttled stride)
         if (Config.ShowRadar) {
             int rBmpW = 310;
             int rBmpH = 330;
             if (hudRadarBmp == null) {
                 hudRadarBmp = new Bitmap(rBmpW, rBmpH, PixelFormat.Format32bppArgb);
             }
-            if ((!radarCollapsed && frameCount % 6 == 2) || hudRadarTexId == 0 || hudRadarDirty) {
+            if ((!radarCollapsed && frameCount % hudUpdateStride == 2) || hudRadarTexId == 0 || hudRadarDirty) {
                 using (Graphics gRad = Graphics.FromImage(hudRadarBmp)) {
                     gRad.Clear(Color.FromArgb(0, 0, 0, 0));
                     gRad.SmoothingMode = SmoothingMode.AntiAlias;
@@ -6859,7 +7193,7 @@ public class HackerWallpaperForm : Form {
 
     protected override void OnPaint(PaintEventArgs e) {
         if (glEnabled) {
-            RenderOpenGLFrame();
+            if (!isGamerSuspended) RenderOpenGLFrame();
             return;
         }
         Graphics g = e.Graphics;
@@ -7177,16 +7511,17 @@ public class HackerWallpaperForm : Form {
     private void DrawTelemetryHUD(Graphics g, int hudX, int hudY, int hudW, int hudH, Color c1, Color c2, Color c3) {
         float locCpu, locGpu, locGpuMs, locRamUsed, locRamTot, locDown, locUp, locDlZ;
         int locRamPct, locPing, locTcp, locFps;
-        bool locEco;
+        bool locEco, locGamer;
         string locNic, locIp;
         string[] logsSnap;
         float[] pingSnap = new float[pingHistory.Length];
 
         lock (telemetryLock) {
-            locCpu = cpuUsage;
-            locGpu = gpuUsagePct;
-            locGpuMs = gpuFrameMs;
-            locFps = currentFps;
+            locGamer = isGamerSuspended;
+            locCpu = locGamer ? 0.0f : cpuUsage;
+            locGpu = locGamer ? 0.0f : gpuUsagePct;
+            locGpuMs = locGamer ? 0.0f : gpuFrameMs;
+            locFps = locGamer ? 0 : currentFps;
             locEco = gpuEcoMode;
             locRamUsed = ramUsedGB;
             locRamTot = ramTotalGB;
@@ -7232,13 +7567,21 @@ public class HackerWallpaperForm : Form {
                 g.DrawLine(cornerPen, hudX + hudW, hudY + actualH, hudX + hudW, hudY + actualH - Math.Min(20, actualH));
             }
 
-            // Row 1: Non-overlapping Header with GPU Model, [BG:1/2/3] Scene Button, Terminal Opacity Controls & Fold Button
-            g.DrawString(string.Format(">> SYS_TELEMETRY // {0} [{1}] | {2}", shortNic, locIp, shortGpu),
+            // Row 1: Non-overlapping Header with GPU Model, [GAMER] 0% GPU Button, [BG:1/2/3] Scene Button, Terminal Opacity Controls & Fold Button
+            g.DrawString(string.Format(">> SYS_HUD // {0} [{1}] | {2}", shortNic, locIp, shortGpu),
                 fontHudBold, c1Brush, hudX + 10, hudY + 7);
             g.DrawString(string.Format("TRM:{0}%", terminalOpacityPct),
-                fontHudSmall, c3Brush, hudX + hudW - 194, hudY + 8);
+                fontHudSmall, c3Brush, hudX + hudW - 256, hudY + 8);
             using (SolidBrush opBtnBg = new SolidBrush(Color.FromArgb(135, 10, 22, 18)))
-            using (Pen opBtnBor = new Pen(Color.FromArgb(140, c1.R, c1.G, c1.B), 1.0f)) {
+            using (SolidBrush gmrActiveBg = new SolidBrush(Color.FromArgb(195, 22, 92, 62)))
+            using (Pen opBtnBor = new Pen(Color.FromArgb(140, c1.R, c1.G, c1.B), 1.0f))
+            using (Pen gmrActiveBor = new Pen(Color.FromArgb(235, 68, 232, 156), 1.3f))
+            using (SolidBrush gmrActiveTxt = new SolidBrush(Color.FromArgb(245, 165, 255, 210))) {
+                // [GAMER / GMR:ON] Clickable 0.0% GPU Hibernation Button (Ctrl+Alt+G)
+                g.FillRectangle(locGamer ? gmrActiveBg : opBtnBg, hudX + hudW - 202, hudY + 5, 58, 18);
+                g.DrawRectangle(locGamer ? gmrActiveBor : opBtnBor, hudX + hudW - 202, hudY + 5, 58, 18);
+                g.DrawString(locGamer ? "GMR:ON" : "GAMER", fontHudSmall, locGamer ? gmrActiveTxt : c1Brush, hudX + hudW - 196, hudY + 7);
+
                 // [BG:1/2/3] Clickable 3D Scene Switcher Button (Ctrl+Alt+M)
                 g.FillRectangle(opBtnBg, hudX + hudW - 140, hudY + 5, 42, 18);
                 g.DrawRectangle(opBtnBor, hudX + hudW - 140, hudY + 5, 42, 18);
@@ -7265,7 +7608,7 @@ public class HackerWallpaperForm : Form {
             g.FillRectangle(barBg, hudX + 12, rowY + 20, 112, 7);
             g.FillRectangle(c1Brush, hudX + 12, rowY + 20, (int)(1.12f * Math.Min(100f, locCpu)), 7);
 
-            string fpsTag = locEco ? (locFps + "eco") : (locFps + "fps");
+            string fpsTag = locGamer ? "GAMER" : (locEco ? (locFps + "eco") : (locFps + "fps"));
             g.DrawString(string.Format("GPU:{0:0.0}% ({1:0.0}ms|{2})", locGpu, locGpuMs, fpsTag), fontHudSmall, c2Brush, hudX + 134, rowY + 1);
             g.FillRectangle(barBg, hudX + 134, rowY + 20, 148, 7);
             g.FillRectangle(c2Brush, hudX + 134, rowY + 20, (int)(1.48f * Math.Min(100f, locGpu)), 7);
@@ -7286,12 +7629,17 @@ public class HackerWallpaperForm : Form {
                 g.FillRectangle(sb, spX + 3 + i * 8, rowY + 31 - bh, 5, bh);
             }
 
-            // Row 3: Network Live Throughput + Active 3D Background Scene + CPU Evolutionary Rate
+            // Row 3: Network Live Throughput + Active 3D Background Scene + CPU Evolutionary Rate (or Gamer Mode Banner)
             int netY = hudY + 76;
-            int evoRate = (porygon != null) ? porygon.CpuTrainingStepsPerSec : 18750;
-            string bgName = GetBgSceneModeShortName(Config.BgSceneMode);
-            g.DrawString(string.Format("NET // DL:{0:0.0}KB/s | UL:{1:0.0}KB/s | 3D_BG:{2} [{3}/3] | EVO:{4:0.0}k/s",
-                locDown, locUp, bgName, Config.BgSceneMode + 1, evoRate / 1000.0), fontHudBold, c3Brush, hudX + 12, netY);
+            if (locGamer) {
+                g.DrawString("MODO GAMER ACTIVO // 0.0% GPU — HIBERNACIÓN TOTAL [Click GMR:ON o Ctrl+Alt+G]",
+                    fontHudBold, c2Brush, hudX + 12, netY);
+            } else {
+                int evoRate = (porygon != null) ? porygon.CpuTrainingStepsPerSec : 18750;
+                string bgName = GetBgSceneModeShortName(Config.BgSceneMode);
+                g.DrawString(string.Format("NET // DL:{0:0.0}KB/s | UL:{1:0.0}KB/s | 3D_BG:{2} [{3}/3] | EVO:{4:0.0}k/s",
+                    locDown, locUp, bgName, Config.BgSceneMode + 1, evoRate / 1000.0), fontHudBold, c3Brush, hudX + 12, netY);
+            }
 
             using (Pen divPen = new Pen(Color.FromArgb(45, c1.R, c1.G, c1.B), 1f)) {
                 g.DrawLine(divPen, hudX + 12, netY + 20, hudX + hudW - 12, netY + 20);
@@ -7299,7 +7647,7 @@ public class HackerWallpaperForm : Form {
 
             // Row 4: Crisp Live Packet / Anomaly Feed
             for (int i = 0; i < logsSnap.Length; i++) {
-                Brush lb = logsSnap[i].Contains("IDS_DETECT") ? c2Brush : ((i == logsSnap.Length - 1) ? c1Brush : txtBrush);
+                Brush lb = logsSnap[i].Contains("IDS_DETECT") || logsSnap[i].Contains("GAMER_MODE") ? c2Brush : ((i == logsSnap.Length - 1) ? c1Brush : txtBrush);
                 string cleanLine = logsSnap[i].Length > 76 ? logsSnap[i].Substring(0, 76) : logsSnap[i];
                 g.DrawString(cleanLine, fontHud, lb, hudX + 12, netY + 26 + i * 19);
             }
@@ -7355,13 +7703,16 @@ public class HackerWallpaperForm : Form {
                 }
 
                 int stripX = bx + bw - 126;
-                for (int n = 0; n < 15; n++) {
-                    float glow = br.SpikeGlow[n * 4];
-                    Color nc = (glow > 0.35f)
-                        ? Color.FromArgb((int)(95 + glow * 120), ag.AuraColor.R, ag.AuraColor.G, ag.AuraColor.B)
-                        : Color.FromArgb(48, c1.R, c1.G, c1.B);
-                    using (SolidBrush nb = new SolidBrush(nc)) {
-                        g.FillEllipse(nb, stripX + n * 8, ry + 3, 6f, 6f);
+                using (SolidBrush dimB = new SolidBrush(Color.FromArgb(48, c1.R, c1.G, c1.B)))
+                using (SolidBrush actB = new SolidBrush(ag.AuraColor)) {
+                    for (int n = 0; n < 15; n++) {
+                        float glow = br.SpikeGlow[n * 4];
+                        if (glow > 0.35f) {
+                            actB.Color = Color.FromArgb((int)(95 + glow * 120), ag.AuraColor.R, ag.AuraColor.G, ag.AuraColor.B);
+                            g.FillEllipse(actB, stripX + n * 8, ry + 3, 6f, 6f);
+                        } else {
+                            g.FillEllipse(dimB, stripX + n * 8, ry + 3, 6f, 6f);
+                        }
                     }
                 }
             }
@@ -7485,23 +7836,24 @@ public class HackerWallpaperForm : Form {
             }
 
             // Pass 1: Back-Hemisphere 3D Triangulated Cortical Wireframe Shell (Dark Silver-Gray 3D Mesh Cradle + Inner Amber Antennal Lobes)
+            PointF[] triPoly = new PointF[3];
             using (SolidBrush backFill = new SolidBrush(Color.FromArgb(24, 82, 94, 112)))
             using (Pen backWire = new Pen(Color.FromArgb(52, 122, 132, 148), isFull ? 0.90f : 0.70f))
             using (Pen amberWire = new Pen(Color.FromArgb(48, 218, 156, 32), isFull ? 0.85f : 0.65f)) {
                 for (int t = 0; t < FlyBrainConnectome.ShellTris.Count; t++) {
                     FlyBrainConnectome.BrainTri3D tri = FlyBrainConnectome.ShellTris[t];
                     if (tri.PartKind == 3) continue; // Mushroom body rendered in Pass 2
+                    triPoly[0] = shellPts[tri.I0];
+                    triPoly[1] = shellPts[tri.I1];
+                    triPoly[2] = shellPts[tri.I2];
                     if (tri.PartKind == 4) {
-                        PointF[] apoly = new PointF[] { shellPts[tri.I0], shellPts[tri.I1], shellPts[tri.I2] };
-                        g.DrawPolygon(amberWire, apoly);
+                        g.DrawPolygon(amberWire, triPoly);
                         continue;
                     }
                     float avgZ = (shellRZ[tri.I0] + shellRZ[tri.I1] + shellRZ[tri.I2]) * 0.3333f;
                     if (avgZ > 2.0f) continue;
-                    PointF p0 = shellPts[tri.I0], p1 = shellPts[tri.I1], p2 = shellPts[tri.I2];
-                    PointF[] poly = new PointF[] { p0, p1, p2 };
-                    g.FillPolygon(backFill, poly);
-                    g.DrawPolygon(backWire, poly);
+                    g.FillPolygon(backFill, triPoly);
+                    g.DrawPolygon(backWire, triPoly);
                 }
             }
 
@@ -7511,10 +7863,11 @@ public class HackerWallpaperForm : Form {
                 for (int t = 0; t < FlyBrainConnectome.ShellTris.Count; t++) {
                     FlyBrainConnectome.BrainTri3D tri = FlyBrainConnectome.ShellTris[t];
                     if (tri.PartKind != 3) continue;
-                    PointF p0 = shellPts[tri.I0], p1 = shellPts[tri.I1], p2 = shellPts[tri.I2];
-                    PointF[] poly = new PointF[] { p0, p1, p2 };
-                    g.FillPolygon(mbFill, poly);
-                    g.DrawPolygon(mbWire, poly);
+                    triPoly[0] = shellPts[tri.I0];
+                    triPoly[1] = shellPts[tri.I1];
+                    triPoly[2] = shellPts[tri.I2];
+                    g.FillPolygon(mbFill, triPoly);
+                    g.DrawPolygon(mbWire, triPoly);
                 }
             }
 
@@ -7542,100 +7895,102 @@ public class HackerWallpaperForm : Form {
                 if (br.SpikeGlow[i] > 0.25f) activeSpikes++;
             }
 
-            // Pass 3: Dense Multi-Color 3D Dendritic Arborizations & Curved Optic Tracts Strictly Inside the Brain Shell!
+            // Pass 3: Dense Multi-Color 3D Dendritic Arborizations & Curved Optic Tracts (Zero per-branch Pen/Brush allocation!)
             float lineScale = isFull ? 1.35f : 0.95f;
-            for (int d = 0; d < br.DendriteBranches.Count; d++) {
-                FlyBrainConnectome.DendriteSeg3D seg = br.DendriteBranches[d];
-                float glow = br.SpikeGlow[seg.NeuronIdx];
+            using (Pen arborPen = new Pen(Color.White, 1.0f))
+            using (SolidBrush tipB = new SolidBrush(Color.White)) {
+                for (int d = 0; d < br.DendriteBranches.Count; d++) {
+                    FlyBrainConnectome.DendriteSeg3D seg = br.DendriteBranches[d];
+                    float glow = br.SpikeGlow[seg.NeuronIdx];
 
-                float rx0 = seg.X0 * cosY - seg.Z0 * sinY;
-                float rz0_1 = seg.X0 * sinY + seg.Z0 * cosY;
-                float ry0 = seg.Y0 * cosP - rz0_1 * sinP;
-                float rz0 = seg.Y0 * sinP + rz0_1 * cosP;
-                float p0Scale = 260f / Math.Max(110f, 260f - rz0);
-                float sx0 = cx + rx0 * modelScale * p0Scale;
-                float sy0 = cy - ry0 * modelScale * p0Scale;
+                    float rx0 = seg.X0 * cosY - seg.Z0 * sinY;
+                    float rz0_1 = seg.X0 * sinY + seg.Z0 * cosY;
+                    float ry0 = seg.Y0 * cosP - rz0_1 * sinP;
+                    float rz0 = seg.Y0 * sinP + rz0_1 * cosP;
+                    float p0Scale = 260f / Math.Max(110f, 260f - rz0);
+                    float sx0 = cx + rx0 * modelScale * p0Scale;
+                    float sy0 = cy - ry0 * modelScale * p0Scale;
 
-                float rx1 = seg.X1 * cosY - seg.Z1 * sinY;
-                float rz1_1 = seg.X1 * sinY + seg.Z1 * cosY;
-                float ry1 = seg.Y1 * cosP - rz1_1 * sinP;
-                float rz1 = seg.Y1 * sinP + rz1_1 * cosP;
-                float p1Scale = 260f / Math.Max(110f, 260f - rz1);
-                float sx1 = cx + rx1 * modelScale * p1Scale;
-                float sy1 = cy - ry1 * modelScale * p1Scale;
+                    float rx1 = seg.X1 * cosY - seg.Z1 * sinY;
+                    float rz1_1 = seg.X1 * sinY + seg.Z1 * cosY;
+                    float ry1 = seg.Y1 * cosP - rz1_1 * sinP;
+                    float rz1 = seg.Y1 * sinP + rz1_1 * cosP;
+                    float p1Scale = 260f / Math.Max(110f, 260f - rz1);
+                    float sx1 = cx + rx1 * modelScale * p1Scale;
+                    float sy1 = cy - ry1 * modelScale * p1Scale;
 
-                int alpha = (int)Math.Min(248f, 112f + glow * 136f);
-                float pwLine = seg.Thickness * (0.80f + glow * 0.55f) * lineScale;
-                using (Pen arborPen = new Pen(Color.FromArgb(alpha, seg.R, seg.G, seg.B), pwLine)) {
+                    int alpha = (int)Math.Min(248f, 112f + glow * 136f);
+                    arborPen.Color = Color.FromArgb(alpha, seg.R, seg.G, seg.B);
+                    arborPen.Width = seg.Thickness * (0.80f + glow * 0.55f) * lineScale;
                     g.DrawLine(arborPen, sx0, sy0, sx1, sy1);
-                }
-                if (seg.IsTip && (glow > 0.28f || (d % 2 == 0))) {
-                    float tipR = ((glow > 0.45f) ? 1.65f : 1.05f) * lineScale;
-                    using (SolidBrush tipB = new SolidBrush(Color.FromArgb(Math.Min(255, alpha + 25), seg.R, seg.G, seg.B))) {
+
+                    if (seg.IsTip && (glow > 0.28f || (d % 2 == 0))) {
+                        float tipR = ((glow > 0.45f) ? 1.65f : 1.05f) * lineScale;
+                        tipB.Color = Color.FromArgb(Math.Min(255, alpha + 25), seg.R, seg.G, seg.B);
                         g.FillEllipse(tipB, sx1 - tipR, sy1 - tipR, tipR * 2f, tipR * 2f);
                     }
                 }
             }
 
-            // Pass 4: Internal Curved Synaptic Axons (routed through Central Commissure / Optic Peduncle) + 64 Neural Somata
+            // Pass 4: Internal Curved Synaptic Axons + 64 Neural Somata (Zero per-synapse Pen/Brush allocation!)
             int synIdx = 0;
-            for (int pre = 0; pre < FlyBrainConnectome.N; pre++) {
-                for (int post = 0; post < FlyBrainConnectome.N; post++) {
-                    float w = br.W[pre, post];
-                    if (Math.Abs(w) < 0.16f) continue;
-                    synIdx++;
-                    float gPre = proj[pre].Glow;
-                    float gPost = proj[post].Glow;
-                    float act = Math.Max(gPre, gPost * 0.85f);
-                    if (act < 0.30f && (synIdx % 11 != 0)) continue;
+            using (Pen synPen = new Pen(Color.White, 1.0f))
+            using (SolidBrush pulseB = new SolidBrush(Color.FromArgb(245, 255, 255, 255))) {
+                for (int pre = 0; pre < FlyBrainConnectome.N; pre++) {
+                    for (int post = 0; post < FlyBrainConnectome.N; post++) {
+                        float w = br.W[pre, post];
+                        if (Math.Abs(w) < 0.16f) continue;
+                        synIdx++;
+                        float gPre = proj[pre].Glow;
+                        float gPost = proj[post].Glow;
+                        float act = Math.Max(gPre, gPost * 0.85f);
+                        if (act < 0.30f && (synIdx % 11 != 0)) continue;
 
-                    // Compute internal 3D anatomical waypoint inside the central protocerebrum / peduncle so tracts NEVER cut outside the shell
-                    float mx3 = (br.NeuronX[pre] + br.NeuronX[post]) * 0.36f;
-                    float my3 = (br.NeuronY[pre] + br.NeuronY[post]) * 0.42f + 1.5f;
-                    float mz3 = (br.NeuronZ[pre] + br.NeuronZ[post]) * 0.45f + 2.5f;
-                    mx3 = Math.Max(-34f, Math.Min(34f, mx3));
-                    my3 = Math.Max(-18f, Math.Min(18f, my3));
+                        float mx3 = (br.NeuronX[pre] + br.NeuronX[post]) * 0.36f;
+                        float my3 = (br.NeuronY[pre] + br.NeuronY[post]) * 0.42f + 1.5f;
+                        float mz3 = (br.NeuronZ[pre] + br.NeuronZ[post]) * 0.45f + 2.5f;
+                        mx3 = Math.Max(-34f, Math.Min(34f, mx3));
+                        my3 = Math.Max(-18f, Math.Min(18f, my3));
 
-                    float mrx = mx3 * cosY - mz3 * sinY;
-                    float mrz1 = mx3 * sinY + mz3 * cosY;
-                    float mry = my3 * cosP - mrz1 * sinP;
-                    float mrz = my3 * sinP + mrz1 * cosP;
-                    float mPersp = 260f / Math.Max(110f, 260f - mrz);
-                    float msx = cx + mrx * modelScale * mPersp;
-                    float msy = cy - mry * modelScale * mPersp;
+                        float mrx = mx3 * cosY - mz3 * sinY;
+                        float mrz1 = mx3 * sinY + mz3 * cosY;
+                        float mry = my3 * cosP - mrz1 * sinP;
+                        float mrz = my3 * sinP + mrz1 * cosP;
+                        float mPersp = 260f / Math.Max(110f, 260f - mrz);
+                        float msx = cx + mrx * modelScale * mPersp;
+                        float msy = cy - mry * modelScale * mPersp;
 
-                    int alpha = (int)Math.Min(210f, 26f + act * 175f);
-                    Color synCol;
-                    if (pre == 11 || post == 11) {
-                        synCol = Color.FromArgb(alpha, 250, 208, 28); // VirusTotal Sensory Pathway in Gold
-                    } else if (proj[post].Region == 3 && act > 0.35f) {
-                        synCol = Color.FromArgb(alpha, 48, 245, 92);  // Ventrolateral Motor Pathway in Emerald-Lime
-                    } else if (w >= 0f) {
-                        synCol = Color.FromArgb(alpha, 45, 238, 188); // Excitatory Pathway in Mint-Cyan
-                    } else {
-                        synCol = Color.FromArgb(alpha, 178, 95, 255); // Inhibitory Pathway in Violet
-                    }
+                        int alpha = (int)Math.Min(210f, 26f + act * 175f);
+                        Color synCol;
+                        if (pre == 11 || post == 11) {
+                            synCol = Color.FromArgb(alpha, 250, 208, 28);
+                        } else if (proj[post].Region == 3 && act > 0.35f) {
+                            synCol = Color.FromArgb(alpha, 48, 245, 92);
+                        } else if (w >= 0f) {
+                            synCol = Color.FromArgb(alpha, 45, 238, 188);
+                        } else {
+                            synCol = Color.FromArgb(alpha, 178, 95, 255);
+                        }
 
-                    using (Pen synPen = new Pen(synCol, (act > 0.5f ? 1.25f : 0.78f) * lineScale)) {
+                        synPen.Color = synCol;
+                        synPen.Width = (act > 0.5f ? 1.25f : 0.78f) * lineScale;
                         g.DrawLine(synPen, proj[pre].SX, proj[pre].SY, msx, msy);
                         g.DrawLine(synPen, msx, msy, proj[post].SX, proj[post].SY);
-                    }
 
-                    if (gPre > 0.42f && (synIdx % 2 == 0)) {
-                        float tPulse = ((frameCount * 0.14f + synIdx * 0.19f) % 1.0f);
-                        float pxp, pyp;
-                        if (tPulse < 0.5f) {
-                            float u = tPulse * 2.0f;
-                            pxp = proj[pre].SX + (msx - proj[pre].SX) * u;
-                            pyp = proj[pre].SY + (msy - proj[pre].SY) * u;
-                        } else {
-                            float u = (tPulse - 0.5f) * 2.0f;
-                            pxp = msx + (proj[post].SX - msx) * u;
-                            pyp = msy + (proj[post].SY - msy) * u;
-                        }
-                        float pr = 1.45f * lineScale;
-                        using (SolidBrush pb = new SolidBrush(Color.FromArgb(245, 255, 255, 255))) {
-                            g.FillEllipse(pb, pxp - pr, pyp - pr, pr * 2f, pr * 2f);
+                        if (gPre > 0.42f && (synIdx % 2 == 0)) {
+                            float tPulse = ((frameCount * 0.14f + synIdx * 0.19f) % 1.0f);
+                            float pxp, pyp;
+                            if (tPulse < 0.5f) {
+                                float u = tPulse * 2.0f;
+                                pxp = proj[pre].SX + (msx - proj[pre].SX) * u;
+                                pyp = proj[pre].SY + (msy - proj[pre].SY) * u;
+                            } else {
+                                float u = (tPulse - 0.5f) * 2.0f;
+                                pxp = msx + (proj[post].SX - msx) * u;
+                                pyp = msy + (proj[post].SY - msy) * u;
+                            }
+                            float pr = 1.45f * lineScale;
+                            g.FillEllipse(pulseB, pxp - pr, pyp - pr, pr * 2f, pr * 2f);
                         }
                     }
                 }
@@ -7645,38 +8000,39 @@ public class HackerWallpaperForm : Form {
             Array.Copy(proj, sorted, FlyBrainConnectome.N);
             Array.Sort(sorted, (a, b) => a.SZ.CompareTo(b.SZ)); // Back-to-front by Z
 
-            for (int i = 0; i < sorted.Length; i++) {
-                Neuron3DProj np = sorted[i];
-                Color nCol;
-                if (np.Index == 0 || np.Index == 8 || np.Index == 11 || (np.Region == 0 && (np.Index % 8) < 4)) {
-                    nCol = Color.FromArgb(255, 252, 212, 32); // Golden-Yellow PI & Lateral Protocerebrum + VT Sensor
-                } else if (np.Region == 0) {
-                    nCol = Color.FromArgb(255, 248, 52, 122); // Lateral Horn & Optic Projection Crimson-Pink
-                } else if (np.Region == 1) {
-                    nCol = Color.FromArgb(255, 42, 242, 178); // Dorsal Calyx Kenyon Cell Mint-Cyan
-                } else if (np.Region == 2) {
-                    nCol = Color.FromArgb(255, 56, 168, 252); // Central Complex Cobalt-Cyan
-                } else {
-                    nCol = Color.FromArgb(255, 52, 246, 86);  // Ventrolateral / SEZ Motor Emerald-Lime
-                }
+            using (SolidBrush haloB = new SolidBrush(Color.White))
+            using (SolidBrush coreB = new SolidBrush(Color.White))
+            using (SolidBrush sparkB = new SolidBrush(Color.FromArgb(250, 255, 255, 255))) {
+                for (int i = 0; i < sorted.Length; i++) {
+                    Neuron3DProj np = sorted[i];
+                    Color nCol;
+                    if (np.Index == 0 || np.Index == 8 || np.Index == 11 || (np.Region == 0 && (np.Index % 8) < 4)) {
+                        nCol = Color.FromArgb(255, 252, 212, 32);
+                    } else if (np.Region == 0) {
+                        nCol = Color.FromArgb(255, 248, 52, 122);
+                    } else if (np.Region == 1) {
+                        nCol = Color.FromArgb(255, 42, 242, 178);
+                    } else if (np.Region == 2) {
+                        nCol = Color.FromArgb(255, 56, 168, 252);
+                    } else {
+                        nCol = Color.FromArgb(255, 52, 246, 86);
+                    }
 
-                float baseR = (1.35f + np.Glow * 1.65f) * np.Scale;
-                int coreAlpha = (int)Math.Min(255f, 155f + np.Glow * 100f);
+                    float baseR = (1.35f + np.Glow * 1.65f) * np.Scale;
+                    int coreAlpha = (int)Math.Min(255f, 155f + np.Glow * 100f);
 
-                if (np.Glow > 0.25f || np.Index == 11) {
-                    float haloR = baseR * 1.85f;
-                    int haloAlpha = (int)Math.Min(115f, 32f + np.Glow * 80f);
-                    using (SolidBrush haloB = new SolidBrush(Color.FromArgb(haloAlpha, nCol.R, nCol.G, nCol.B))) {
+                    if (np.Glow > 0.25f || np.Index == 11) {
+                        float haloR = baseR * 1.85f;
+                        int haloAlpha = (int)Math.Min(115f, 32f + np.Glow * 80f);
+                        haloB.Color = Color.FromArgb(haloAlpha, nCol.R, nCol.G, nCol.B);
                         g.FillEllipse(haloB, np.SX - haloR, np.SY - haloR, haloR * 2f, haloR * 2f);
                     }
-                }
 
-                using (SolidBrush coreB = new SolidBrush(Color.FromArgb(coreAlpha, nCol.R, nCol.G, nCol.B))) {
+                    coreB.Color = Color.FromArgb(coreAlpha, nCol.R, nCol.G, nCol.B);
                     g.FillEllipse(coreB, np.SX - baseR, np.SY - baseR, baseR * 2f, baseR * 2f);
-                }
-                if (np.Glow > 0.55f) {
-                    float spR = 0.95f * lineScale;
-                    using (SolidBrush sparkB = new SolidBrush(Color.FromArgb(250, 255, 255, 255))) {
+
+                    if (np.Glow > 0.55f) {
+                        float spR = 0.95f * lineScale;
                         g.FillEllipse(sparkB, np.SX - spR, np.SY - spR, spR * 2f, spR * 2f);
                     }
                 }
@@ -7690,9 +8046,10 @@ public class HackerWallpaperForm : Form {
                     if (tri.PartKind == 3 || tri.PartKind == 4) continue;
                     float avgZ = (shellRZ[tri.I0] + shellRZ[tri.I1] + shellRZ[tri.I2]) * 0.3333f;
                     if (avgZ <= 2.0f) continue;
-                    PointF p0 = shellPts[tri.I0], p1 = shellPts[tri.I1], p2 = shellPts[tri.I2];
-                    PointF[] poly = new PointF[] { p0, p1, p2 };
-                    g.DrawPolygon((avgZ < 10.0f) ? rimWire : frontWire, poly);
+                    triPoly[0] = shellPts[tri.I0];
+                    triPoly[1] = shellPts[tri.I1];
+                    triPoly[2] = shellPts[tri.I2];
+                    g.DrawPolygon((avgZ < 10.0f) ? rimWire : frontWire, triPoly);
                 }
             }
 
@@ -7740,8 +8097,8 @@ public class HackerWallpaperForm : Form {
         }
 
         configForm = new Form();
-        configForm.Text = "Configurar Hacker Wallpaper // Enjambre Autónomo Porygon IDS";
-        configForm.ClientSize = new Size(495, 585);
+        configForm.Text = "Configurar Hacker Wallpaper // Enjambre Autónomo Porygon IDS + Modo Gamer";
+        configForm.ClientSize = new Size(505, 650);
         configForm.FormBorderStyle = FormBorderStyle.FixedDialog;
         configForm.MaximizeBox = false;
         configForm.StartPosition = FormStartPosition.CenterScreen;
@@ -7769,7 +8126,7 @@ public class HackerWallpaperForm : Form {
         };
         Label lblSwarmStatus = new Label {
             Location = new Point(22, 58),
-            Size = new Size(450, 40),
+            Size = new Size(460, 40),
             Font = new Font("Consolas", 8.5f, FontStyle.Regular),
             ForeColor = Color.FromArgb(224, 212, 176),
             BackColor = Color.FromArgb(14, 24, 20)
@@ -7781,18 +8138,19 @@ public class HackerWallpaperForm : Form {
             var a2 = porygon.Agents[2];
             lblSwarmStatus.Text = string.Format(
                 " PORYGON: LVL {0} ({1}XP) | PORYGON2: LVL {2} ({3}XP) | PORYGON-Z: LVL {4} ({5}XP)\n" +
-                " Flujos Auditados: {6} | Anomalías Purgadas: {7} | Escena 3D: [{8}/3] {9}",
+                " Flujos: {6} | Anomalías: {7} | Escena 3D: [{8}/3] {9} | GPU: {10}",
                 a0.Brain.Level, a0.Brain.XP, a1.Brain.Level, a1.Brain.XP, a2.Brain.Level, a2.Brain.XP,
                 a0.Brain.PacketsCollected + a1.Brain.PacketsCollected + a2.Brain.PacketsCollected,
                 a0.Brain.AnomaliesCleared + a1.Brain.AnomaliesCleared + a2.Brain.AnomaliesCleared,
-                Config.BgSceneMode + 1, GetBgSceneModeShortName(Config.BgSceneMode));
+                Config.BgSceneMode + 1, GetBgSceneModeShortName(Config.BgSceneMode),
+                isGamerSuspended ? "0.0% (GAMER ON)" : (gpuUsagePct.ToString("0.0") + "%"));
         };
         updateSwarmLabel();
 
         Button btnTrainWave = new Button {
             Text = "⚡ Simular Anomalía IDS (Ctrl+Alt+P)",
             Location = new Point(22, 104),
-            Size = new Size(228, 30),
+            Size = new Size(226, 30),
             FlatStyle = FlatStyle.Flat,
             BackColor = Color.FromArgb(20, 36, 30),
             ForeColor = Color.FromArgb(52, 168, 138),
@@ -7807,7 +8165,7 @@ public class HackerWallpaperForm : Form {
         Button btnCycleScene = new Button {
             Text = "🌲 Entorno 3D [1/3..3/3] (Ctrl+Alt+M)",
             Location = new Point(256, 104),
-            Size = new Size(216, 30),
+            Size = new Size(226, 30),
             FlatStyle = FlatStyle.Flat,
             BackColor = Color.FromArgb(28, 36, 24),
             ForeColor = Color.FromArgb(186, 138, 56),
@@ -7819,16 +8177,41 @@ public class HackerWallpaperForm : Form {
             this.Invalidate();
         };
 
+        Button btnGamerMode = new Button {
+            Location = new Point(22, 140),
+            Size = new Size(460, 34),
+            FlatStyle = FlatStyle.Flat,
+            Font = new Font("Segoe UI", 9.2f, FontStyle.Bold)
+        };
+        Action updateGamerBtn = () => {
+            if (isGamerSuspended || Config.GamerMode) {
+                btnGamerMode.Text = "🎮 MODO GAMER ACTIVO (0.0% GPU // HIBERNACIÓN TOTAL) — Click o Ctrl+Alt+G para Reanudar";
+                btnGamerMode.BackColor = Color.FromArgb(22, 92, 62);
+                btnGamerMode.ForeColor = Color.FromArgb(165, 255, 210);
+            } else {
+                btnGamerMode.Text = "🎮 Activar Modo Gamer 0.0% GPU Ahora (Ctrl+Alt+G o Botón [GAMER] en HUD)";
+                btnGamerMode.BackColor = Color.FromArgb(24, 34, 48);
+                btnGamerMode.ForeColor = Color.FromArgb(96, 218, 184);
+            }
+        };
+        updateGamerBtn();
+        btnGamerMode.Click += (s, ev) => {
+            ToggleGamerMode();
+            updateGamerBtn();
+            updateSwarmLabel();
+        };
+
         configForm.Controls.Add(lblSwarm);
         configForm.Controls.Add(lblSwarmStatus);
         configForm.Controls.Add(btnTrainWave);
         configForm.Controls.Add(btnCycleScene);
+        configForm.Controls.Add(btnGamerMode);
 
         // --- PALETA DE COLORES ---
-        Label lblTheme = new Label { Text = "Paleta de Colores (Descanso Visual / Eye-Care Mate):", Location = new Point(22, 144), AutoSize = true };
+        Label lblTheme = new Label { Text = "Paleta de Colores (Descanso Visual / Eye-Care Mate):", Location = new Point(22, 182), AutoSize = true };
         ComboBox cbTheme = new ComboBox {
-            Location = new Point(22, 165),
-            Width = 450,
+            Location = new Point(22, 203),
+            Width = 460,
             DropDownStyle = ComboBoxStyle.DropDownList,
             BackColor = Color.FromArgb(16, 28, 24),
             ForeColor = Color.White
@@ -7848,11 +8231,11 @@ public class HackerWallpaperForm : Form {
         configForm.Controls.Add(lblTheme);
         configForm.Controls.Add(cbTheme);
 
-        Label lblSpeed = new Label { Text = string.Format("Velocidad de Lluvia de Código: {0}%", Config.RainSpeed), Location = new Point(22, 198), AutoSize = true };
+        Label lblSpeed = new Label { Text = string.Format("Velocidad de Lluvia de Código: {0}%", Config.RainSpeed), Location = new Point(22, 236), AutoSize = true };
         TrackBar tbSpeed = new TrackBar {
-            Location = new Point(22, 218),
+            Location = new Point(22, 256),
             AutoSize = false,
-            Size = new Size(450, 30),
+            Size = new Size(460, 28),
             Minimum = 0,
             Maximum = 200,
             TickStyle = TickStyle.None,
@@ -7866,11 +8249,11 @@ public class HackerWallpaperForm : Form {
         configForm.Controls.Add(lblSpeed);
         configForm.Controls.Add(tbSpeed);
 
-        Label lblDens = new Label { Text = string.Format("Densidad de Columnas: {0}", Config.RainDensity), Location = new Point(22, 252), AutoSize = true };
+        Label lblDens = new Label { Text = string.Format("Densidad de Columnas: {0}", Config.RainDensity), Location = new Point(22, 288), AutoSize = true };
         TrackBar tbDens = new TrackBar {
-            Location = new Point(22, 272),
+            Location = new Point(22, 308),
             AutoSize = false,
-            Size = new Size(450, 30),
+            Size = new Size(460, 28),
             Minimum = 20,
             Maximum = 110,
             TickStyle = TickStyle.None,
@@ -7885,11 +8268,11 @@ public class HackerWallpaperForm : Form {
         configForm.Controls.Add(lblDens);
         configForm.Controls.Add(tbDens);
 
-        Label lblScale = new Label { Text = string.Format("Tamaño de los 3 Avatares Porygon: {0}%", Config.PorygonScale), Location = new Point(22, 306), AutoSize = true };
+        Label lblScale = new Label { Text = string.Format("Tamaño de los 3 Avatares Porygon: {0}%", Config.PorygonScale), Location = new Point(22, 340), AutoSize = true };
         TrackBar tbScale = new TrackBar {
-            Location = new Point(22, 326),
+            Location = new Point(22, 360),
             AutoSize = false,
-            Size = new Size(450, 30),
+            Size = new Size(460, 28),
             Minimum = 50,
             Maximum = 160,
             TickStyle = TickStyle.None,
@@ -7903,9 +8286,23 @@ public class HackerWallpaperForm : Form {
         configForm.Controls.Add(lblScale);
         configForm.Controls.Add(tbScale);
 
+        CheckBox chkAutoGamer = new CheckBox {
+            Text = "Auto-Activar Modo Gamer (0.0% GPU) al detectar Videojuegos en Pantalla Completa",
+            Location = new Point(24, 396),
+            AutoSize = true,
+            ForeColor = Color.FromArgb(110, 242, 188),
+            Checked = Config.AutoGamerOnFullscreenGame
+        };
+        chkAutoGamer.CheckedChanged += (s, ev) => {
+            Config.AutoGamerOnFullscreenGame = chkAutoGamer.Checked;
+            Config.Save();
+            UpdateGamerSuspensionState(true);
+            updateGamerBtn();
+        };
+
         CheckBox chkTrain = new CheckBox {
             Text = "Modo Entrenamiento Intensivo Continuo (Más Orbes Dorados y Anomalías)",
-            Location = new Point(24, 366),
+            Location = new Point(24, 424),
             AutoSize = true,
             ForeColor = Color.FromArgb(250, 204, 21),
             Checked = Config.TrainingMode
@@ -7914,7 +8311,7 @@ public class HackerWallpaperForm : Form {
 
         CheckBox chkFollowMouse = new CheckBox {
             Text = "Seguir el cursor del mouse (Desactivado por defecto — 100% Independientes)",
-            Location = new Point(24, 394),
+            Location = new Point(24, 452),
             AutoSize = true,
             Checked = Config.FollowMouse
         };
@@ -7922,7 +8319,7 @@ public class HackerWallpaperForm : Form {
 
         CheckBox chkTel = new CheckBox {
             Text = "Mostrar Terminal de Telemetría Real (CPU, GPU, RAM, Red, Ping)",
-            Location = new Point(24, 422),
+            Location = new Point(24, 480),
             AutoSize = true,
             Checked = Config.ShowTelemetry
         };
@@ -7930,7 +8327,7 @@ public class HackerWallpaperForm : Form {
 
         CheckBox chkRad = new CheckBox {
             Text = "Mostrar Radar Sonar 360° de Conexiones de Red",
-            Location = new Point(24, 450),
+            Location = new Point(24, 508),
             AutoSize = true,
             Checked = Config.ShowRadar
         };
@@ -7938,7 +8335,7 @@ public class HackerWallpaperForm : Form {
 
         CheckBox chkPory = new CheckBox {
             Text = "Activar Enjambre 3D (Porygon + Porygon2 + Porygon-Z)",
-            Location = new Point(24, 478),
+            Location = new Point(24, 536),
             AutoSize = true,
             Checked = Config.ShowPorygon
         };
@@ -7946,8 +8343,8 @@ public class HackerWallpaperForm : Form {
 
         Button btnClose = new Button {
             Text = "Guardar y Cerrar Panel",
-            Location = new Point(24, 518),
-            Size = new Size(448, 38),
+            Location = new Point(24, 576),
+            Size = new Size(458, 38),
             FlatStyle = FlatStyle.Flat,
             BackColor = Color.FromArgb(52, 168, 138),
             ForeColor = Color.FromArgb(8, 16, 14),
@@ -7956,6 +8353,7 @@ public class HackerWallpaperForm : Form {
         btnClose.FlatAppearance.BorderSize = 0;
         btnClose.Click += (s, ev) => { Config.Save(); configForm.Close(); };
 
+        configForm.Controls.Add(chkAutoGamer);
         configForm.Controls.Add(chkTrain);
         configForm.Controls.Add(chkFollowMouse);
         configForm.Controls.Add(chkTel);
