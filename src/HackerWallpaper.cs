@@ -6624,9 +6624,9 @@ public class HackerWallpaperForm : Form {
         this.toggleGamerEvent = gamerEvt;
         Config = WallpaperConfig.Load();
         if (configEvt != null) {
-            // Ensure cold startup always begins with live 3D rendering unless --gamer was explicitly passed,
-            // while preserving AutoGamerOnFullscreenGame = true for automatic 0.0% GPU hibernation on games.
+            // Ensure cold startup always begins with live 3D rendering and Scene Mode 0 (Forest + River)
             Config.GamerMode = startGamerOnBoot;
+            Config.BgSceneMode = 0;
             Config.Save();
         }
         radarCollapsed = Config.RadarCollapsed;
@@ -9873,8 +9873,10 @@ public class HackerWallpaperForm : Form {
             RenderDenseCyberForestFloraOpenGL(mIdx, m, horizonY, vanishX, floorSpan, ceilSpan, phase, netMod, c1, c2, c3);
         } else if (mode == 1) {
             // =========================================================================
-            // MODE 1 (TOPO+MESH): TERRENO DE OSCILADOR VECTORIAL + BÓVEDA DE TRIÁNGULOS DELAUNAY
+            // MODE 1 (TOPO+MESH): TERRENO DE OSCILADOR VECTORIAL + BÓVEDA DELAUNAY + RÍO Y BOSQUE
             // =========================================================================
+            RenderHorizonMountainRangeAndPortalOpenGL(mIdx, m, horizonY, vanishX, phase, netMod, c1, c2, c3);
+
             // 2A. Upper Geodesic Delaunay Triangle Vault (4 rows x 9 cols of 3D oscillating vertices)
             int dRows = 4;
             int dCols = 9;
@@ -9910,7 +9912,7 @@ public class HackerWallpaperForm : Form {
                 }
             }
 
-            // 2B. Lower Multi-Band Vector Oscilloscope Topographic Ridges (Unknown Pleasures 3D Occluding Polygon Ridges)
+            // 2B. Lower Multi-Band Vector Oscilloscope Topographic Ridges framing the River Valley
             int tRows = 9;
             int tCols = 20;
             float[,] tx = new float[tRows, tCols + 1];
@@ -9919,20 +9921,25 @@ public class HackerWallpaperForm : Form {
                 float rt = (r + 0.25f) / (float)tRows;
                 float persp = (float)Math.Pow(rt, 1.45);
                 float baseY = horizonY - 8f + persp * (floorSpan + 4f);
+                float rivCx, rivCy, rivHw, rivPr;
+                GetRiverGeometryAt(rt, m, horizonY, vanishX, floorSpan, phase, mIdx, out rivCx, out rivCy, out rivHw, out rivPr);
+
                 for (int j = 0; j <= tCols; j++) {
                     float u = (j / (float)tCols) * 2.0f - 1.0f; // -1..+1
                     float x = m.Left + (j / (float)tCols) * m.Width;
+                    float distFromRiver = Math.Abs(x - rivCx) / Math.Max(8f, rivHw * 1.45f);
+                    float valleyMask = (distFromRiver < 1.25f) ? (distFromRiver * distFromRiver * 0.55f) : 1.0f;
                     float bellCenter = (float)Math.Exp(-(u * u) * 5.5f);
                     float bellFlank  = (float)Math.Exp(-((Math.Abs(u) - 0.58f) * (Math.Abs(u) - 0.58f)) * 14.0f);
                     float harmonic   = (float)(Math.Sin(j * 0.95f + phase * 1.4f + r * 0.8f) * 0.6f
                                              + Math.Cos(j * 1.75f - phase * 1.1f + r * 1.3f) * 0.4f);
-                    float ridgeH = (bellCenter * 38.0f + bellFlank * 24.0f) * (0.45f + 0.55f * Math.Abs(harmonic)) * (0.55f + 0.65f * persp) * netMod;
+                    float ridgeH = (bellCenter * 38.0f + bellFlank * 24.0f) * (0.45f + 0.55f * Math.Abs(harmonic)) * (0.55f + 0.65f * persp) * netMod * valleyMask;
                     tx[r, j] = x;
                     ty[r, j] = Math.Max(m.Top + 40f, Math.Min(m.Bottom - 2f, baseY - ridgeH));
                 }
 
                 // Solid Matte Obsidian Polygon Occlusion under each topographic ridge
-                Color occlCol = Color.FromArgb(88, 4, 10, 9);
+                Color occlCol = Color.FromArgb(44, 4, 10, 9);
                 GpuGl.SetColor(occlCol);
                 GpuGl.glBegin(GpuGl.GL_TRIANGLES);
                 for (int j = 0; j < tCols; j++) {
@@ -9969,10 +9976,15 @@ public class HackerWallpaperForm : Form {
                 }
                 GpuGl.glEnd();
             }
+
+            RenderCyberDataRiverOpenGL(mIdx, m, horizonY, vanishX, floorSpan, phase, netMod, c1, c2, c3);
+            RenderDenseCyberForestFloraOpenGL(mIdx, m, horizonY, vanishX, floorSpan, ceilSpan, phase, netMod, c1, c2, c3);
         } else {
             // =========================================================================
-            // MODE 2 (MYCELIUM): BOSQUE MICELIAL POLIGONAL (BIOLUMINESCENT FOREST MESH)
+            // MODE 2 (MYCELIUM): BOSQUE MICELIAL POLIGONAL + RÍO DE DATOS Y SELVA
             // =========================================================================
+            RenderHorizonMountainRangeAndPortalOpenGL(mIdx, m, horizonY, vanishX, phase, netMod, c1, c2, c3);
+
             int arborCount = 6;
             for (int a = 0; a < arborCount; a++) {
                 float u = (a + 0.5f) / (float)arborCount;
@@ -10039,6 +10051,9 @@ public class HackerWallpaperForm : Form {
                 GpuGl.glVertex2f(gx, gy);
             }
             GpuGl.glEnd();
+
+            RenderCyberDataRiverOpenGL(mIdx, m, horizonY, vanishX, floorSpan, phase, netMod, c1, c2, c3);
+            RenderDenseCyberForestFloraOpenGL(mIdx, m, horizonY, vanishX, floorSpan, ceilSpan, phase, netMod, c1, c2, c3);
         }
     }
 
