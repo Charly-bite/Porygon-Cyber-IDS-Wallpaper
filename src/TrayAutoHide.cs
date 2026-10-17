@@ -16,6 +16,7 @@ public class TrayAutoHideContext : ApplicationContext {
     [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hWnd);
     [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
     [DllImport("user32.dll")] private static extern int SetWindowRgn(IntPtr hWnd, IntPtr hRgn, bool bRedraw);
+    [DllImport("user32.dll", CharSet = CharSet.Auto)] private static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
     [DllImport("user32.dll", CharSet = CharSet.Auto)]
     private static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, IntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out IntPtr lpdwResult);
 
@@ -31,9 +32,6 @@ public class TrayAutoHideContext : ApplicationContext {
 
     private System.Windows.Forms.Timer pollTimer;
     private bool wasHoveringClock = false;
-    private int lastNotifyLeft = -1;
-    private int lastTrayW = -1;
-    private int lastTrayH = -1;
     private int tickCount = 0;
 
     public TrayAutoHideContext() {
@@ -42,11 +40,11 @@ public class TrayAutoHideContext : ApplicationContext {
         EnsureTranslucentTaskbarClear();
         EnforceSingleMonitorTaskbars();
 
-        IntPtr tray;
+        IntPtr tray, notifyWnd;
         int trayW, trayH, trayTop, notifyLeft;
-        GetTrayGeometry(out tray, out trayW, out trayH, out trayTop, out notifyLeft);
+        GetTrayGeometry(out tray, out notifyWnd, out trayW, out trayH, out trayTop, out notifyLeft);
         if (tray != IntPtr.Zero) {
-            ApplyClockAutoHideRegion(tray, false, notifyLeft, trayW, trayH);
+            SetTrayVisibility(tray, notifyWnd, false);
         }
 
         pollTimer = new System.Windows.Forms.Timer();
@@ -203,13 +201,29 @@ public class TrayAutoHideContext : ApplicationContext {
         }
     }
 
-    private void GetTrayGeometry(out IntPtr tray, out int trayW, out int trayH, out int trayTop, out int notifyLeft) {
+    [DllImport("user32.dll")] private static extern bool EnumChildWindows(IntPtr hWndParent, EnumChildProc lpEnumFunc, IntPtr lParam);
+    [DllImport("user32.dll")] private static extern bool RedrawWindow(IntPtr hWnd, IntPtr lprcUpdate, IntPtr hrgnUpdate, uint flags);
+    [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int vKey);
+    private delegate bool EnumChildProc(IntPtr hWnd, IntPtr lParam);
+
+    private const int SW_SHOWNA = 8;
+    private const uint RDW_INVALIDATE = 0x0001;
+    private const uint RDW_ERASE = 0x0004;
+    private const uint RDW_ALLCHILDREN = 0x0080;
+    private const uint RDW_UPDATENOW = 0x0100;
+    private const uint RDW_FRAME = 0x0400;
+
+    private DateTime lastHoverTime = DateTime.MinValue;
+    private int cachedNotifyLeft = 1640;
+
+    private void GetTrayGeometry(out IntPtr tray, out IntPtr notifyWnd, out int trayW, out int trayH, out int trayTop, out int notifyLeft) {
         tray = FindWindow("Shell_TrayWnd", null);
+        notifyWnd = IntPtr.Zero;
         Rectangle pri = Screen.PrimaryScreen.Bounds;
         trayW = pri.Width;
         trayH = 48;
         trayTop = pri.Bottom - 48;
-        notifyLeft = pri.Width - 220;
+        notifyLeft = cachedNotifyLeft;
 
         if (tray != IntPtr.Zero) {
             RECT tr;
@@ -218,35 +232,39 @@ public class TrayAutoHideContext : ApplicationContext {
                 trayH = tr.Bottom - tr.Top;
                 trayTop = tr.Top;
             }
-            IntPtr notifyWnd = FindWindowEx(tray, IntPtr.Zero, "TrayNotifyWnd", null);
+            notifyWnd = FindWindowEx(tray, IntPtr.Zero, "TrayNotifyWnd", null);
             if (notifyWnd != IntPtr.Zero) {
                 RECT nr;
-                if (GetWindowRect(notifyWnd, out nr) && nr.Left > 300) {
-                    notifyLeft = nr.Left;
+                if (GetWindowRect(notifyWnd, out nr)) {
+                    int w = nr.Right - nr.Left;
+                    if (nr.Left > 300 && w >= 40 && w <= 650) {
+                        notifyLeft = nr.Left;
+                        cachedNotifyLeft = nr.Left;
+                    }
                 }
             }
         }
     }
 
-    private void ApplyClockAutoHideRegion(IntPtr tray, bool includeClock, int notifyLeft, int trayW, int trayH) {
+    private void SetTrayVisibility(IntPtr tray, IntPtr notifyWnd, bool visible) {
         if (tray == IntPtr.Zero) return;
 
-        lastNotifyLeft = notifyLeft;
-        lastTrayW = trayW;
-        lastTrayH = trayH;
+        // Always ensure Shell_TrayWnd itself has no clipping region so centered app icons and tray render natively
+        SetWindowRgn(tray, IntPtr.Zero, true);
 
-        if (includeClock) {
-            // Unclip entire taskbar when hovering bottom-right so clock and system tray icons render natively
-            SetWindowRgn(tray, IntPtr.Zero, true);
-        } else {
-            // Keep 0 .. notifyLeft-8 completely unclipped from y=0..trayH+4 so centered taskbar icons NEVER get clipped,
-            // while cleanly cutting out the right-hand system tray & clock zone until hovered
-            int clipRight = Math.Max(400, notifyLeft - 8);
-            IntPtr rgn = CreateRectRgn(0, 0, clipRight, trayH + 4);
-            if (SetWindowRgn(tray, rgn, true) == 0) {
-                DeleteObject(rgn);
+        if (notifyWnd != IntPtr.Zero) {
+            SetWindowRgn(notifyWnd, IntPtr.Zero, true);
+            int cmd = visible ? SW_SHOWNA : SW_HIDE;
+            ShowWindow(notifyWnd, cmd);
+            EnumChildWindows(notifyWnd, (hChild, lParam) => {
+                ShowWindow(hChild, cmd);
+                return true;
+            }, IntPtr.Zero);
+            if (visible) {
+                RedrawWindow(notifyWnd, IntPtr.Zero, IntPtr.Zero, RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN | RDW_UPDATENOW);
             }
         }
+        RedrawWindow(tray, IntPtr.Zero, IntPtr.Zero, RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN | RDW_UPDATENOW);
     }
 
     private void OnPollTick(object sender, EventArgs e) {
@@ -258,18 +276,36 @@ public class TrayAutoHideContext : ApplicationContext {
             EnsureTranslucentTaskbarClear();
         }
 
-        IntPtr tray;
+        IntPtr tray, notifyWnd;
         int trayW, trayH, trayTop, notifyLeft;
-        GetTrayGeometry(out tray, out trayW, out trayH, out trayTop, out notifyLeft);
+        GetTrayGeometry(out tray, out notifyWnd, out trayW, out trayH, out trayTop, out notifyLeft);
         if (tray == IntPtr.Zero) return;
 
         Point cursor = Cursor.Position;
-        int clockHoverLeft = Math.Max(1650, notifyLeft - 14);
-        bool hoverClock = (cursor.X >= clockHoverLeft && cursor.X <= trayW + 4 && cursor.Y >= trayTop - 8 && cursor.Y <= trayTop + trayH + 8);
+        int triggerLeft = Math.Max(1550, notifyLeft - 24);
+        int triggerTop = trayTop - 10;
 
-        if (hoverClock != wasHoveringClock || notifyLeft != lastNotifyLeft || trayW != lastTrayW || trayH != lastTrayH) {
-            wasHoveringClock = hoverClock;
-            ApplyClockAutoHideRegion(tray, wasHoveringClock, notifyLeft, trayW, trayH);
+        bool inHoverZone = (cursor.X >= triggerLeft && cursor.X <= trayW + 8 && cursor.Y >= triggerTop && cursor.Y <= trayTop + trayH + 12);
+        bool inKeepAliveZone = (cursor.X >= triggerLeft - 50 && cursor.X <= trayW + 12 && cursor.Y >= triggerTop - 40 && cursor.Y <= trayTop + trayH + 16);
+        bool mousePressed = ((GetAsyncKeyState(0x01) & 0x8000) != 0) || ((GetAsyncKeyState(0x02) & 0x8000) != 0);
+
+        if (inHoverZone) {
+            lastHoverTime = DateTime.UtcNow;
+            if (!wasHoveringClock || (notifyWnd != IntPtr.Zero && !IsWindowVisible(notifyWnd))) {
+                wasHoveringClock = true;
+                SetTrayVisibility(tray, notifyWnd, true);
+            }
+        } else {
+            if (wasHoveringClock && inKeepAliveZone) {
+                lastHoverTime = DateTime.UtcNow;
+            }
+            double elapsedMs = (DateTime.UtcNow - lastHoverTime).TotalMilliseconds;
+            if (wasHoveringClock && !inKeepAliveZone && !mousePressed && elapsedMs > 800) {
+                wasHoveringClock = false;
+                SetTrayVisibility(tray, notifyWnd, false);
+            } else if (!wasHoveringClock && notifyWnd != IntPtr.Zero && IsWindowVisible(notifyWnd)) {
+                SetTrayVisibility(tray, notifyWnd, false);
+            }
         }
     }
 
