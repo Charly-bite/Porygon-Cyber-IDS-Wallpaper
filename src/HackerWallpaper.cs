@@ -7244,7 +7244,106 @@ public class HackerWallpaperForm : Form {
         }
         GpuGl.glEnd();
 
-        // 6. Floating Hex/Binary Telemetry Tokens Drifting in the River Current (1 VRAM Font Atlas Batch)
+        // 6. Partially Submerged River Rocks with Animated Data-Foam V-Wakes (5 River Boulders)
+        float[] subRockT = new float[] { 0.30f, 0.45f, 0.60f, 0.75f, 0.89f };
+        float[] subRockU = new float[] { -0.36f, 0.34f, -0.28f, 0.38f, -0.32f };
+        GpuGl.glBegin(GpuGl.GL_TRIANGLES);
+        for (int sr = 0; sr < subRockT.Length; sr++) {
+            float st = subRockT[sr];
+            float sxC, syC, sHw, sPr;
+            GetRiverGeometryAt(st, m, horizonY, vanishX, floorSpan, phase, mIdx, out sxC, out syC, out sHw, out sPr);
+            float rx = sxC + subRockU[sr] * sHw;
+            float ry = syC + 1.0f * sPr;
+            float rw = (6.0f + (sr % 2) * 3.5f) * (0.28f + 0.72f * sPr);
+            float rh = (4.2f + (sr % 2) * 2.4f) * (0.28f + 0.72f * sPr);
+
+            // Lit left facet
+            GpuGl.glColor4ub((byte)(18 + c1.R / 4), (byte)(38 + c1.G / 4), (byte)(44 + c1.B / 4), (byte)(155 + (int)(sPr * 75f)));
+            GpuGl.glVertex2f(rx - rw, ry);
+            GpuGl.glVertex2f(rx - rw * 0.25f, ry - rh);
+            GpuGl.glVertex2f(rx + rw * 0.15f, ry);
+
+            // Shaded right facet
+            GpuGl.glColor4ub(8, 20, 28, (byte)(170 + (int)(sPr * 70f)));
+            GpuGl.glVertex2f(rx - rw * 0.25f, ry - rh);
+            GpuGl.glVertex2f(rx + rw, ry);
+            GpuGl.glVertex2f(rx + rw * 0.15f, ry);
+        }
+        GpuGl.glEnd();
+
+        // Submerged rock wireframe edges + animated V-wake data foam ripples
+        GpuGl.glLineWidth(1.0f);
+        GpuGl.glBegin(GpuGl.GL_LINES);
+        for (int sr = 0; sr < subRockT.Length; sr++) {
+            float st = subRockT[sr];
+            float sxC, syC, sHw, sPr;
+            GetRiverGeometryAt(st, m, horizonY, vanishX, floorSpan, phase, mIdx, out sxC, out syC, out sHw, out sPr);
+            float rx = sxC + subRockU[sr] * sHw;
+            float ry = syC + 1.0f * sPr;
+            float rw = (6.0f + (sr % 2) * 3.5f) * (0.28f + 0.72f * sPr);
+            float rh = (4.2f + (sr % 2) * 2.4f) * (0.28f + 0.72f * sPr);
+
+            byte edgeA = (byte)(75 + (int)(sPr * 110f));
+            GpuGl.glColor4ub(c1.R, c1.G, c1.B, edgeA);
+            GpuGl.glVertex2f(rx - rw, ry); GpuGl.glVertex2f(rx - rw * 0.25f, ry - rh);
+            GpuGl.glVertex2f(rx - rw * 0.25f, ry - rh); GpuGl.glVertex2f(rx + rw, ry);
+            GpuGl.glVertex2f(rx - rw * 0.25f, ry - rh); GpuGl.glVertex2f(rx + rw * 0.15f, ry);
+
+            // Glowing waterline foam base + V-wake streaming toward the horizon (since current flows to horizon)
+            for (int wk = 0; wk < 2; wk++) {
+                float wkPulse = ((flowPhase * 0.85f + sr * 0.37f + wk * 0.5f) % 1.0f);
+                float wkSpread = rw * (1.15f + wkPulse * 0.85f);
+                float wkLen = (7.0f + wkPulse * 14.0f) * sPr;
+                byte foamA = (byte)((1.0f - wkPulse) * (85f + sPr * 125f));
+                GpuGl.glColor4ub((byte)Math.Min(255, c2.R + 45), (byte)Math.Min(255, c2.G + 45), (byte)Math.Min(255, c2.B + 45), foamA);
+
+                // Left & right foam wake arms trailing toward horizon (upward -Y)
+                GpuGl.glVertex2f(rx - rw * 0.85f, ry + 1.0f * sPr);
+                GpuGl.glVertex2f(rx - wkSpread, ry - wkLen);
+
+                GpuGl.glVertex2f(rx + rw * 0.85f, ry + 1.0f * sPr);
+                GpuGl.glVertex2f(rx + wkSpread, ry - wkLen);
+
+                // Front bow-wave arc at base of rock
+                GpuGl.glVertex2f(rx - wkSpread * 0.75f, ry + (1.5f + wkPulse * 2.5f) * sPr);
+                GpuGl.glVertex2f(rx + wkSpread * 0.75f, ry + (1.5f + wkPulse * 2.5f) * sPr);
+            }
+        }
+        GpuGl.glEnd();
+
+        // 7. Translucent Bio-Digital Mist Ribbons Drifting Over the River Channel (1 GL_TRIANGLES batch)
+        int mistCount = 7;
+        GpuGl.glBegin(GpuGl.GL_TRIANGLES);
+        for (int mi = 0; mi < mistCount; mi++) {
+            float mt = 0.16f + (mi / (float)(mistCount - 1)) * 0.76f;
+            float mxC, myC, mHw, mPr;
+            GetRiverGeometryAt(mt, m, horizonY, vanishX, floorSpan, phase, mIdx, out mxC, out myC, out mHw, out mPr);
+
+            float drift = (float)Math.Sin(phase * 0.52f + mi * 1.45f) * (mHw * 0.28f);
+            float mCenterX = mxC + drift;
+            float mCenterY = myC - (2.5f + 5.5f * mPr);
+            float mistHalfW = mHw * (1.15f + 0.20f * (float)Math.Cos(phase * 0.4f + mi));
+            float mistHalfH = 2.2f + 5.2f * mPr;
+
+            byte coreAlpha = (byte)(12 + (int)(mPr * 18f));
+            Color mistCol = (mi % 2 == 0) ? c1 : c2;
+
+            // Soft elongated diamond mist wisp (center alpha -> 0 alpha at outer tips)
+            GpuGl.glColor4ub(mistCol.R, mistCol.G, mistCol.B, coreAlpha);
+            GpuGl.glVertex2f(mCenterX, mCenterY - mistHalfH);
+            GpuGl.glVertex2f(mCenterX, mCenterY + mistHalfH);
+            GpuGl.glColor4ub(mistCol.R, mistCol.G, mistCol.B, 0);
+            GpuGl.glVertex2f(mCenterX - mistHalfW, mCenterY);
+
+            GpuGl.glColor4ub(mistCol.R, mistCol.G, mistCol.B, coreAlpha);
+            GpuGl.glVertex2f(mCenterX, mCenterY - mistHalfH);
+            GpuGl.glVertex2f(mCenterX, mCenterY + mistHalfH);
+            GpuGl.glColor4ub(mistCol.R, mistCol.G, mistCol.B, 0);
+            GpuGl.glVertex2f(mCenterX + mistHalfW, mCenterY);
+        }
+        GpuGl.glEnd();
+
+        // 8. Floating Hex/Binary Telemetry Tokens Drifting in the River Current (1 VRAM Font Atlas Batch)
         if (!gpuEcoMode) {
             GpuGl.BeginFontAtlasBatch();
             int glyphStreams = 16;
@@ -7272,6 +7371,151 @@ public class HackerWallpaperForm : Form {
             }
             GpuGl.EndFontAtlasBatch();
         }
+    }
+
+    private void RenderHorizonMountainRangeAndPortalOpenGL(int mIdx, Rectangle m, float horizonY, float vanishX, float phase, float netMod, Color c1, Color c2, Color c3) {
+        // =========================================================================
+        // 1. CYBER-PORTAL / CONVERGENCE HALO AT THE RIVER VANISHING POINT (vanishX, horizonY)
+        // =========================================================================
+        float portalR = m.Width * 0.048f;
+        float pulse = 0.88f + 0.12f * (float)Math.Sin(phase * 1.4f);
+        float rOuter = portalR * pulse;
+        float rInner = portalR * 0.56f * pulse;
+        int arcSegs = 12;
+
+        // Soft polygonal horizon glow fan above horizonY
+        GpuGl.glBegin(GpuGl.GL_TRIANGLES);
+        for (int i = 0; i < arcSegs; i++) {
+            double a0 = Math.PI * (i / (double)arcSegs);
+            double a1 = Math.PI * ((i + 1) / (double)arcSegs);
+            float x0 = vanishX - (float)Math.Cos(a0) * rOuter * 1.45f;
+            float y0 = horizonY - (float)Math.Sin(a0) * rOuter * 0.92f;
+            float x1 = vanishX - (float)Math.Cos(a1) * rOuter * 1.45f;
+            float y1 = horizonY - (float)Math.Sin(a1) * rOuter * 0.92f;
+
+            GpuGl.glColor4ub(c2.R, c2.G, c2.B, 34);
+            GpuGl.glVertex2f(vanishX, horizonY);
+            GpuGl.glColor4ub(c1.R, c1.G, c1.B, 0);
+            GpuGl.glVertex2f(x0, y0);
+            GpuGl.glVertex2f(x1, y1);
+        }
+        GpuGl.glEnd();
+
+        // Concentric wireframe geodesic portal arches above the vanishing river
+        GpuGl.glLineWidth(0.95f);
+        GpuGl.glBegin(GpuGl.GL_LINE_STRIP);
+        for (int i = 0; i <= arcSegs; i++) {
+            double a = Math.PI * (i / (double)arcSegs);
+            float px = vanishX - (float)Math.Cos(a) * rOuter;
+            float py = horizonY - (float)Math.Sin(a) * (rOuter * 0.68f);
+            byte pa = (byte)(35 + (int)(Math.Sin(a) * 65f));
+            GpuGl.glColor4ub(c1.R, c1.G, c1.B, pa);
+            GpuGl.glVertex2f(px, py);
+        }
+        GpuGl.glEnd();
+
+        GpuGl.glLineWidth(0.85f);
+        GpuGl.glBegin(GpuGl.GL_LINE_STRIP);
+        for (int i = 0; i <= arcSegs; i++) {
+            double a = Math.PI * (i / (double)arcSegs);
+            float px = vanishX - (float)Math.Cos(a) * rInner;
+            float py = horizonY - (float)Math.Sin(a) * (rInner * 0.68f);
+            byte pa = (byte)(50 + (int)(Math.Sin(a) * 80f));
+            GpuGl.glColor4ub(c2.R, c2.G, c2.B, pa);
+            GpuGl.glVertex2f(px, py);
+        }
+        GpuGl.glEnd();
+
+        // Radial portal struts connecting inner and outer horizon rings
+        GpuGl.glBegin(GpuGl.GL_LINES);
+        for (int i = 1; i < arcSegs; i += 2) {
+            double a = Math.PI * (i / (double)arcSegs);
+            float cosA = (float)Math.Cos(a);
+            float sinA = (float)Math.Sin(a);
+            GpuGl.glColor4ub(c2.R, c2.G, c2.B, 52);
+            GpuGl.glVertex2f(vanishX - cosA * rInner * 0.4f, horizonY - sinA * rInner * 0.28f);
+            GpuGl.glVertex2f(vanishX - cosA * rOuter, horizonY - sinA * rOuter * 0.68f);
+        }
+        GpuGl.glEnd();
+
+        // =========================================================================
+        // 2. LOW-POLY FACETED HORIZON MOUNTAIN RANGE (14 PEAKS FRAMING THE CANYON PASS)
+        // =========================================================================
+        float[] pkNormX = new float[] {
+            0.04f, 0.11f, 0.19f, 0.27f, 0.34f, 0.40f, 0.45f, // Left mountain wing sloping into canyon pass
+            0.55f, 0.60f, 0.66f, 0.73f, 0.81f, 0.89f, 0.96f  // Right mountain wing rising from canyon pass
+        };
+        float[] pkSpanW = new float[] {
+            0.065f, 0.075f, 0.085f, 0.080f, 0.070f, 0.058f, 0.045f,
+            0.045f, 0.058f, 0.070f, 0.080f, 0.085f, 0.075f, 0.065f
+        };
+        float[] pkHeightFrac = new float[] {
+            0.052f, 0.082f, 0.108f, 0.092f, 0.068f, 0.046f, 0.025f,
+            0.025f, 0.048f, 0.070f, 0.094f, 0.106f, 0.080f, 0.050f
+        };
+
+        int peakCount = pkNormX.Length;
+        GpuGl.glBegin(GpuGl.GL_TRIANGLES);
+        for (int p = 0; p < peakCount; p++) {
+            bool isLeftWing = (p < 7);
+            float px = m.Left + m.Width * pkNormX[p];
+            float halfSpan = m.Width * pkSpanW[p];
+            float ph = m.Height * pkHeightFrac[p];
+            float py = horizonY - ph;
+            float baseY = horizonY + 2.0f;
+            // Central ridge offset slightly toward the central portal
+            float ridgeBaseX = px + (isLeftWing ? halfSpan * 0.16f : -halfSpan * 0.16f);
+
+            // Inner facet (illuminated by the central horizon portal) & outer facet (deep slate shadow)
+            Color innerLit  = Color.FromArgb(46, (byte)(10 + c1.R / 4), (byte)(24 + c1.G / 3), (byte)(28 + c1.B / 3));
+            Color outerDark = Color.FromArgb(54, 5, 13, 18);
+
+            if (isLeftWing) {
+                // Left face = outer shadow, Right face = inner portal-lit
+                GpuGl.SetColor(outerDark);
+                GpuGl.glVertex2f(px - halfSpan, baseY);
+                GpuGl.glVertex2f(px, py);
+                GpuGl.glVertex2f(ridgeBaseX, baseY);
+
+                GpuGl.SetColor(innerLit);
+                GpuGl.glVertex2f(px, py);
+                GpuGl.glVertex2f(px + halfSpan, baseY);
+                GpuGl.glVertex2f(ridgeBaseX, baseY);
+            } else {
+                // Left face = inner portal-lit, Right face = outer shadow
+                GpuGl.SetColor(innerLit);
+                GpuGl.glVertex2f(px - halfSpan, baseY);
+                GpuGl.glVertex2f(px, py);
+                GpuGl.glVertex2f(ridgeBaseX, baseY);
+
+                GpuGl.SetColor(outerDark);
+                GpuGl.glVertex2f(px, py);
+                GpuGl.glVertex2f(px + halfSpan, baseY);
+                GpuGl.glVertex2f(ridgeBaseX, baseY);
+            }
+        }
+        GpuGl.glEnd();
+
+        // Crisp 0.85px wireframe mountain ridges
+        GpuGl.glLineWidth(0.85f);
+        GpuGl.glBegin(GpuGl.GL_LINES);
+        for (int p = 0; p < peakCount; p++) {
+            bool isLeftWing = (p < 7);
+            float px = m.Left + m.Width * pkNormX[p];
+            float halfSpan = m.Width * pkSpanW[p];
+            float ph = m.Height * pkHeightFrac[p];
+            float py = horizonY - ph;
+            float baseY = horizonY + 2.0f;
+            float ridgeBaseX = px + (isLeftWing ? halfSpan * 0.16f : -halfSpan * 0.16f);
+
+            GpuGl.glColor4ub(c1.R, c1.G, c1.B, 58);
+            GpuGl.glVertex2f(px - halfSpan, baseY); GpuGl.glVertex2f(px, py);
+            GpuGl.glVertex2f(px, py); GpuGl.glVertex2f(px + halfSpan, baseY);
+
+            GpuGl.glColor4ub(c2.R, c2.G, c2.B, 48);
+            GpuGl.glVertex2f(px, py); GpuGl.glVertex2f(ridgeBaseX, baseY);
+        }
+        GpuGl.glEnd();
     }
 
     private void RenderDenseCyberForestFloraOpenGL(int mIdx, Rectangle m, float horizonY, float vanishX, float floorSpan, float ceilSpan, float phase, float netMod, Color c1, Color c2, Color c3) {
@@ -7666,7 +7910,71 @@ public class HackerWallpaperForm : Form {
         GpuGl.glEnd();
 
         // =========================================================================
-        // D. SUBTLE HANGING CANOPY LIANA VINES FROM UPPER CEILING (8 VINES)
+        // D. FLOATING BIO-DIGITAL FIREFLIES & LUMINOUS FOREST SPORES (26 PARTICLES)
+        // =========================================================================
+        int fireflyCount = 26;
+        GpuGl.glLineWidth(0.85f);
+        GpuGl.glBegin(GpuGl.GL_LINES);
+        for (int ff = 0; ff < fireflyCount; ff++) {
+            float seedX = (ff * 0.6180339f + 0.07f) % 1.0f;
+            float seedY = ((ff * 7 + 3) % fireflyCount) / (float)fireflyCount;
+            float depthT = 0.16f + seedY * 0.80f;
+
+            // Gentle organic drift and vertical rising float
+            float driftX = (float)Math.Sin(phase * 0.58f + ff * 1.73f) * (14.0f + 18.0f * depthT);
+            float floatY = (float)Math.Cos(phase * 0.74f + ff * 2.31f) * (8.0f + 12.0f * depthT);
+
+            float fx = m.Left + m.Width * (0.05f + 0.90f * seedX) + driftX;
+            float fy = (horizonY - m.Height * 0.06f) + depthT * (floorSpan + m.Height * 0.04f) + floatY;
+            float pulse = 0.30f + 0.70f * (0.5f + 0.5f * (float)Math.Sin(phase * 1.85f + ff * 1.95f));
+            byte tailA = (byte)(22 + (int)(pulse * 75f));
+            Color ffCol = (ff % 3 == 0) ? c2 : c1;
+
+            GpuGl.glColor4ub(ffCol.R, ffCol.G, ffCol.B, tailA);
+            GpuGl.glVertex2f(fx, fy);
+            GpuGl.glColor4ub(ffCol.R, ffCol.G, ffCol.B, 0);
+            GpuGl.glVertex2f(fx - driftX * 0.22f, fy + (5.0f + 5.0f * depthT));
+        }
+        GpuGl.glEnd();
+
+        // Single batched GL_QUADS pass for soft diamond glow halo + bright firefly core
+        GpuGl.glBegin(GpuGl.GL_QUADS);
+        for (int ff = 0; ff < fireflyCount; ff++) {
+            float seedX = (ff * 0.6180339f + 0.07f) % 1.0f;
+            float seedY = ((ff * 7 + 3) % fireflyCount) / (float)fireflyCount;
+            float depthT = 0.16f + seedY * 0.80f;
+
+            float driftX = (float)Math.Sin(phase * 0.58f + ff * 1.73f) * (14.0f + 18.0f * depthT);
+            float floatY = (float)Math.Cos(phase * 0.74f + ff * 2.31f) * (8.0f + 12.0f * depthT);
+
+            float fx = m.Left + m.Width * (0.05f + 0.90f * seedX) + driftX;
+            float fy = (horizonY - m.Height * 0.06f) + depthT * (floorSpan + m.Height * 0.04f) + floatY;
+            float pulse = 0.30f + 0.70f * (0.5f + 0.5f * (float)Math.Sin(phase * 1.85f + ff * 1.95f));
+
+            float szHalo = (2.2f + 2.8f * depthT) * (0.75f + 0.45f * pulse);
+            float szCore = (0.9f + 1.2f * depthT);
+            Color ffCol = (ff % 3 == 0) ? c2 : c1;
+            byte haloA = (byte)(18 + (int)(pulse * 52f));
+            byte coreA = (byte)(85 + (int)(pulse * 155f));
+
+            // Outer diamond glow halo
+            GpuGl.glColor4ub(ffCol.R, ffCol.G, ffCol.B, haloA);
+            GpuGl.glVertex2f(fx, fy - szHalo);
+            GpuGl.glVertex2f(fx + szHalo, fy);
+            GpuGl.glVertex2f(fx, fy + szHalo);
+            GpuGl.glVertex2f(fx - szHalo, fy);
+
+            // Bright bioluminescent core
+            GpuGl.glColor4ub((byte)Math.Min(255, ffCol.R + 65), (byte)Math.Min(255, ffCol.G + 65), (byte)Math.Min(255, ffCol.B + 55), coreA);
+            GpuGl.glVertex2f(fx - szCore, fy - szCore);
+            GpuGl.glVertex2f(fx + szCore, fy - szCore);
+            GpuGl.glVertex2f(fx + szCore, fy + szCore);
+            GpuGl.glVertex2f(fx - szCore, fy + szCore);
+        }
+        GpuGl.glEnd();
+
+        // =========================================================================
+        // E. SUBTLE HANGING CANOPY LIANA VINES FROM UPPER CEILING (8 VINES)
         // =========================================================================
         int vineCount = 8;
         for (int v = 0; v < vineCount; v++) {
@@ -7703,6 +8011,8 @@ public class HackerWallpaperForm : Form {
             // =========================================================================
             // MODE 0 (SELVA+OSC): HÍBRIDO SELVA BIO-DIGITAL LOW-POLY + RÍO DE DATOS + OSCILADOR 3D
             // =========================================================================
+            // 1.0: Distant Low-Poly Horizon Mountain Range + Vanishing Point Cyber-Portal
+            RenderHorizonMountainRangeAndPortalOpenGL(mIdx, m, horizonY, vanishX, phase, netMod, c1, c2, c3);
             int rows = 7;
             int cols = 18;
             float[,] vx = new float[rows, cols + 1];
