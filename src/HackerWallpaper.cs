@@ -1873,6 +1873,7 @@ public class Porygon3DAvatar {
             float sumAcc = 0f;
             int totalPruned = 0;
 
+            bool anyCrossover = false;
             for (int i = 0; i < Agents.Count; i++) {
                 PorygonAgent ag = Agents[i];
                 FlyBrainConnectome br = ag.Brain;
@@ -1895,6 +1896,7 @@ public class Porygon3DAvatar {
 
                     IdsDetectionLog.Add(auditLine);
                     while (IdsDetectionLog.Count > 10) IdsDetectionLog.RemoveAt(0);
+                    anyCrossover = true;
                 } else {
                     SyncAgentLifeStageMesh(ag);
                 }
@@ -1910,6 +1912,9 @@ public class Porygon3DAvatar {
             AvgSwarmAccuracy = sumAcc / Agents.Count;
             TotalPrunedTraits = totalPruned;
             CpuEvoStepsPerSec = Agents.Count * stepsPerAgent * 5;
+            if (anyCrossover) {
+                SaveBrainStates();
+            }
         }
     }
 
@@ -1919,10 +1924,12 @@ public class Porygon3DAvatar {
             sb.Append("[\r\n");
             for (int i = 0; i < Agents.Count; i++) {
                 FlyBrainConnectome b = Agents[i].Brain;
+                string safeTrait = (b.LastPrunedTrait ?? "GENOME_CLEAN").Replace("\"", "'");
                 sb.AppendFormat(System.Globalization.CultureInfo.InvariantCulture,
-                    "  {{ \"Name\": \"{0}\", \"Level\": {1}, \"XP\": {2}, \"Packets\": {3}, \"Anomalies\": {4}, \"Syncs\": {5}, \"Gain\": {6:0.000}, \"Gen\": {7}, \"Age\": {8:0.0}, \"Fit\": {9:0.0}, \"Acc\": {10:0.0}, \"Pruned\": {11} }}{12}\r\n",
+                    "  {{ \"Name\": \"{0}\", \"Level\": {1}, \"XP\": {2}, \"Packets\": {3}, \"Anomalies\": {4}, \"Syncs\": {5}, \"Gain\": {6:0.000}, \"Gen\": {7}, \"Age\": {8:0.0}, \"Fit\": {9:0.0}, \"Acc\": {10:0.0}, \"Pruned\": {11}, \"Trait\": \"{12}\", \"G0\": {13:0.000}, \"G1\": {14:0.000}, \"G2\": {15:0.000}, \"G3\": {16:0.000}, \"G4\": {17:0.000}, \"G5\": {18:0.000}, \"G6\": {19:0.000} }}{20}\r\n",
                     Agents[i].Name, b.Level, b.XP, b.PacketsCollected, b.AnomaliesCleared, b.NeuralSyncs, b.SynapticGain,
-                    b.Generation, b.LifeAge, b.FitnessScore, b.DetectionAccuracy, b.PrunedTraitsCount,
+                    b.Generation, b.LifeAge, b.FitnessScore, b.DetectionAccuracy, b.PrunedTraitsCount, safeTrait,
+                    b.AnomalyGenome[0], b.AnomalyGenome[1], b.AnomalyGenome[2], b.AnomalyGenome[3], b.AnomalyGenome[4], b.AnomalyGenome[5], b.AnomalyGenome[6],
                     (i < Agents.Count - 1) ? "," : "");
             }
             sb.Append("]");
@@ -1952,6 +1959,14 @@ public class Porygon3DAvatar {
                 if (dict.ContainsKey("Fit"))       b.FitnessScore = Math.Max(50f, Math.Min(99.9f, Convert.ToSingle(dict["Fit"])));
                 if (dict.ContainsKey("Acc"))       b.DetectionAccuracy = Math.Max(60f, Math.Min(99.9f, Convert.ToSingle(dict["Acc"])));
                 if (dict.ContainsKey("Pruned"))    b.PrunedTraitsCount = Math.Max(0, Convert.ToInt32(dict["Pruned"]));
+                if (dict.ContainsKey("Trait") && dict["Trait"] != null) b.LastPrunedTrait = dict["Trait"].ToString();
+                for (int g = 0; g < 7; g++) {
+                    string gk = "G" + g;
+                    if (dict.ContainsKey(gk)) {
+                        b.AnomalyGenome[g] = Math.Max(0.05f, Math.Min(3.50f, Convert.ToSingle(dict[gk])));
+                        b.EliteGenome[g] = b.AnomalyGenome[g];
+                    }
+                }
                 b.EliteFitness = b.FitnessScore;
             }
         } catch { }
@@ -4782,6 +4797,12 @@ public class HackerWallpaperForm : Form {
     public static extern IntPtr SetParent(IntPtr hWndChild, IntPtr hWndNewParent);
 
     [DllImport("user32.dll")]
+    public static extern IntPtr GetParent(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    public static extern bool IsWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
     public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
 
     [DllImport("user32.dll")]
@@ -6489,6 +6510,16 @@ public class HackerWallpaperForm : Form {
                 return;
             }
         }
+        const int WM_QUERYENDSESSION = 0x0011;
+        const int WM_ENDSESSION = 0x0016;
+        if (m.Msg == WM_QUERYENDSESSION || m.Msg == WM_ENDSESSION) {
+            try {
+                if (Config != null) Config.Save();
+                if (porygon != null) porygon.SaveBrainStates();
+            } catch { }
+            m.Result = new IntPtr(1);
+            return;
+        }
         if (m.Msg == WM_NCHITTEST) {
             m.Result = new IntPtr(-1); // HTTRANSPARENT so all clicks go straight to desktop folders
             return;
@@ -6580,11 +6611,12 @@ public class HackerWallpaperForm : Form {
 
     private void AttachToDesktopWorkerW() {
         cachedProgman = FindWindow("Progman", null);
-        IntPtr res;
-        SendMessageTimeout(cachedProgman, 0x052C, new IntPtr(0xD), new IntPtr(0x1), 0, 1000, out res);
-        SendMessageTimeout(cachedProgman, 0x052C, IntPtr.Zero, IntPtr.Zero, 0, 1000, out res);
-
-        cachedDefView = FindWindowEx(cachedProgman, IntPtr.Zero, "SHELLDLL_DefView", null);
+        if (cachedProgman != IntPtr.Zero) {
+            IntPtr res;
+            SendMessageTimeout(cachedProgman, 0x052C, new IntPtr(0xD), new IntPtr(0x1), 0, 1000, out res);
+            SendMessageTimeout(cachedProgman, 0x052C, IntPtr.Zero, IntPtr.Zero, 0, 1000, out res);
+            cachedDefView = FindWindowEx(cachedProgman, IntPtr.Zero, "SHELLDLL_DefView", null);
+        }
 
         const int WS_POPUP = unchecked((int)0x80000000);
         const int WS_CAPTION = 0x00C00000;
@@ -6594,11 +6626,12 @@ public class HackerWallpaperForm : Form {
         const int WS_CLIPSIBLINGS = 0x04000000;
         const uint SWP_FRAMECHANGED = 0x0020;
 
-        int style = GetWindowLong(this.Handle, GWL_STYLE);
-        style = (style & ~WS_POPUP & ~WS_CAPTION & ~WS_THICKFRAME) | WS_CHILD | WS_VISIBLE | WS_DISABLED | WS_CLIPCHILDREN | WS_CLIPSIBLINGS;
-        SetWindowLong(this.Handle, GWL_STYLE, style);
-
-        SetParent(this.Handle, cachedProgman);
+        if (cachedProgman != IntPtr.Zero) {
+            int style = GetWindowLong(this.Handle, GWL_STYLE);
+            style = (style & ~WS_POPUP & ~WS_CAPTION & ~WS_THICKFRAME) | WS_CHILD | WS_VISIBLE | WS_DISABLED | WS_CLIPCHILDREN | WS_CLIPSIBLINGS;
+            SetWindowLong(this.Handle, GWL_STYLE, style);
+            SetParent(this.Handle, cachedProgman);
+        }
 
         int exStyle = GetWindowLong(this.Handle, GWL_EXSTYLE);
         exStyle = (exStyle & ~WS_EX_LAYERED) | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
@@ -6620,8 +6653,42 @@ public class HackerWallpaperForm : Form {
     }
 
     private void EnsureBehindDesktopIcons() {
-        if (cachedProgman == IntPtr.Zero) cachedProgman = FindWindow("Progman", null);
-        if (cachedDefView == IntPtr.Zero) cachedDefView = FindWindowEx(cachedProgman, IntPtr.Zero, "SHELLDLL_DefView", null);
+        if (cachedProgman == IntPtr.Zero || !IsWindow(cachedProgman)) {
+            cachedProgman = FindWindow("Progman", null);
+            cachedDefView = IntPtr.Zero;
+        }
+        if (cachedProgman == IntPtr.Zero) return;
+
+        IntPtr prevDefView = cachedDefView;
+        if (cachedDefView == IntPtr.Zero || !IsWindow(cachedDefView)) {
+            cachedDefView = FindWindowEx(cachedProgman, IntPtr.Zero, "SHELLDLL_DefView", null);
+        }
+        bool defViewJustAppeared = (prevDefView == IntPtr.Zero && cachedDefView != IntPtr.Zero);
+
+        // If started at Windows logon before Progman was ready (or if Explorer.exe restarted), re-parent to Progman!
+        if (GetParent(this.Handle) != cachedProgman) {
+            AttachToDesktopWorkerW();
+            return;
+        }
+
+        // Detect if multi-monitor topology expanded after Windows login (e.g. 1 monitor -> 5 monitors)
+        if (frameCount >= 20) {
+            List<Rectangle> newRects; List<string> newNames; Rectangle newPrim; int newW, newH;
+            QueryPhysicalMonitors(out newRects, out newNames, out newPrim, out newW, out newH);
+            if (newW != screenW || newH != screenH || newRects.Count != monitorRects.Count) {
+                RebuildBackground();
+                RebuildRainColumns();
+                GpuGl.CanvasW = screenW;
+                GpuGl.CanvasH = screenH;
+                bgTexDirty = true;
+                hudTelemetryDirty = true;
+                hudRadarDirty = true;
+                hudConnectomeDirty = true;
+                hudBrain3DDirty = true;
+                defViewJustAppeared = true;
+            }
+        }
+
         int exStyle = GetWindowLong(this.Handle, GWL_EXSTYLE);
         if ((exStyle & WS_EX_LAYERED) == 0) {
             SetWindowLong(this.Handle, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
@@ -6629,7 +6696,8 @@ public class HackerWallpaperForm : Form {
             if (cachedDefView != IntPtr.Zero) {
                 SetWindowPos(this.Handle, cachedDefView, 0, 0, screenW, screenH, SWP_NOACTIVATE | SWP_SHOWWINDOW);
             }
-        } else if (frameCount <= 5 && cachedDefView != IntPtr.Zero) {
+        } else if ((frameCount <= 5 || frameCount == 25 || frameCount == 60 || defViewJustAppeared) && cachedDefView != IntPtr.Zero) {
+            SetLayeredWindowAttributes(this.Handle, 0, 255, LWA_ALPHA);
             SetWindowPos(this.Handle, cachedDefView, 0, 0, screenW, screenH, SWP_NOACTIVATE | SWP_SHOWWINDOW);
         }
     }
@@ -6981,7 +7049,7 @@ public class HackerWallpaperForm : Form {
             currentFps = deskActive ? 20 : 10;
         }
 
-        if (frameCount <= 5 || frameCount % 120 == 0) {
+        if (frameCount <= 5 || frameCount == 25 || frameCount == 60 || frameCount % 120 == 0) {
             EnsureBehindDesktopIcons();
         }
         if (Config.AutoPauseMaximized && frameCount % 8 == 0 && IsAnotherWindowMaximized()) {
@@ -9302,7 +9370,7 @@ public class HackerWallpaperForm : Form {
             if (!mutexNew) {
                 if (wantGamer) {
                     gamerEvt.Set();
-                } else {
+                } else if (wantConfig) {
                     evt.Set();
                 }
                 return;

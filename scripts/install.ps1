@@ -29,6 +29,7 @@ Set-ItemProperty -Path $runKey -Name "TrayAutoHide" -Value "`"$installDir\TrayAu
 Remove-ItemProperty -Path $runKey -Name "TranslucentTB" -ErrorAction SilentlyContinue
 
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+$trigger.Delay = "PT4S"
 $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Limited
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)
 
