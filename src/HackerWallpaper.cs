@@ -4351,7 +4351,6 @@ public class Porygon3DAvatar {
                 }
             }
             GpuGl.glEnd();
-            GpuGl.glEnable(GpuGl.GL_LINE_SMOOTH);
         }
 
         GpuGl.glDisable(GpuGl.GL_DEPTH_TEST);
@@ -4996,10 +4995,14 @@ public class HackerWallpaperForm : Form {
 
     private float cpuUsage = 0f;
     private ulong prevIdle = 0, prevKernel = 0, prevUser = 0;
-    private float gpuUsagePct = 11.2f;
-    private float gpuFrameMs = 3.8f;
-    private int currentFps = 24;
+    private float gpuUsagePct = 6.2f;
+    private float gpuFrameMs = 2.4f;
+    private int currentFps = 40;
     private bool gpuEcoMode = false;
+    private bool cachedWindowMaximized = false;
+    private float sceneTimePhase = 0f;
+    private int fpsFrameAccum = 0;
+    private Stopwatch fpsMeasureSw = Stopwatch.StartNew();
     private Stopwatch frameSw = new Stopwatch();
     private float ramUsedGB = 0f, ramTotalGB = 32f;
     private int ramPercent = 0;
@@ -5298,7 +5301,7 @@ public class HackerWallpaperForm : Form {
         UpdateRealTelemetry(null);
 
         renderTimer = new System.Windows.Forms.Timer();
-        renderTimer.Interval = 42; // Hardware GPU Eco-Balanced target (~24 FPS active desktop / 15 FPS when app focused)
+        renderTimer.Interval = 22; // Hardware GPU Batched target (~42 FPS active desktop / 25 FPS eco mode)
         renderTimer.Tick += OnRenderTick;
 
         telemetryTimer = new System.Threading.Timer(UpdateRealTelemetry, null, 1200, 2200);
@@ -6963,27 +6966,43 @@ public class HackerWallpaperForm : Form {
             return;
         }
 
-        // Adaptive GPU Eco-Governor: 20 FPS (50ms) when Desktop is focused or dragging 3D Brain; 10 FPS (95ms) when another app is focused!
-        if (frameCount % 12 == 0) {
+        // Smart Adaptive GPU Governor:
+        // - 42 FPS (22ms) when Desktop is focused or visible (no maximized window)
+        // - 25 FPS (38ms) Eco Mode when another application is focused/maximized
+        if (frameCount % 16 == 0) {
+            cachedWindowMaximized = IsAnotherWindowMaximized();
             IntPtr fgWnd = GetForegroundWindow();
-            bool deskActive = IsDesktopWindowHandle(fgWnd) || brain3DDragging || hudBrain3DDirty;
-            gpuEcoMode = !deskActive;
-            int targetInterval = deskActive ? 50 : 95;
+            bool deskFocused = IsDesktopWindowHandle(fgWnd) || brain3DDragging || hudBrain3DDirty;
+            bool highFpsMode = deskFocused || !cachedWindowMaximized;
+            gpuEcoMode = !deskFocused && cachedWindowMaximized;
+            int targetInterval = deskFocused ? 22 : (highFpsMode ? 26 : 38);
             if (renderTimer.Interval != targetInterval) {
                 renderTimer.Interval = targetInterval;
             }
-            currentFps = deskActive ? 20 : 10;
         }
 
-        if (frameCount <= 5 || frameCount == 25 || frameCount == 60 || frameCount % 120 == 0) {
+        if (frameCount <= 5 || frameCount == 25 || frameCount == 60 || frameCount % 160 == 0) {
             EnsureBehindDesktopIcons();
         }
-        if (Config.AutoPauseMaximized && frameCount % 8 == 0 && IsAnotherWindowMaximized()) {
+        if (Config.AutoPauseMaximized && cachedWindowMaximized) {
             return;
         }
 
+        // Real-time measured FPS counter (updates once per second)
+        fpsFrameAccum++;
+        long fpsElapsedMs = fpsMeasureSw.ElapsedMilliseconds;
+        if (fpsElapsedMs >= 1000) {
+            currentFps = Math.Max(12, Math.Min(60, (int)Math.Round(fpsFrameAccum * 1000.0 / fpsElapsedMs)));
+            fpsFrameAccum = 0;
+            fpsMeasureSw.Restart();
+        }
+
+        // Frame-rate independent animation step (calibrated so 40 FPS feels twice as fluid without moving 2x too fast)
+        float dtScale = gpuEcoMode ? 0.88f : 0.62f;
+        sceneTimePhase += 0.032f * dtScale;
+
         if (Config.RainSpeed > 0) {
-            float speedMult = Config.RainSpeed / 100.0f;
+            float speedMult = (Config.RainSpeed / 100.0f) * dtScale;
             for (int i = 0; i < columns.Count; i++) {
                 RainColumn col = columns[i];
                 int cStep = col.CharStep > 0 ? col.CharStep : 16;
@@ -7002,10 +7021,10 @@ public class HackerWallpaperForm : Form {
             porygon.Update(screenW, screenH, clientMouse, feedSnap, Config.FollowMouse, Config.TrainingMode);
         }
 
-        radarAngle = (radarAngle + 3.0f) % 360f;
-        brain3DYaw = (brain3DYaw + 0.042f) % (float)(Math.PI * 2.0);
+        radarAngle = (radarAngle + 3.0f * dtScale) % 360f;
+        brain3DYaw = (brain3DYaw + 0.042f * dtScale) % (float)(Math.PI * 2.0);
 
-        if (frameCount % 600 == 0) {
+        if (frameCount % 900 == 0) {
             try { EmptyWorkingSet(Process.GetCurrentProcess().Handle); } catch { }
         }
 
@@ -7019,6 +7038,49 @@ public class HackerWallpaperForm : Form {
     private static readonly string[] RIVER_DATA_TOKENS = new string[] {
         "01", "FF", "A7", "10", "7E", "C4", "00", "9B", "3F", "E2", "11", "8A", "5D", "F0", "0A", "6C"
     };
+    private static readonly float[] RIVER_LANE_OFFSETS = new float[] { -0.72f, -0.36f, 0.0f, 0.36f, 0.72f };
+    private static readonly float[] SUB_ROCK_T = new float[] { 0.30f, 0.45f, 0.60f, 0.75f, 0.89f };
+    private static readonly float[] SUB_ROCK_U = new float[] { -0.36f, 0.34f, -0.28f, 0.38f, -0.32f };
+    private static readonly float[] PK_NORM_X = new float[] {
+        0.04f, 0.11f, 0.19f, 0.27f, 0.34f, 0.40f, 0.45f,
+        0.55f, 0.60f, 0.66f, 0.73f, 0.81f, 0.89f, 0.96f
+    };
+    private static readonly float[] PK_SPAN_W = new float[] {
+        0.065f, 0.075f, 0.085f, 0.080f, 0.070f, 0.058f, 0.045f,
+        0.045f, 0.058f, 0.070f, 0.080f, 0.085f, 0.075f, 0.065f
+    };
+    private static readonly float[] PK_HEIGHT_FRAC = new float[] {
+        0.052f, 0.082f, 0.108f, 0.092f, 0.068f, 0.046f, 0.025f,
+        0.025f, 0.048f, 0.070f, 0.094f, 0.106f, 0.080f, 0.050f
+    };
+    private static readonly float[] ROCK_DEPTHS = new float[] { 0.22f, 0.30f, 0.38f, 0.46f, 0.54f, 0.62f, 0.70f, 0.76f, 0.82f, 0.88f, 0.92f, 0.96f };
+    private static readonly float[] ROCK_SIDES  = new float[] { -1.0f,  1.0f, -1.0f,  1.0f, -1.0f,  1.0f, -1.0f,  1.0f, -1.0f,  1.0f, -1.0f,  1.0f };
+    private static readonly float[] ROCK_BANK_M = new float[] { 1.12f, 1.18f, 1.95f, 1.14f, 1.20f, 2.15f, 1.12f, 1.16f, 2.35f, 1.12f, 1.18f, 1.85f };
+    private static readonly float[] TREE_POS_NORM = new float[] {
+        0.34f, 0.66f, 0.24f, 0.76f, 0.13f, 0.87f, 0.30f, 0.70f, 0.19f, 0.81f, 0.07f, 0.93f, 0.25f, 0.75f
+    };
+    private static readonly float[] TREE_DEPTH = new float[] {
+        0.22f, 0.24f, 0.34f, 0.36f, 0.46f, 0.48f, 0.58f, 0.60f, 0.70f, 0.72f, 0.82f, 0.84f, 0.91f, 0.93f
+    };
+    private static readonly int[] TREE_SPECIES = new int[] {
+        0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 0, 2, 1, 0
+    };
+
+    // Pre-allocated zero-GC scratch arrays for 3D river, terrain, rocks, and ferns
+    private readonly float[] bufRCx = new float[25];
+    private readonly float[] bufRCy = new float[25];
+    private readonly float[] bufRHw = new float[25];
+    private readonly float[] bufRPr = new float[25];
+    private readonly float[] bufRkX = new float[12];
+    private readonly float[] bufRkY = new float[12];
+    private readonly float[] bufRkW = new float[12];
+    private readonly float[] bufRkH = new float[12];
+    private readonly float[] bufRkPersp = new float[12];
+    private readonly float[] bufFnX = new float[14];
+    private readonly float[] bufFnY = new float[14];
+    private readonly float[] bufFnScale = new float[14];
+    private readonly float[,] bufTerVX = new float[7, 19];
+    private readonly float[,] bufTerVY = new float[7, 19];
 
     private void GetRiverGeometryAt(float t, Rectangle m, float horizonY, float vanishX, float floorSpan, float phase, int mIdx,
         out float cx, out float cy, out float halfW, out float persp) {
@@ -7039,10 +7101,10 @@ public class HackerWallpaperForm : Form {
 
     private void RenderCyberDataRiverOpenGL(int mIdx, Rectangle m, float horizonY, float vanishX, float floorSpan, float phase, float netMod, Color c1, Color c2, Color c3) {
         int rSteps = 24;
-        float[] rCx = new float[rSteps + 1];
-        float[] rCy = new float[rSteps + 1];
-        float[] rHw = new float[rSteps + 1];
-        float[] rPr = new float[rSteps + 1];
+        float[] rCx = bufRCx;
+        float[] rCy = bufRCy;
+        float[] rHw = bufRHw;
+        float[] rPr = bufRPr;
 
         for (int i = 0; i <= rSteps; i++) {
             float t = i / (float)rSteps;
@@ -7441,18 +7503,9 @@ public class HackerWallpaperForm : Form {
         // =========================================================================
         // 2. LOW-POLY FACETED HORIZON MOUNTAIN RANGE (14 PEAKS FRAMING THE CANYON PASS)
         // =========================================================================
-        float[] pkNormX = new float[] {
-            0.04f, 0.11f, 0.19f, 0.27f, 0.34f, 0.40f, 0.45f, // Left mountain wing sloping into canyon pass
-            0.55f, 0.60f, 0.66f, 0.73f, 0.81f, 0.89f, 0.96f  // Right mountain wing rising from canyon pass
-        };
-        float[] pkSpanW = new float[] {
-            0.065f, 0.075f, 0.085f, 0.080f, 0.070f, 0.058f, 0.045f,
-            0.045f, 0.058f, 0.070f, 0.080f, 0.085f, 0.075f, 0.065f
-        };
-        float[] pkHeightFrac = new float[] {
-            0.052f, 0.082f, 0.108f, 0.092f, 0.068f, 0.046f, 0.025f,
-            0.025f, 0.048f, 0.070f, 0.094f, 0.106f, 0.080f, 0.050f
-        };
+        float[] pkNormX = PK_NORM_X;
+        float[] pkSpanW = PK_SPAN_W;
+        float[] pkHeightFrac = PK_HEIGHT_FRAC;
 
         int peakCount = pkNormX.Length;
         GpuGl.glBegin(GpuGl.GL_TRIANGLES);
@@ -7523,16 +7576,16 @@ public class HackerWallpaperForm : Form {
         // A. BALANCED LOW-POLY ROCKS & BIOLUMINESCENT CRYSTALS (12 CLUSTERS)
         //    Nestled along the curved riverbanks and near tree bases without clutter
         // =========================================================================
-        float[] rockDepths = new float[] { 0.22f, 0.30f, 0.38f, 0.46f, 0.54f, 0.62f, 0.70f, 0.76f, 0.82f, 0.88f, 0.92f, 0.96f };
-        float[] rockSides  = new float[] { -1.0f,  1.0f, -1.0f,  1.0f, -1.0f,  1.0f, -1.0f,  1.0f, -1.0f,  1.0f, -1.0f,  1.0f };
-        float[] rockBankM  = new float[] { 1.12f, 1.18f, 1.95f, 1.14f, 1.20f, 2.15f, 1.12f, 1.16f, 2.35f, 1.12f, 1.18f, 1.85f };
+        float[] rockDepths = ROCK_DEPTHS;
+        float[] rockSides  = ROCK_SIDES;
+        float[] rockBankM  = ROCK_BANK_M;
         int rockCount = rockDepths.Length;
 
-        float[] rkX = new float[rockCount];
-        float[] rkY = new float[rockCount];
-        float[] rkW = new float[rockCount];
-        float[] rkH = new float[rockCount];
-        float[] rkPersp = new float[rockCount];
+        float[] rkX = bufRkX;
+        float[] rkY = bufRkY;
+        float[] rkW = bufRkW;
+        float[] rkH = bufRkH;
+        float[] rkPersp = bufRkPersp;
 
         for (int rIdx = 0; rIdx < rockCount; rIdx++) {
             float t = rockDepths[rIdx];
@@ -7636,39 +7689,14 @@ public class HackerWallpaperForm : Form {
 
         // =========================================================================
         // B. BALANCED MULTI-SPECIES 3D FOREST (14 TREES: 7 LEFT, 7 RIGHT)
-        //    Curated non-overlapping positions with 3 cohesive low-poly species:
-        //      Species 0: Classic Low-Poly Pine (3-4 tiers)
-        //      Species 1: Slender Crystal Cypress Spire (Narrow 4-segment obelisk)
-        //      Species 2: Unified Geodesic Canopy Tree (Faceted hexagonal crown)
+        //    100% Batched into 1 GL_TRIANGLES pass + 1 GL_LINES pass (eliminates ~200 glBegin/glEnd calls)
         // =========================================================================
-        float[] treePosNorm = new float[] {
-            0.34f, 0.66f, // Horizon pair flanking the vanishing river
-            0.24f, 0.76f, // Upper-mid pair
-            0.13f, 0.87f, // Outer mid-ground pair (leaves wide clearing for Porygon!)
-            0.30f, 0.70f, // Riverbend mid pair
-            0.19f, 0.81f, // Lower-mid pair
-            0.07f, 0.93f, // Foreground outer pair
-            0.25f, 0.75f  // Foreground riverbank pair
-        };
-        float[] treeDepth = new float[] {
-            0.22f, 0.24f,
-            0.34f, 0.36f,
-            0.46f, 0.48f,
-            0.58f, 0.60f,
-            0.70f, 0.72f,
-            0.82f, 0.84f,
-            0.91f, 0.93f
-        };
-        int[] treeSpecies = new int[] {
-            0, 1,
-            2, 0,
-            1, 2,
-            0, 1,
-            2, 0,
-            0, 2,
-            1, 0
-        };
+        float[] treePosNorm = TREE_POS_NORM;
+        float[] treeDepth = TREE_DEPTH;
+        int[] treeSpecies = TREE_SPECIES;
 
+        // Pass B1: Unified GL_TRIANGLES pass for all 14 tree trunks & faceted low-poly crowns
+        GpuGl.glBegin(GpuGl.GL_TRIANGLES);
         for (int tIdx = 0; tIdx < treePosNorm.Length; tIdx++) {
             float dScale = treeDepth[tIdx];
             float rCx, rCy, rHw, rPersp;
@@ -7678,7 +7706,6 @@ public class HackerWallpaperForm : Form {
             float treeH = m.Height * (0.12f + dScale * 0.16f);
             float treeW = m.Width * (0.017f + dScale * 0.020f);
 
-            // Keep trees outside the meandering river channel
             float minRiverDist = rHw * 1.38f + treeW * 0.65f;
             if (Math.Abs(baseX - rCx) < minRiverDist) {
                 baseX = (baseX < rCx) ? (rCx - minRiverDist) : (rCx + minRiverDist);
@@ -7689,16 +7716,15 @@ public class HackerWallpaperForm : Form {
             int species = treeSpecies[tIdx];
 
             if (species == 0) {
-                // -----------------------------------------------------------------
-                // SPECIES 0: CLASSIC LOW-POLY CONIFER PINE (3-4 Tiers)
-                // -----------------------------------------------------------------
                 float trkW = treeW * 0.16f;
                 float topTrkX = baseX + sway * 0.4f;
                 float topTrkY = baseY - treeH * 0.42f;
-                GpuGl.FillTriangle(baseX - trkW, baseY, baseX + trkW, baseY, topTrkX, topTrkY, Color.FromArgb(74, 22, 36, 28));
-                GpuGl.DrawTriangle(baseX - trkW, baseY, baseX + trkW, baseY, topTrkX, topTrkY, Color.FromArgb(65, c2.R, c2.G, c2.B), 0.85f);
+                GpuGl.glColor4ub(22, 36, 28, 74);
+                GpuGl.glVertex2f(baseX - trkW, baseY); GpuGl.glVertex2f(baseX + trkW, baseY); GpuGl.glVertex2f(topTrkX, topTrkY);
 
                 int tiers = (dScale > 0.65f) ? 4 : 3;
+                byte aL = (byte)(42 + (int)(dScale * 32f));
+                byte aR = (byte)(38 + (int)(dScale * 26f));
                 for (int tier = 0; tier < tiers; tier++) {
                     float tierFrac = tier / (float)tiers;
                     float tyBot = baseY - treeH * (0.24f + tierFrac * 0.54f);
@@ -7706,30 +7732,26 @@ public class HackerWallpaperForm : Form {
                     float tw = treeW * (1.0f - tierFrac * 0.58f);
                     float txCenter = baseX + sway * (0.45f + tierFrac * 0.45f);
                     float txApex = baseX + sway * (0.65f + tierFrac * 0.55f);
+                    float yMid = tyBot + 5f * dScale;
 
-                    Color leftFacet  = Color.FromArgb((int)(42 + dScale * 32f), c1.R / 2, (c1.G * 2) / 3, c1.B / 2);
-                    Color rightFacet = Color.FromArgb((int)(38 + dScale * 26f), c3.R / 3, c3.G / 2, c3.B / 2);
-                    Color edgeCol    = Color.FromArgb((int)(58 + dScale * 46f), c1.R, c1.G, c1.B);
+                    GpuGl.glColor4ub((byte)(c1.R / 2), (byte)((c1.G * 2) / 3), (byte)(c1.B / 2), aL);
+                    GpuGl.glVertex2f(txCenter - tw, tyBot); GpuGl.glVertex2f(txCenter, yMid); GpuGl.glVertex2f(txApex, tyTop);
 
-                    GpuGl.FillTriangle(txCenter - tw, tyBot, txCenter, tyBot + 5f * dScale, txApex, tyTop, leftFacet);
-                    GpuGl.DrawTriangle(txCenter - tw, tyBot, txCenter, tyBot + 5f * dScale, txApex, tyTop, edgeCol, 0.9f);
-                    GpuGl.FillTriangle(txCenter, tyBot + 5f * dScale, txCenter + tw, tyBot, txApex, tyTop, rightFacet);
-                    GpuGl.DrawTriangle(txCenter, tyBot + 5f * dScale, txCenter + tw, tyBot, txApex, tyTop, edgeCol, 0.9f);
+                    GpuGl.glColor4ub((byte)(c3.R / 3), (byte)(c3.G / 2), (byte)(c3.B / 2), aR);
+                    GpuGl.glVertex2f(txCenter, yMid); GpuGl.glVertex2f(txCenter + tw, tyBot); GpuGl.glVertex2f(txApex, tyTop);
                 }
             } else if (species == 1) {
-                // -----------------------------------------------------------------
-                // SPECIES 1: SLENDER 4-TIER LOW-POLY SPRUCE / FIR CONIFER
-                //            (Same cohesive low-poly language, taller & slimmer)
-                // -----------------------------------------------------------------
                 float sprH = treeH * 1.15f;
                 float sprW = treeW * 0.84f;
                 float trkW = sprW * 0.16f;
                 float topTrkX = baseX + sway * 0.42f;
                 float topTrkY = baseY - sprH * 0.40f;
-                GpuGl.FillTriangle(baseX - trkW, baseY, baseX + trkW, baseY, topTrkX, topTrkY, Color.FromArgb(74, 20, 34, 30));
-                GpuGl.DrawTriangle(baseX - trkW, baseY, baseX + trkW, baseY, topTrkX, topTrkY, Color.FromArgb(65, c2.R, c2.G, c2.B), 0.85f);
+                GpuGl.glColor4ub(20, 34, 30, 74);
+                GpuGl.glVertex2f(baseX - trkW, baseY); GpuGl.glVertex2f(baseX + trkW, baseY); GpuGl.glVertex2f(topTrkX, topTrkY);
 
                 int tiers = 4;
+                byte aL = (byte)(44 + (int)(dScale * 34f));
+                byte aR = (byte)(38 + (int)(dScale * 28f));
                 for (int tier = 0; tier < tiers; tier++) {
                     float tierFrac = tier / (float)tiers;
                     float tyBot = baseY - sprH * (0.22f + tierFrac * 0.56f);
@@ -7737,34 +7759,24 @@ public class HackerWallpaperForm : Form {
                     float tw = sprW * (1.0f - tierFrac * 0.60f);
                     float txCenter = baseX + sway * (0.42f + tierFrac * 0.48f);
                     float txApex = baseX + sway * (0.60f + tierFrac * 0.58f);
+                    float yMid = tyBot + 4.5f * dScale;
 
-                    Color leftFacet  = Color.FromArgb((int)(44 + dScale * 34f), (c1.R + c2.R) / 4, (c1.G + c2.G) / 3, (c1.B + c2.B) / 3);
-                    Color rightFacet = Color.FromArgb((int)(38 + dScale * 28f), c3.R / 3, c3.G / 2, (c1.B + c3.B) / 4);
-                    Color edgeCol    = Color.FromArgb((int)(60 + dScale * 48f), (c1.R + c2.R) / 2, (c1.G + c2.G) / 2, (c1.B + c2.B) / 2);
+                    GpuGl.glColor4ub((byte)((c1.R + c2.R) / 4), (byte)((c1.G + c2.G) / 3), (byte)((c1.B + c2.B) / 3), aL);
+                    GpuGl.glVertex2f(txCenter - tw, tyBot); GpuGl.glVertex2f(txCenter, yMid); GpuGl.glVertex2f(txApex, tyTop);
 
-                    GpuGl.FillTriangle(txCenter - tw, tyBot, txCenter, tyBot + 4.5f * dScale, txApex, tyTop, leftFacet);
-                    GpuGl.DrawTriangle(txCenter - tw, tyBot, txCenter, tyBot + 4.5f * dScale, txApex, tyTop, edgeCol, 0.9f);
-                    GpuGl.FillTriangle(txCenter, tyBot + 4.5f * dScale, txCenter + tw, tyBot, txApex, tyTop, rightFacet);
-                    GpuGl.DrawTriangle(txCenter, tyBot + 4.5f * dScale, txCenter + tw, tyBot, txApex, tyTop, edgeCol, 0.9f);
+                    GpuGl.glColor4ub((byte)(c3.R / 3), (byte)(c3.G / 2), (byte)((c1.B + c3.B) / 4), aR);
+                    GpuGl.glVertex2f(txCenter, yMid); GpuGl.glVertex2f(txCenter + tw, tyBot); GpuGl.glVertex2f(txApex, tyTop);
                 }
             } else {
-                // -----------------------------------------------------------------
-                // SPECIES 2: UNIFIED GEODESIC CANOPY BIO-TREE (Cohesive 6-Facet Crown)
-                // -----------------------------------------------------------------
                 float geoH = treeH * 0.94f;
                 float geoW = treeW * 0.92f;
                 float trkW = geoW * 0.16f;
                 float crCenterX = baseX + sway * 0.55f;
                 float crCenterY = baseY - geoH * 0.62f;
 
-                // Trunk + internal Y-branch veins reaching into the geodesic crown
-                GpuGl.FillTriangle(baseX - trkW, baseY, baseX + trkW, baseY, crCenterX, crCenterY + geoH * 0.12f, Color.FromArgb(76, 24, 36, 28));
-                Color limbCol = Color.FromArgb((int)(72 + dScale * 50f), c2.R, c2.G, c2.B);
-                GpuGl.DrawLine(baseX, baseY, crCenterX, crCenterY, limbCol, 1.0f);
-                GpuGl.DrawLine(crCenterX, crCenterY + geoH * 0.16f, crCenterX - geoW * 0.45f, crCenterY - geoH * 0.04f, limbCol, 0.85f);
-                GpuGl.DrawLine(crCenterX, crCenterY + geoH * 0.16f, crCenterX + geoW * 0.45f, crCenterY - geoH * 0.04f, limbCol, 0.85f);
+                GpuGl.glColor4ub(24, 36, 28, 76);
+                GpuGl.glVertex2f(baseX - trkW, baseY); GpuGl.glVertex2f(baseX + trkW, baseY); GpuGl.glVertex2f(crCenterX, crCenterY + geoH * 0.12f);
 
-                // Cohesive 6-vertex hexagonal/octahedral gem crown centered at (crCenterX, crCenterY)
                 float topX = crCenterX + sway * 0.15f, topY = baseY - geoH;
                 float ulX  = crCenterX - geoW * 0.82f, ulY  = crCenterY - geoH * 0.14f;
                 float urX  = crCenterX + geoW * 0.82f, urY  = crCenterY - geoH * 0.14f;
@@ -7772,39 +7784,142 @@ public class HackerWallpaperForm : Form {
                 float brX  = crCenterX + geoW * 0.92f, brY  = crCenterY + geoH * 0.16f;
                 float botX = crCenterX,                botY = crCenterY + geoH * 0.30f;
 
-                Color fTopLt = Color.FromArgb((int)(46 + dScale * 36f), (c1.R + c2.R) / 3, (c1.G * 2) / 3, (c1.B + c2.B) / 3);
-                Color fTopRt = Color.FromArgb((int)(40 + dScale * 30f), c1.R / 3, c1.G / 2, (c1.B * 2) / 3);
-                Color fMidLt = Color.FromArgb((int)(42 + dScale * 32f), c1.R / 2, c1.G / 2, c1.B / 2);
-                Color fMidRt = Color.FromArgb((int)(36 + dScale * 26f), c3.R / 3, c3.G / 2, c3.B / 2);
-                Color edgeG  = Color.FromArgb((int)(62 + dScale * 48f), c1.R, c1.G, c1.B);
+                GpuGl.glColor4ub((byte)((c1.R + c2.R) / 3), (byte)((c1.G * 2) / 3), (byte)((c1.B + c2.B) / 3), (byte)(46 + (int)(dScale * 36f)));
+                GpuGl.glVertex2f(ulX, ulY); GpuGl.glVertex2f(topX, topY); GpuGl.glVertex2f(crCenterX, crCenterY);
 
-                GpuGl.FillTriangle(ulX, ulY, topX, topY, crCenterX, crCenterY, fTopLt);
-                GpuGl.DrawTriangle(ulX, ulY, topX, topY, crCenterX, crCenterY, edgeG, 0.85f);
+                GpuGl.glColor4ub((byte)(c1.R / 3), (byte)(c1.G / 2), (byte)((c1.B * 2) / 3), (byte)(40 + (int)(dScale * 30f)));
+                GpuGl.glVertex2f(topX, topY); GpuGl.glVertex2f(urX, urY); GpuGl.glVertex2f(crCenterX, crCenterY);
 
-                GpuGl.FillTriangle(topX, topY, urX, urY, crCenterX, crCenterY, fTopRt);
-                GpuGl.DrawTriangle(topX, topY, urX, urY, crCenterX, crCenterY, edgeG, 0.85f);
+                GpuGl.glColor4ub((byte)(c1.R / 2), (byte)(c1.G / 2), (byte)(c1.B / 2), (byte)(42 + (int)(dScale * 32f)));
+                GpuGl.glVertex2f(blX, blY); GpuGl.glVertex2f(ulX, ulY); GpuGl.glVertex2f(crCenterX, crCenterY);
+                GpuGl.glVertex2f(blX, blY); GpuGl.glVertex2f(crCenterX, crCenterY); GpuGl.glVertex2f(botX, botY);
 
-                GpuGl.FillTriangle(blX, blY, ulX, ulY, crCenterX, crCenterY, fMidLt);
-                GpuGl.DrawTriangle(blX, blY, ulX, ulY, crCenterX, crCenterY, edgeG, 0.85f);
-
-                GpuGl.FillTriangle(urX, urY, brX, brY, crCenterX, crCenterY, fMidRt);
-                GpuGl.DrawTriangle(urX, urY, brX, brY, crCenterX, crCenterY, edgeG, 0.85f);
-
-                GpuGl.FillTriangle(blX, blY, crCenterX, crCenterY, botX, botY, fMidLt);
-                GpuGl.DrawTriangle(blX, blY, crCenterX, crCenterY, botX, botY, edgeG, 0.85f);
-
-                GpuGl.FillTriangle(crCenterX, crCenterY, brX, brY, botX, botY, fMidRt);
-                GpuGl.DrawTriangle(crCenterX, crCenterY, brX, brY, botX, botY, edgeG, 0.85f);
+                GpuGl.glColor4ub((byte)(c3.R / 3), (byte)(c3.G / 2), (byte)(c3.B / 2), (byte)(36 + (int)(dScale * 26f)));
+                GpuGl.glVertex2f(urX, urY); GpuGl.glVertex2f(brX, brY); GpuGl.glVertex2f(crCenterX, crCenterY);
+                GpuGl.glVertex2f(crCenterX, crCenterY); GpuGl.glVertex2f(brX, brY); GpuGl.glVertex2f(botX, botY);
             }
         }
+        GpuGl.glEnd();
+
+        // Pass B2: Unified GL_LINES pass for all 14 tree wireframe edges & internal limbs
+        GpuGl.glLineWidth(0.9f);
+        GpuGl.glBegin(GpuGl.GL_LINES);
+        for (int tIdx = 0; tIdx < treePosNorm.Length; tIdx++) {
+            float dScale = treeDepth[tIdx];
+            float rCx, rCy, rHw, rPersp;
+            GetRiverGeometryAt(dScale, m, horizonY, vanishX, floorSpan, phase, mIdx, out rCx, out rCy, out rHw, out rPersp);
+
+            float baseX = m.Left + m.Width * treePosNorm[tIdx];
+            float treeH = m.Height * (0.12f + dScale * 0.16f);
+            float treeW = m.Width * (0.017f + dScale * 0.020f);
+
+            float minRiverDist = rHw * 1.38f + treeW * 0.65f;
+            if (Math.Abs(baseX - rCx) < minRiverDist) {
+                baseX = (baseX < rCx) ? (rCx - minRiverDist) : (rCx + minRiverDist);
+            }
+
+            float baseY = horizonY + (dScale - 0.18f) * floorSpan * 0.56f;
+            float sway = (float)Math.Sin(phase * 0.65f + tIdx * 1.4f) * (3.5f * dScale);
+            int species = treeSpecies[tIdx];
+
+            if (species == 0) {
+                float trkW = treeW * 0.16f;
+                float topTrkX = baseX + sway * 0.4f;
+                float topTrkY = baseY - treeH * 0.42f;
+                GpuGl.glColor4ub(c2.R, c2.G, c2.B, 65);
+                GpuGl.glVertex2f(baseX - trkW, baseY); GpuGl.glVertex2f(topTrkX, topTrkY);
+                GpuGl.glVertex2f(baseX + trkW, baseY); GpuGl.glVertex2f(topTrkX, topTrkY);
+
+                int tiers = (dScale > 0.65f) ? 4 : 3;
+                byte eA = (byte)(58 + (int)(dScale * 46f));
+                GpuGl.glColor4ub(c1.R, c1.G, c1.B, eA);
+                for (int tier = 0; tier < tiers; tier++) {
+                    float tierFrac = tier / (float)tiers;
+                    float tyBot = baseY - treeH * (0.24f + tierFrac * 0.54f);
+                    float tyTop = baseY - treeH * (0.54f + tierFrac * 0.48f);
+                    float tw = treeW * (1.0f - tierFrac * 0.58f);
+                    float txCenter = baseX + sway * (0.45f + tierFrac * 0.45f);
+                    float txApex = baseX + sway * (0.65f + tierFrac * 0.55f);
+                    float yMid = tyBot + 5f * dScale;
+
+                    GpuGl.glVertex2f(txCenter - tw, tyBot); GpuGl.glVertex2f(txCenter, yMid);
+                    GpuGl.glVertex2f(txCenter, yMid);       GpuGl.glVertex2f(txCenter + tw, tyBot);
+                    GpuGl.glVertex2f(txCenter - tw, tyBot); GpuGl.glVertex2f(txApex, tyTop);
+                    GpuGl.glVertex2f(txCenter, yMid);       GpuGl.glVertex2f(txApex, tyTop);
+                    GpuGl.glVertex2f(txCenter + tw, tyBot); GpuGl.glVertex2f(txApex, tyTop);
+                }
+            } else if (species == 1) {
+                float sprH = treeH * 1.15f;
+                float sprW = treeW * 0.84f;
+                float trkW = sprW * 0.16f;
+                float topTrkX = baseX + sway * 0.42f;
+                float topTrkY = baseY - sprH * 0.40f;
+                GpuGl.glColor4ub(c2.R, c2.G, c2.B, 65);
+                GpuGl.glVertex2f(baseX - trkW, baseY); GpuGl.glVertex2f(topTrkX, topTrkY);
+                GpuGl.glVertex2f(baseX + trkW, baseY); GpuGl.glVertex2f(topTrkX, topTrkY);
+
+                int tiers = 4;
+                byte eA = (byte)(60 + (int)(dScale * 48f));
+                GpuGl.glColor4ub((byte)((c1.R + c2.R) / 2), (byte)((c1.G + c2.G) / 2), (byte)((c1.B + c2.B) / 2), eA);
+                for (int tier = 0; tier < tiers; tier++) {
+                    float tierFrac = tier / (float)tiers;
+                    float tyBot = baseY - sprH * (0.22f + tierFrac * 0.56f);
+                    float tyTop = baseY - sprH * (0.48f + tierFrac * 0.52f);
+                    float tw = sprW * (1.0f - tierFrac * 0.60f);
+                    float txCenter = baseX + sway * (0.42f + tierFrac * 0.48f);
+                    float txApex = baseX + sway * (0.60f + tierFrac * 0.58f);
+                    float yMid = tyBot + 4.5f * dScale;
+
+                    GpuGl.glVertex2f(txCenter - tw, tyBot); GpuGl.glVertex2f(txCenter, yMid);
+                    GpuGl.glVertex2f(txCenter, yMid);       GpuGl.glVertex2f(txCenter + tw, tyBot);
+                    GpuGl.glVertex2f(txCenter - tw, tyBot); GpuGl.glVertex2f(txApex, tyTop);
+                    GpuGl.glVertex2f(txCenter, yMid);       GpuGl.glVertex2f(txApex, tyTop);
+                    GpuGl.glVertex2f(txCenter + tw, tyBot); GpuGl.glVertex2f(txApex, tyTop);
+                }
+            } else {
+                float geoH = treeH * 0.94f;
+                float geoW = treeW * 0.92f;
+                float crCenterX = baseX + sway * 0.55f;
+                float crCenterY = baseY - geoH * 0.62f;
+
+                GpuGl.glColor4ub(c2.R, c2.G, c2.B, (byte)(72 + (int)(dScale * 50f)));
+                GpuGl.glVertex2f(baseX, baseY); GpuGl.glVertex2f(crCenterX, crCenterY);
+                GpuGl.glVertex2f(crCenterX, crCenterY + geoH * 0.16f); GpuGl.glVertex2f(crCenterX - geoW * 0.45f, crCenterY - geoH * 0.04f);
+                GpuGl.glVertex2f(crCenterX, crCenterY + geoH * 0.16f); GpuGl.glVertex2f(crCenterX + geoW * 0.45f, crCenterY - geoH * 0.04f);
+
+                float topX = crCenterX + sway * 0.15f, topY = baseY - geoH;
+                float ulX  = crCenterX - geoW * 0.82f, ulY  = crCenterY - geoH * 0.14f;
+                float urX  = crCenterX + geoW * 0.82f, urY  = crCenterY - geoH * 0.14f;
+                float blX  = crCenterX - geoW * 0.92f, blY  = crCenterY + geoH * 0.16f;
+                float brX  = crCenterX + geoW * 0.92f, brY  = crCenterY + geoH * 0.16f;
+                float botX = crCenterX,                botY = crCenterY + geoH * 0.30f;
+
+                GpuGl.glColor4ub(c1.R, c1.G, c1.B, (byte)(62 + (int)(dScale * 48f)));
+                // Outer hexagon ring
+                GpuGl.glVertex2f(ulX, ulY); GpuGl.glVertex2f(topX, topY);
+                GpuGl.glVertex2f(topX, topY); GpuGl.glVertex2f(urX, urY);
+                GpuGl.glVertex2f(urX, urY); GpuGl.glVertex2f(brX, brY);
+                GpuGl.glVertex2f(brX, brY); GpuGl.glVertex2f(botX, botY);
+                GpuGl.glVertex2f(botX, botY); GpuGl.glVertex2f(blX, blY);
+                GpuGl.glVertex2f(blX, blY); GpuGl.glVertex2f(ulX, ulY);
+                // Inner radial facet spokes
+                GpuGl.glVertex2f(crCenterX, crCenterY); GpuGl.glVertex2f(topX, topY);
+                GpuGl.glVertex2f(crCenterX, crCenterY); GpuGl.glVertex2f(ulX, ulY);
+                GpuGl.glVertex2f(crCenterX, crCenterY); GpuGl.glVertex2f(urX, urY);
+                GpuGl.glVertex2f(crCenterX, crCenterY); GpuGl.glVertex2f(blX, blY);
+                GpuGl.glVertex2f(crCenterX, crCenterY); GpuGl.glVertex2f(brX, brY);
+                GpuGl.glVertex2f(crCenterX, crCenterY); GpuGl.glVertex2f(botX, botY);
+            }
+        }
+        GpuGl.glEnd();
 
         // =========================================================================
         // C. DELICATE ARCHED CYBER-FERNS (14 ROSETTES ALONG RIVERBANKS & ROCK BASES)
         // =========================================================================
         int fernCount = 14;
-        float[] fnX = new float[fernCount];
-        float[] fnY = new float[fernCount];
-        float[] fnScale = new float[fernCount];
+        float[] fnX = bufFnX;
+        float[] fnY = bufFnY;
+        float[] fnScale = bufFnScale;
 
         for (int fIdx = 0; fIdx < fernCount; fIdx++) {
             float t = 0.24f + (fIdx / (float)(fernCount - 1)) * 0.72f;
@@ -7920,7 +8035,6 @@ public class HackerWallpaperForm : Form {
             float seedY = ((ff * 7 + 3) % fireflyCount) / (float)fireflyCount;
             float depthT = 0.16f + seedY * 0.80f;
 
-            // Gentle organic drift and vertical rising float
             float driftX = (float)Math.Sin(phase * 0.58f + ff * 1.73f) * (14.0f + 18.0f * depthT);
             float floatY = (float)Math.Cos(phase * 0.74f + ff * 2.31f) * (8.0f + 12.0f * depthT);
 
@@ -7974,28 +8088,53 @@ public class HackerWallpaperForm : Form {
         GpuGl.glEnd();
 
         // =========================================================================
-        // E. SUBTLE HANGING CANOPY LIANA VINES FROM UPPER CEILING (8 VINES)
+        // E. SUBTLE HANGING CANOPY LIANA VINES FROM UPPER CEILING (8 VINES, BATCHED)
         // =========================================================================
         int vineCount = 8;
+        int segs = 5;
+        GpuGl.glLineWidth(1.1f);
+        GpuGl.glBegin(GpuGl.GL_LINES);
         for (int v = 0; v < vineCount; v++) {
             float vxBase = m.Left + m.Width * (0.05f + 0.90f * (v / (float)(vineCount - 1)));
             if (Math.Abs(vxBase - vanishX) < m.Width * 0.18f && (v == 3 || v == 4)) continue;
             float vineLen = ceilSpan * (0.30f + (v % 3) * 0.12f);
-            int segs = 5;
             float prevX = vxBase;
             float prevY = m.Top;
             for (int s = 1; s <= segs; s++) {
                 float st = s / (float)segs;
                 float curX = vxBase + (float)Math.Sin(phase * 0.8f + v * 1.1f + s * 0.7f) * (8.0f * st);
                 float curY = m.Top + st * vineLen;
-                int vAlpha = (int)(70 * (1.0f - st * 0.35f));
-                GpuGl.DrawLine(prevX, prevY, curX, curY, Color.FromArgb(vAlpha, c1.R, c1.G, c1.B), 1.1f);
-                Color spCol = (s == segs) ? Color.FromArgb(140, c2.R, c2.G, c2.B) : Color.FromArgb(90, c1.R, c1.G, c1.B);
-                GpuGl.FillRect(curX - 1.8f, curY - 1.8f, 3.6f, 3.6f, spCol);
+                byte vAlpha = (byte)(70 * (1.0f - st * 0.35f));
+                GpuGl.glColor4ub(c1.R, c1.G, c1.B, vAlpha);
+                GpuGl.glVertex2f(prevX, prevY);
+                GpuGl.glVertex2f(curX, curY);
                 prevX = curX;
                 prevY = curY;
             }
         }
+        GpuGl.glEnd();
+
+        GpuGl.glBegin(GpuGl.GL_QUADS);
+        for (int v = 0; v < vineCount; v++) {
+            float vxBase = m.Left + m.Width * (0.05f + 0.90f * (v / (float)(vineCount - 1)));
+            if (Math.Abs(vxBase - vanishX) < m.Width * 0.18f && (v == 3 || v == 4)) continue;
+            float vineLen = ceilSpan * (0.30f + (v % 3) * 0.12f);
+            for (int s = 1; s <= segs; s++) {
+                float st = s / (float)segs;
+                float curX = vxBase + (float)Math.Sin(phase * 0.8f + v * 1.1f + s * 0.7f) * (8.0f * st);
+                float curY = m.Top + st * vineLen;
+                if (s == segs) {
+                    GpuGl.glColor4ub(c2.R, c2.G, c2.B, 140);
+                } else {
+                    GpuGl.glColor4ub(c1.R, c1.G, c1.B, 90);
+                }
+                GpuGl.glVertex2f(curX - 1.8f, curY - 1.8f);
+                GpuGl.glVertex2f(curX + 1.8f, curY - 1.8f);
+                GpuGl.glVertex2f(curX + 1.8f, curY + 1.8f);
+                GpuGl.glVertex2f(curX - 1.8f, curY + 1.8f);
+            }
+        }
+        GpuGl.glEnd();
     }
 
     private void Render3DProceduralEnvironmentOpenGL(int mIdx, Rectangle m, Color c1, Color c2, Color c3) {
@@ -8004,7 +8143,7 @@ public class HackerWallpaperForm : Form {
         float vanishX = m.Left + m.Width * 0.50f;
         float floorSpan = m.Bottom - horizonY;
         float ceilSpan = (horizonY - 24f) - m.Top;
-        float phase = frameCount * 0.032f + mIdx * 0.85f;
+        float phase = sceneTimePhase + mIdx * 0.85f;
         float netMod = Math.Min(1.8f, 0.45f + (netDownKbps / 180.0f) + currentFeed.AnomalyIndex * 0.65f);
 
         if (mode == 0) {
@@ -8015,8 +8154,8 @@ public class HackerWallpaperForm : Form {
             RenderHorizonMountainRangeAndPortalOpenGL(mIdx, m, horizonY, vanishX, phase, netMod, c1, c2, c3);
             int rows = 7;
             int cols = 18;
-            float[,] vx = new float[rows, cols + 1];
-            float[,] vy = new float[rows, cols + 1];
+            float[,] vx = bufTerVX;
+            float[,] vy = bufTerVY;
 
             for (int r = 0; r < rows; r++) {
                 float t = (r + 0.35f) / (float)rows;
@@ -8078,7 +8217,7 @@ public class HackerWallpaperForm : Form {
                     GpuGl.glEnd();
                 }
 
-                // 1C. Oscilloscope 3D Ridge Line + Crest Vertices
+                // 1C. Oscilloscope 3D Ridge Line + Batched Crest Vertices
                 int lineAlpha = (int)(38 + persp * 82f);
                 Color waveCol = (r % 2 == 0)
                     ? Color.FromArgb(lineAlpha, c1.R, c1.G, c1.B)
@@ -8091,10 +8230,20 @@ public class HackerWallpaperForm : Form {
                 }
                 GpuGl.glEnd();
 
+                GpuGl.glBegin(GpuGl.GL_QUADS);
                 for (int j = 1; j < cols; j += 2) {
-                    Color nodeCol = (j % 4 == 1) ? Color.FromArgb(lineAlpha + 25, c2.R, c2.G, c2.B) : Color.FromArgb(lineAlpha + 15, c1.R, c1.G, c1.B);
-                    GpuGl.FillRect(vx[r, j] - 1.6f, vy[r, j] - 1.6f, 3.2f, 3.2f, nodeCol);
+                    if (j % 4 == 1) {
+                        GpuGl.glColor4ub(c2.R, c2.G, c2.B, (byte)Math.Min(255, lineAlpha + 25));
+                    } else {
+                        GpuGl.glColor4ub(c1.R, c1.G, c1.B, (byte)Math.Min(255, lineAlpha + 15));
+                    }
+                    float nx = vx[r, j], ny = vy[r, j];
+                    GpuGl.glVertex2f(nx - 1.6f, ny - 1.6f);
+                    GpuGl.glVertex2f(nx + 1.6f, ny - 1.6f);
+                    GpuGl.glVertex2f(nx + 1.6f, ny + 1.6f);
+                    GpuGl.glVertex2f(nx - 1.6f, ny + 1.6f);
                 }
+                GpuGl.glEnd();
             }
 
             // 1C-RIVER: Render the Curved 3D Cyber-Data River right through the middle of the forest!
@@ -8564,7 +8713,8 @@ public class HackerWallpaperForm : Form {
             GpuGl.EndFontAtlasBatch();
         }
 
-        int hudUpdateStride = gpuEcoMode ? 14 : 6;
+        int hudCycle = gpuEcoMode ? 24 : 12;
+        int hudSlot = frameCount % hudCycle;
 
         // 2. Render Autonomous 3D Porygons on Hardware GPU + Collapsible Evolutionary Swarm HUD + 3D FlyWire Brain Card
         if (Config.ShowPorygon) {
@@ -8579,7 +8729,7 @@ public class HackerWallpaperForm : Form {
                 if (hudConnectomeBmp != null) hudConnectomeBmp.Dispose();
                 hudConnectomeBmp = new Bitmap(bw + 4, fullBh + 4, PixelFormat.Format32bppArgb);
             }
-            if (frameCount % (hudUpdateStride + 2) == 1 || hudConnectomeTexId == 0 || hudConnectomeDirty) {
+            if (hudSlot == 8 || hudConnectomeTexId == 0 || hudConnectomeDirty) {
                 using (Graphics gHud = Graphics.FromImage(hudConnectomeBmp)) {
                     gHud.Clear(Color.FromArgb(0, 0, 0, 0));
                     gHud.SmoothingMode = SmoothingMode.AntiAlias;
@@ -8591,7 +8741,7 @@ public class HackerWallpaperForm : Form {
             }
             GpuGl.DrawTexturedQuad(hudConnectomeTexId, bx - 2, by - 2, bw + 4, fullBh + 4);
 
-            // Render 3D FlyWire Drosophila Brain in Card Mode (Throttled to save GPU/PCIe bandwidth!)
+            // Render 3D FlyWire Drosophila Brain in Card Mode (Staggered on slot 0 to avoid GDI+ frame spikes!)
             if (!brain3DFullscreen || brain3DCollapsed) {
                 int brainW = 356;
                 int fullBrainH = 246;
@@ -8602,7 +8752,7 @@ public class HackerWallpaperForm : Form {
                     if (hudBrain3DBmp != null) hudBrain3DBmp.Dispose();
                     hudBrain3DBmp = new Bitmap(brainW + 4, fullBrainH + 4, PixelFormat.Format32bppArgb);
                 }
-                if ((!brain3DCollapsed && frameCount % hudUpdateStride == 0) || hudBrain3DTexId == 0 || hudBrain3DDirty) {
+                if ((!brain3DCollapsed && hudSlot == 0) || hudBrain3DTexId == 0 || hudBrain3DDirty) {
                     using (Graphics gBr = Graphics.FromImage(hudBrain3DBmp)) {
                         gBr.Clear(Color.FromArgb(0, 0, 0, 0));
                         gBr.SmoothingMode = SmoothingMode.AntiAlias;
@@ -8616,14 +8766,14 @@ public class HackerWallpaperForm : Form {
             }
         }
 
-        // 3. Render Collapsible Network Sonar Radar (50% Transparent, updated on throttled stride)
+        // 3. Render Collapsible Network Sonar Radar (50% Transparent, staggered on slot 4)
         if (Config.ShowRadar) {
             int rBmpW = 310;
             int rBmpH = 330;
             if (hudRadarBmp == null) {
                 hudRadarBmp = new Bitmap(rBmpW, rBmpH, PixelFormat.Format32bppArgb);
             }
-            if ((!radarCollapsed && frameCount % hudUpdateStride == 2) || hudRadarTexId == 0 || hudRadarDirty) {
+            if ((!radarCollapsed && hudSlot == 4) || hudRadarTexId == 0 || hudRadarDirty) {
                 using (Graphics gRad = Graphics.FromImage(hudRadarBmp)) {
                     gRad.Clear(Color.FromArgb(0, 0, 0, 0));
                     gRad.SmoothingMode = SmoothingMode.AntiAlias;
