@@ -1329,10 +1329,12 @@ public class Porygon3DAvatar {
         public Color BaseColor;
         public float DepthBias;
         public Vec3 LocalNormal;
+        public byte ContourEdgeMask; // bit 0: edge(0,1), bit 1: edge(1,2), bit 2: edge(2,0)
         public Face3D(Color col, float bias, params int[] idx) {
             BaseColor = col;
             DepthBias = bias;
             Indices = idx;
+            ContourEdgeMask = 0;
         }
     }
 
@@ -2173,24 +2175,127 @@ public class Porygon3DAvatar {
             int subdiv = 1;
             float depthBias = 0f;
             if (bmp != null && uvs != null) {
-                if (isPorygon3ds && meshIdx == 1) subdiv = 6;
+                if (isPorygon3ds && meshIdx == 1) { subdiv = 6; depthBias = 1.8f; }
                 else if (isPorygonZ && meshIdx == 1) { subdiv = 2; depthBias = 1.5f; }
                 else if (isPorygon2 && meshIdx == 2) { subdiv = 3; depthBias = 4.5f; }
                 else if (isPorygon2 && meshIdx == 0) { subdiv = 1; depthBias = 1.0f; }
             }
 
+            // Precompute UV edge multiplicity & max triangle centroid luma for Porygon (isPorygon3ds) contour detection
+            Dictionary<int, int> uvEdgeCount = null;
+            Dictionary<int, int> uvEdgeMaxLuma = null;
+            if (isPorygon3ds && bmp != null && uvs != null) {
+                uvEdgeCount = new Dictionary<int, int>();
+                uvEdgeMaxLuma = new Dictionary<int, int>();
+                for (int i = 0; i + 2 < indices.Length; i += 3) {
+                    int i0 = indices[i], i1 = indices[i + 1], i2 = indices[i + 2];
+                    int cLuma = 400;
+                    if (i0 < uvs.Length && i1 < uvs.Length && i2 < uvs.Length) {
+                        float cu = (uvs[i0].X + uvs[i1].X + uvs[i2].X) / 3.0f;
+                        float cv = (uvs[i0].Y + uvs[i1].Y + uvs[i2].Y) / 3.0f;
+                        Color cc = SampleGlbTexture(bmp, cu, cv, matColor);
+                        cLuma = cc.R + cc.G + cc.B;
+                    }
+                    int[] triV = new int[] { i0, i1, i2 };
+                    for (int e = 0; e < 3; e++) {
+                        int a = Math.Min(triV[e], triV[(e + 1) % 3]);
+                        int b = Math.Max(triV[e], triV[(e + 1) % 3]);
+                        int key = a * 10000 + b;
+                        int curCnt;
+                        uvEdgeCount[key] = uvEdgeCount.TryGetValue(key, out curCnt) ? (curCnt + 1) : 1;
+                        int curMax;
+                        if (!uvEdgeMaxLuma.TryGetValue(key, out curMax) || cLuma > curMax) {
+                            uvEdgeMaxLuma[key] = cLuma;
+                        }
+                    }
+                }
+            }
+
             if (subdiv <= 1) {
                 int baseV = model.Verts.Count;
                 for (int i = 0; i < wPos.Length; i++) model.Verts.Add(wPos[i]);
+                int triCount = indices.Length / 3;
+                Vec3[] triNorms = null;
+                bool[] triIsPink = null;
+                Dictionary<string, List<int>> edge3DMap = null;
+                if (isPorygon3ds && bmp != null && uvs != null) {
+                    triNorms = new Vec3[triCount];
+                    triIsPink = new bool[triCount];
+                    edge3DMap = new Dictionary<string, List<int>>();
+                    for (int t = 0; t < triCount; t++) {
+                        int a0 = indices[t * 3], a1 = indices[t * 3 + 1], a2 = indices[t * 3 + 2];
+                        triNorms[t] = Vec3.Cross(wPos[a1] - wPos[a0], wPos[a2] - wPos[a0]).Normalized();
+                        Color tc = matColor;
+                        if (a0 < uvs.Length && a1 < uvs.Length && a2 < uvs.Length) {
+                            tc = SampleGlbTexture(bmp, (uvs[a0].X + uvs[a1].X + uvs[a2].X) / 3.0f, (uvs[a0].Y + uvs[a1].Y + uvs[a2].Y) / 3.0f, matColor);
+                        }
+                        triIsPink[t] = (tc.R > tc.B);
+                        int[] tv = new int[] { a0, a1, a2 };
+                        for (int e = 0; e < 3; e++) {
+                            string k3d = MakeEdge3DKey(pos[tv[e]], pos[tv[(e + 1) % 3]]);
+                            List<int> list;
+                            if (!edge3DMap.TryGetValue(k3d, out list)) {
+                                list = new List<int>(2);
+                                edge3DMap[k3d] = list;
+                            }
+                            list.Add(t);
+                        }
+                    }
+                }
+
                 for (int i = 0; i + 2 < indices.Length; i += 3) {
+                    int tIdx = i / 3;
                     int i0 = indices[i], i1 = indices[i + 1], i2 = indices[i + 2];
                     Color c = matColor;
                     if (bmp != null && uvs != null && i0 < uvs.Length && i1 < uvs.Length && i2 < uvs.Length) {
                         float u = (uvs[i0].X + uvs[i1].X + uvs[i2].X) / 3.0f;
                         float v = (uvs[i0].Y + uvs[i1].Y + uvs[i2].Y) / 3.0f;
                         c = SampleGlbTexture(bmp, u, v, matColor);
+                        if (isPorygon3ds && meshIdx == 0) {
+                            if (c.B >= c.R && c.R < 72) c = Color.FromArgb(79, 169, 180);
+                            else if (c.R > c.B && c.R < 135) c = Color.FromArgb(198, 79, 91);
+                        }
                     }
-                    model.Faces.Add(new Face3D(c, depthBias, baseV + i0, baseV + i1, baseV + i2));
+                    Face3D face = new Face3D(c, depthBias, baseV + i0, baseV + i1, baseV + i2);
+                    if (isPorygon3ds && uvEdgeCount != null && bmp != null && uvs != null) {
+                        int[] triV = new int[] { i0, i1, i2 };
+                        byte mask = 0;
+                        for (int e = 0; e < 3; e++) {
+                            int va = triV[e], vb = triV[(e + 1) % 3];
+                            int key = Math.Min(va, vb) * 10000 + Math.Max(va, vb);
+                            int cnt = uvEdgeCount.ContainsKey(key) ? uvEdgeCount[key] : 1;
+                            int maxLuma = uvEdgeMaxLuma.ContainsKey(key) ? uvEdgeMaxLuma[key] : (c.R + c.G + c.B);
+                            bool isContour = (cnt == 1);
+                            if (!isContour && va < uvs.Length && vb < uvs.Length) {
+                                int minEdgeLuma = SampleMinEdgeTexLuma(bmp, uvs[va], uvs[vb]);
+                                if (maxLuma - minEdgeLuma > 38) isContour = true;
+                            }
+                            if (edge3DMap != null) {
+                                string k3d = MakeEdge3DKey(pos[va], pos[vb]);
+                                List<int> adj;
+                                if (edge3DMap.TryGetValue(k3d, out adj) && adj.Count >= 2) {
+                                    int otherT = (adj[0] == tIdx) ? adj[1] : adj[0];
+                                    float dotN = Math.Abs(Vec3.Dot(triNorms[tIdx], triNorms[otherT]));
+                                    bool sameFamily = (triIsPink[tIdx] == triIsPink[otherT]);
+                                    bool isCenterline = (Math.Abs(pos[va].X) < 0.02f && Math.Abs(pos[vb].X) < 0.02f);
+                                    bool isHorizontalRidge = (Math.Abs(pos[va].Y - pos[vb].Y) < 0.02f && Math.Abs(pos[va].Z - pos[vb].Z) < 0.02f);
+                                    bool isTailFin = (Math.Min(pos[va].Z, pos[vb].Z) < -1.55f);
+                                    if (!sameFamily) {
+                                        isContour = true;
+                                    } else if (isTailFin) {
+                                        isContour = isCenterline;
+                                    } else if (dotN < 0.900f || isHorizontalRidge) {
+                                        isContour = true;
+                                    } else if (!isCenterline) {
+                                        isContour = false;
+                                    }
+                                }
+                            }
+                            if (isContour) mask |= (byte)(1 << e);
+                        }
+                        face.ContourEdgeMask = mask;
+                    }
+                    model.Faces.Add(face);
                 }
             } else {
                 for (int i = 0; i + 2 < indices.Length; i += 3) {
@@ -2198,13 +2303,25 @@ public class Porygon3DAvatar {
                     Vec3 v0 = wPos[i0], v1 = wPos[i1], v2 = wPos[i2];
                     PointF uv0 = uvs[i0], uv1 = uvs[i1], uv2 = uvs[i2];
 
+                    bool b01 = false, b12 = false, b20 = false;
+                    if (isPorygon3ds && meshIdx == 1 && uvEdgeCount != null) {
+                        int k01 = Math.Min(i0, i1) * 10000 + Math.Max(i0, i1);
+                        int k12 = Math.Min(i1, i2) * 10000 + Math.Max(i1, i2);
+                        int k20 = Math.Min(i2, i0) * 10000 + Math.Max(i2, i0);
+                        b01 = (!uvEdgeCount.ContainsKey(k01) || uvEdgeCount[k01] == 1);
+                        b12 = (!uvEdgeCount.ContainsKey(k12) || uvEdgeCount[k12] == 1);
+                        b20 = (!uvEdgeCount.ContainsKey(k20) || uvEdgeCount[k20] == 1);
+                    }
+
                     for (int r = 0; r < subdiv; r++) {
                         for (int col = 0; col < subdiv - r; col++) {
                             AddSubTri(model, v0, v1, v2, uv0, uv1, uv2, subdiv,
-                                r, col, r + 1, col, r, col + 1, bmp, matColor, depthBias);
+                                r, col, r + 1, col, r, col + 1, bmp, matColor, depthBias,
+                                isPorygon3ds && meshIdx == 1, b01, b12, b20);
                             if (r + col < subdiv - 1) {
                                 AddSubTri(model, v0, v1, v2, uv0, uv1, uv2, subdiv,
-                                    r + 1, col, r + 1, col + 1, r, col + 1, bmp, matColor, depthBias);
+                                    r + 1, col, r + 1, col + 1, r, col + 1, bmp, matColor, depthBias,
+                                    isPorygon3ds && meshIdx == 1, b01, b12, b20);
                             }
                         }
                     }
@@ -2213,8 +2330,51 @@ public class Porygon3DAvatar {
         }
     }
 
+    private static string MakeEdge3DKey(Vec3 a, Vec3 b) {
+        int ax = (int)Math.Round(a.X * 200f), ay = (int)Math.Round(a.Y * 200f), az = (int)Math.Round(a.Z * 200f);
+        int bx = (int)Math.Round(b.X * 200f), by = (int)Math.Round(b.Y * 200f), bz = (int)Math.Round(b.Z * 200f);
+        if (ax < bx || (ax == bx && (ay < by || (ay == by && az <= bz)))) {
+            return ax + "," + ay + "," + az + ":" + bx + "," + by + "," + bz;
+        }
+        return bx + "," + by + "," + bz + ":" + ax + "," + ay + "," + az;
+    }
+
+    private static int SampleMinEdgeTexLuma(Bitmap bmp, PointF ua, PointF ub) {
+        int minLuma = 999;
+        float[] ts = new float[] { 0.30f, 0.50f, 0.70f };
+        int w = bmp.Width, h = bmp.Height;
+        for (int ti = 0; ti < ts.Length; ti++) {
+            float t = ts[ti];
+            float u = ua.X * (1f - t) + ub.X * t;
+            float v = ua.Y * (1f - t) + ub.Y * t;
+            if (u < 0f || u > 1f) u = u - (float)Math.Floor(u);
+            if (v > 1.02f) v = 1.0f - (v - (float)Math.Floor(v));
+            else if (v < 0f) v = v - (float)Math.Floor(v);
+            int cx = Math.Max(0, Math.Min(w - 1, (int)(u * (w - 1))));
+            int cy = Math.Max(0, Math.Min(h - 1, (int)(v * (h - 1))));
+            for (int dy = -1; dy <= 1; dy++) {
+                int py = Math.Max(0, Math.Min(h - 1, cy + dy));
+                for (int dx = -1; dx <= 1; dx++) {
+                    int px = Math.Max(0, Math.Min(w - 1, cx + dx));
+                    Color c = bmp.GetPixel(px, py);
+                    int luma = c.R + c.G + c.B;
+                    if (luma < minLuma) minLuma = luma;
+                }
+            }
+        }
+        return minLuma;
+    }
+
+    private static bool IsSubEdgeOnBaseBoundary(int N, int r1, int c1, int r2, int c2, bool b01, bool b12, bool b20) {
+        if (b01 && c1 == 0 && c2 == 0) return true;
+        if (b12 && (r1 + c1 == N) && (r2 + c2 == N)) return true;
+        if (b20 && r1 == 0 && r2 == 0) return true;
+        return false;
+    }
+
     private void AddSubTri(ModelData model, Vec3 v0, Vec3 v1, Vec3 v2, PointF uv0, PointF uv1, PointF uv2,
-        int N, int rA, int cA, int rB, int cB, int rC, int cC, Bitmap bmp, Color factor, float depthBias) {
+        int N, int rA, int cA, int rB, int cB, int rC, int cC, Bitmap bmp, Color factor, float depthBias,
+        bool isPorygonEye = false, bool b01 = false, bool b12 = false, bool b20 = false) {
 
         float a0 = (float)rA / N, b0 = (float)cA / N, d0 = 1f - a0 - b0;
         float a1 = (float)rB / N, b1 = (float)cB / N, d1 = 1f - a1 - b1;
@@ -2228,11 +2388,22 @@ public class Porygon3DAvatar {
         float v = (uv0.Y * (d0 + d1 + d2) + uv1.Y * (a0 + a1 + a2) + uv2.Y * (b0 + b1 + b2)) / 3.0f;
 
         Color col = SampleGlbTexture(bmp, u, v, factor);
+        if (isPorygonEye && col.R < 105 && col.G < 105 && col.B < 105) {
+            col = Color.FromArgb(14, 16, 22); // Crisp black pupil matching Porygon2/Z
+        }
         int idx0 = model.Verts.Count;
         model.Verts.Add(pA);
         model.Verts.Add(pB);
         model.Verts.Add(pC);
-        model.Faces.Add(new Face3D(col, depthBias, idx0, idx0 + 1, idx0 + 2));
+        Face3D face = new Face3D(col, depthBias, idx0, idx0 + 1, idx0 + 2);
+        if (isPorygonEye) {
+            byte mask = 0;
+            if (IsSubEdgeOnBaseBoundary(N, rA, cA, rB, cB, b01, b12, b20)) mask |= 1;
+            if (IsSubEdgeOnBaseBoundary(N, rB, cB, rC, cC, b01, b12, b20)) mask |= 2;
+            if (IsSubEdgeOnBaseBoundary(N, rC, cC, rA, cA, b01, b12, b20)) mask |= 4;
+            face.ContourEdgeMask = mask;
+        }
+        model.Faces.Add(face);
     }
 
     private static Color SampleGlbTexture(Bitmap bmp, float u, float v, Color factor) {
@@ -3025,6 +3196,8 @@ public class Porygon3DAvatar {
         public PointF[] Pts;
         public float Depth;
         public Color ShadedColor;
+        public byte ContourMask;
+        public bool IsEyeOverlay;
         public int CompareTo(ProjectedFace other) {
             return this.Depth.CompareTo(other.Depth);
         }
@@ -3981,6 +4154,40 @@ public class Porygon3DAvatar {
             GpuGl.glVertex3f(p2.X, p2.Y, z2);
         }
         GpuGl.glEnd();
+
+        // Hardware Z-Buffered Cel-Shaded Black Contour Edges for Porygon (facets, color seams, and hexagonal eyes)
+        if (bFaces.Count < 1000) {
+            GpuGl.glEnable(GpuGl.GL_LINE_SMOOTH);
+            GpuGl.glLineWidth(Math.Max(1.45f, 1.95f * zDepthScale));
+            GpuGl.glColor4ub(12, 15, 22, 245);
+            GpuGl.glBegin(GpuGl.GL_LINES);
+            for (int i = 0; i < bFaces.Count; i++) {
+                Face3D f = bFaces[i];
+                byte mask = f.ContourEdgeMask;
+                if (mask == 0) continue;
+                int i0 = f.Indices[0], i1 = f.Indices[1], i2 = f.Indices[2];
+                PointF p0 = pv[i0], p1 = pv[i1], p2 = pv[i2];
+                float zBias = f.DepthBias + 2.2f;
+                float z0 = tv[i0].Z + zBias;
+                float z1 = tv[i1].Z + zBias;
+                float z2 = tv[i2].Z + zBias;
+                if ((mask & 1) != 0) {
+                    GpuGl.glVertex3f(p0.X, p0.Y, z0);
+                    GpuGl.glVertex3f(p1.X, p1.Y, z1);
+                }
+                if ((mask & 2) != 0) {
+                    GpuGl.glVertex3f(p1.X, p1.Y, z1);
+                    GpuGl.glVertex3f(p2.X, p2.Y, z2);
+                }
+                if ((mask & 4) != 0) {
+                    GpuGl.glVertex3f(p2.X, p2.Y, z2);
+                    GpuGl.glVertex3f(p0.X, p0.Y, z0);
+                }
+            }
+            GpuGl.glEnd();
+            GpuGl.glDisable(GpuGl.GL_LINE_SMOOTH);
+        }
+
         GpuGl.glDisable(GpuGl.GL_DEPTH_TEST);
 
         // 3D Mesh Vertex Absorption Glow — Sparkling wireframe vertices on Porygon's body when absorbing captured packet shards!
@@ -4284,13 +4491,15 @@ public class Porygon3DAvatar {
             renderList.Add(new ProjectedFace {
                 Pts = new PointF[] { p0, p1, p2 },
                 Depth = avgZ,
-                ShadedColor = Color.FromArgb(255, r, gr, b)
+                ShadedColor = Color.FromArgb(255, r, gr, b),
+                ContourMask = f.ContourEdgeMask,
+                IsEyeOverlay = (f.DepthBias > 0f)
             });
         }
 
         renderList.Sort();
 
-        if (renderList.Count > 350) {
+        if (renderList.Count > 1000) {
             SmoothingMode prevMode = g.SmoothingMode;
             g.SmoothingMode = SmoothingMode.None;
             using (SolidBrush fb = new SolidBrush(Color.White)) {
@@ -4302,12 +4511,48 @@ public class Porygon3DAvatar {
             }
             g.SmoothingMode = prevMode;
         } else {
-            for (int i = 0; i < renderList.Count; i++) {
-                ProjectedFace pf = renderList[i];
-                using (SolidBrush fb = new SolidBrush(pf.ShadedColor))
-                using (Pen seamPen = new Pen(pf.ShadedColor, 1.1f)) {
-                    g.FillPolygon(fb, pf.Pts);
-                    g.DrawPolygon(seamPen, pf.Pts);
+            float contourW = Math.Max(1.45f, 1.95f * zDepthScale * (userScale / 100f));
+            using (Pen contourPen = new Pen(Color.FromArgb(245, 12, 15, 22), contourW)) {
+                contourPen.StartCap = LineCap.Round;
+                contourPen.EndCap = LineCap.Round;
+                int cIdx = 0;
+                for (int i = 0; i < renderList.Count; i++) {
+                    ProjectedFace pf = renderList[i];
+                    while (cIdx < i && renderList[cIdx].Depth + 3.8f <= pf.Depth) {
+                        ProjectedFace cf = renderList[cIdx++];
+                        if (cf.IsEyeOverlay && cf.ContourMask != 0) {
+                            byte cm = cf.ContourMask;
+                            if ((cm & 1) != 0) g.DrawLine(contourPen, cf.Pts[0], cf.Pts[1]);
+                            if ((cm & 2) != 0) g.DrawLine(contourPen, cf.Pts[1], cf.Pts[2]);
+                            if ((cm & 4) != 0) g.DrawLine(contourPen, cf.Pts[2], cf.Pts[0]);
+                        }
+                    }
+                    using (SolidBrush fb = new SolidBrush(pf.ShadedColor))
+                    using (Pen seamPen = new Pen(pf.ShadedColor, 1.0f)) {
+                        g.FillPolygon(fb, pf.Pts);
+                        byte mask = pf.ContourMask;
+                        if (mask == 0) {
+                            g.DrawPolygon(seamPen, pf.Pts);
+                        } else {
+                            if ((mask & 1) == 0) g.DrawLine(seamPen, pf.Pts[0], pf.Pts[1]);
+                            if ((mask & 2) == 0) g.DrawLine(seamPen, pf.Pts[1], pf.Pts[2]);
+                            if ((mask & 4) == 0) g.DrawLine(seamPen, pf.Pts[2], pf.Pts[0]);
+                            if (!pf.IsEyeOverlay) {
+                                if ((mask & 1) != 0) g.DrawLine(contourPen, pf.Pts[0], pf.Pts[1]);
+                                if ((mask & 2) != 0) g.DrawLine(contourPen, pf.Pts[1], pf.Pts[2]);
+                                if ((mask & 4) != 0) g.DrawLine(contourPen, pf.Pts[2], pf.Pts[0]);
+                            }
+                        }
+                    }
+                }
+                while (cIdx < renderList.Count) {
+                    ProjectedFace cf = renderList[cIdx++];
+                    if (cf.IsEyeOverlay && cf.ContourMask != 0) {
+                        byte cm = cf.ContourMask;
+                        if ((cm & 1) != 0) g.DrawLine(contourPen, cf.Pts[0], cf.Pts[1]);
+                        if ((cm & 2) != 0) g.DrawLine(contourPen, cf.Pts[1], cf.Pts[2]);
+                        if ((cm & 4) != 0) g.DrawLine(contourPen, cf.Pts[2], cf.Pts[0]);
+                    }
                 }
             }
         }
@@ -8545,10 +8790,19 @@ public class HackerWallpaperForm : Form {
 
     public static void RenderModelsContactSheet(string outPath) {
         Porygon3DAvatar av = new Porygon3DAvatar(1920, 1080);
+        if (av.Agents.Count >= 3) {
+            if (av.Stage0Model != null) { av.Agents[0].Model = av.Stage0Model; av.Agents[0].Name = "PORYGON"; av.Agents[0].Brain.LifeStage = 0; }
+            if (av.Stage1Model != null) { av.Agents[1].Model = av.Stage1Model; av.Agents[1].Name = "PORYGON2"; av.Agents[1].Brain.LifeStage = 1; }
+            if (av.Stage2Model != null) { av.Agents[2].Model = av.Stage2Model; av.Agents[2].Name = "PORYGON-Z"; av.Agents[2].Brain.LifeStage = 2; }
+            av.Agents[0].PosX = 520f;  av.Agents[0].PosY = 540f; av.Agents[0].PosZ = 40f; av.Agents[0].Yaw = 0.52f; av.Agents[0].Pitch = 0.14f;
+            av.Agents[1].PosX = 960f;  av.Agents[1].PosY = 560f; av.Agents[1].PosZ = 40f; av.Agents[1].Yaw = 0.48f; av.Agents[1].Pitch = 0.12f;
+            av.Agents[2].PosX = 1400f; av.Agents[2].PosY = 520f; av.Agents[2].PosZ = 40f; av.Agents[2].Yaw = 0.42f; av.Agents[2].Pitch = 0.10f;
+            while (av.Agents.Count > 3) av.Agents.RemoveAt(av.Agents.Count - 1);
+        }
         av.TriggerTrainingWave(1920, 1080);
         if (av.Packets.Count > 0) {
             av.Packets[0].X = 1120;
-            av.Packets[0].Y = 360;
+            av.Packets[0].Y = 340;
             av.Packets[0].IsHovered = true;
             av.HoveredPacket = av.Packets[0];
         }
@@ -8558,7 +8812,7 @@ public class HackerWallpaperForm : Form {
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
             Font fSmall = new Font("Consolas", 8f, FontStyle.Regular);
-            av.Render(g, 110f, Color.FromArgb(52, 168, 138), Color.FromArgb(186, 138, 56), fSmall);
+            av.Render(g, 135f, Color.FromArgb(52, 168, 138), Color.FromArgb(186, 138, 56), fSmall);
             bmp.Save(outPath, ImageFormat.Png);
         }
     }
