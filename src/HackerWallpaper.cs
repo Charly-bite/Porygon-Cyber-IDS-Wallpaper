@@ -1526,21 +1526,58 @@ public class Porygon3DAvatar {
         }
     }
 
+    public List<string> LineageAuditHistory = new List<string>();
+
+    private static string LocalLineageAuditLogPath {
+        get {
+            string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "HackerWallpaper");
+            return Path.Combine(dir, "porygon_lineage_audit.log");
+        }
+    }
+
     private static string ProjectLineageAuditLogPath {
         get {
-            return @"C:\Users\CarlosAlbertoAcevesC\Desktop\03-ciberseguridad-soc\porygon-cyber-ids-wallpaper\logs\porygon_lineage_audit.log";
+            return @"C:\Users\Admin\Porygon-Cyber-IDS-Wallpaper\logs\porygon_lineage_audit.log";
         }
     }
 
     private void AppendLineageRecord(string auditSummaryLine, string jsonlRecord) {
         try {
+            lock (LineageAuditHistory) {
+                LineageAuditHistory.Add(auditSummaryLine);
+                while (LineageAuditHistory.Count > 40) LineageAuditHistory.RemoveAt(0);
+            }
             string dir1 = Path.GetDirectoryName(LineageJsonlPath);
             if (!Directory.Exists(dir1)) Directory.CreateDirectory(dir1);
             File.AppendAllText(LineageJsonlPath, jsonlRecord + "\r\n", Encoding.UTF8);
+            File.AppendAllText(LocalLineageAuditLogPath, auditSummaryLine + "\r\n", Encoding.UTF8);
 
             string dir2 = Path.GetDirectoryName(ProjectLineageAuditLogPath);
             if (!Directory.Exists(dir2)) Directory.CreateDirectory(dir2);
             File.AppendAllText(ProjectLineageAuditLogPath, auditSummaryLine + "\r\n", Encoding.UTF8);
+        } catch { }
+    }
+
+    private void LoadLineageHistory() {
+        try {
+            string path = File.Exists(LocalLineageAuditLogPath) ? LocalLineageAuditLogPath : ProjectLineageAuditLogPath;
+            if (File.Exists(path)) {
+                string[] lines = File.ReadAllLines(path, Encoding.UTF8);
+                int start = Math.Max(0, lines.Length - 30);
+                lock (LineageAuditHistory) {
+                    LineageAuditHistory.Clear();
+                    for (int i = start; i < lines.Length; i++) {
+                        if (!string.IsNullOrWhiteSpace(lines[i])) LineageAuditHistory.Add(lines[i].Trim());
+                    }
+                    if (LineageAuditHistory.Count > 0) {
+                        LastLineageAuditSummary = LineageAuditHistory[LineageAuditHistory.Count - 1];
+                    }
+                }
+                TotalCrossovers = Math.Max(TotalCrossovers, lines.Length);
+            } else if (File.Exists(LineageJsonlPath)) {
+                string[] jlines = File.ReadAllLines(LineageJsonlPath, Encoding.UTF8);
+                TotalCrossovers = Math.Max(TotalCrossovers, jlines.Length);
+            }
         } catch { }
     }
 
@@ -1635,8 +1672,23 @@ public class Porygon3DAvatar {
         RefreshMonitors(screenW, screenH);
         LoadThreeFavoriteModels(screenW, screenH);
         LoadBrainStates();
+        LoadLineageHistory();
+        int maxGen = 1;
+        float maxFit = 0f, sumAcc = 0f;
+        int totalPruned = 0;
         for (int i = 0; i < Agents.Count; i++) {
             SyncAgentLifeStageMesh(Agents[i]);
+            FlyBrainConnectome b = Agents[i].Brain;
+            if (b.Generation > maxGen) maxGen = b.Generation;
+            if (b.FitnessScore > maxFit) maxFit = b.FitnessScore;
+            sumAcc += b.DetectionAccuracy;
+            totalPruned += b.PrunedTraitsCount;
+        }
+        if (Agents.Count > 0) {
+            HighestGeneration = maxGen;
+            BestSwarmFitness = maxFit;
+            AvgSwarmAccuracy = sumAcc / Agents.Count;
+            TotalPrunedTraits = totalPruned;
         }
 
         IdsDetectionLog.Add("[" + DateTime.Now.ToString("HH:mm:ss") + "] EVO_INIT // " + Agents.Count + " Evolutionary Cores + VT API online across " + MonitorRects.Count + " monitors");
@@ -1956,6 +2008,51 @@ public class Porygon3DAvatar {
             a.Brain.ActiveStateName = "EVOLUTION // LEVEL_UP -> LVL " + a.Brain.Level;
         }
         SaveBrainStates();
+    }
+
+    public void ForceEvolutionaryCrossoverAll() {
+        lock (packetLock) {
+            if (Agents.Count == 0) return;
+            PorygonAgent alphaAgent = Agents[0];
+            for (int i = 1; i < Agents.Count; i++) {
+                if (Agents[i].Brain.FitnessScore > alphaAgent.Brain.FitnessScore) {
+                    alphaAgent = Agents[i];
+                }
+            }
+            int maxGen = 1;
+            float maxFit = 0f, sumAcc = 0f;
+            int totalPruned = 0;
+            int seedBase = Environment.TickCount;
+            for (int i = 0; i < Agents.Count; i++) {
+                PorygonAgent ag = Agents[i];
+                FlyBrainConnectome br = ag.Brain;
+                string oldName = ag.Name;
+                string auditLine, jsonlLine;
+                br.CrossoverAndAuditGeneration(alphaAgent.Brain, oldName, alphaAgent.Name, seedBase + i * 31337, out auditLine, out jsonlLine);
+                SyncAgentLifeStageMesh(ag);
+                ag.LevelUpBannerTimer = 1.0f;
+                ag.LevelUpBannerText = string.Format("★ G{0} CROSSOVER // {1} ★", br.Generation, br.LastPrunedTrait);
+                ag.SpinRollTimer = 1.0f;
+                ag.ShieldTimer = 1.0f;
+                br.ActiveStateName = string.Format("GEN_{0}_AUDIT // {1}", br.Generation, br.LastPrunedTrait);
+
+                TotalCrossovers++;
+                LastLineageAuditSummary = string.Format("G{0} {1}x{2} -> {3}", br.Generation, oldName, alphaAgent.Name, br.LastPrunedTrait);
+                AppendLineageRecord(auditLine, jsonlLine);
+                IdsDetectionLog.Add(auditLine);
+                while (IdsDetectionLog.Count > 10) IdsDetectionLog.RemoveAt(0);
+
+                if (br.Generation > maxGen) maxGen = br.Generation;
+                if (br.FitnessScore > maxFit) maxFit = br.FitnessScore;
+                sumAcc += br.DetectionAccuracy;
+                totalPruned += br.PrunedTraitsCount;
+            }
+            HighestGeneration = maxGen;
+            BestSwarmFitness = maxFit;
+            AvgSwarmAccuracy = sumAcc / Agents.Count;
+            TotalPrunedTraits = totalPruned;
+            SaveBrainStates();
+        }
     }
 
     public void SpawnDataPacket(int screenW, int screenH, int kind) {
@@ -6739,6 +6836,12 @@ public class HackerWallpaperForm : Form {
                 int by = primaryMonRect.Bottom - bh - 54;
                 Rectangle connRect = new Rectangle(bx, by, bw, bh);
                 if (connRect.Contains(pt)) {
+                    int relX = pt.X - bx;
+                    int relY = pt.Y - by;
+                    if (relY <= 28 && relX >= bw - 222 && relX <= bw - 150) {
+                        ShowConfigWindow();
+                        return;
+                    }
                     connectomeCollapsed = !connectomeCollapsed;
                     Config.ConnectomeCollapsed = connectomeCollapsed;
                     Config.Save();
@@ -8106,6 +8209,12 @@ public class HackerWallpaperForm : Form {
 
             g.DrawString(string.Format(">> PORYGON EVO-IDS SWARM // ANOMALY:{0:0}% [{1}]",
                 anomIdx * 100f, sumTag), fontHudSmall, anomIdx > 0.45f ? c2B : c1B, bx + 10, by + 8);
+            using (SolidBrush pBtnBg = new SolidBrush(Color.FromArgb(150, 12, 28, 22)))
+            using (Pen pBtnBor = new Pen(Color.FromArgb(170, c1.R, c1.G, c1.B), 1.0f)) {
+                g.FillRectangle(pBtnBg, bx + bw - 218, by + 5, 64, 18);
+                g.DrawRectangle(pBtnBor, bx + bw - 218, by + 5, 64, 18);
+                g.DrawString("PANEL/G+", fontHudSmall, c1B, bx + bw - 213, by + 7);
+            }
             g.DrawString(string.Format("CPU_EVO:{0:0.0}k/s [{1}]", evoRate / 1000.0, connectomeCollapsed ? "+" : "-"),
                 fontHudSmall, goldB, bx + bw - 148, by + 8);
 
@@ -8521,39 +8630,42 @@ public class HackerWallpaperForm : Form {
         }
 
         configForm = new Form();
-        configForm.Text = "Configurar Hacker Wallpaper // Enjambre Autónomo Porygon IDS + Modo Gamer";
-        configForm.ClientSize = new Size(505, 650);
+        configForm.Text = "Configurar Hacker Wallpaper // Enjambre Autónomo Porygon IDS + Avance Generacional + Modo Gamer";
+        configForm.ClientSize = new Size(1090, 650);
         configForm.FormBorderStyle = FormBorderStyle.FixedDialog;
         configForm.MaximizeBox = false;
         configForm.StartPosition = FormStartPosition.CenterScreen;
-        configForm.BackColor = Color.FromArgb(13, 18, 32);
+        configForm.BackColor = Color.FromArgb(11, 16, 26);
         configForm.ForeColor = Color.FromArgb(226, 232, 240);
-        configForm.Font = new Font("Segoe UI", 9.5f, FontStyle.Regular);
+        configForm.Font = new Font("Segoe UI", 9.2f, FontStyle.Regular);
         configForm.TopMost = true;
 
         Label title = new Label {
-            Text = "PANEL DE CONTROL // PORYGON NEURAL IDS SWARM",
-            Font = new Font("Consolas", 11f, FontStyle.Bold),
+            Text = "PANEL DE CONTROL // PORYGON NEURAL IDS SWARM (Ctrl+Alt+W / Ctrl+Alt+G Gamer)",
+            Font = new Font("Consolas", 10.5f, FontStyle.Bold),
             ForeColor = Color.FromArgb(52, 168, 138),
-            Location = new Point(22, 12),
+            Location = new Point(22, 10),
             AutoSize = true
         };
         configForm.Controls.Add(title);
 
-        // --- SECCIÓN DE DETECCIÓN DE ANOMALÍAS DE RED Y ENTRENAMIENTO ---
+        // =========================================================================
+        // COLUMNA IZQUIERDA (X = 22, Width = 468): CONTROLES GENERALES & MODO GAMER
+        // =========================================================================
         Label lblSwarm = new Label {
             Text = "Detección de Anomalías de Red (Porygon, Porygon2 y Porygon-Z):",
             ForeColor = Color.FromArgb(186, 138, 56),
-            Font = new Font("Segoe UI", 9.2f, FontStyle.Bold),
-            Location = new Point(22, 38),
+            Font = new Font("Segoe UI", 9.0f, FontStyle.Bold),
+            Location = new Point(22, 34),
             AutoSize = true
         };
         Label lblSwarmStatus = new Label {
-            Location = new Point(22, 58),
-            Size = new Size(460, 40),
-            Font = new Font("Consolas", 8.5f, FontStyle.Regular),
+            Location = new Point(22, 54),
+            Size = new Size(468, 52),
+            Font = new Font("Consolas", 8.2f, FontStyle.Regular),
             ForeColor = Color.FromArgb(224, 212, 176),
-            BackColor = Color.FromArgb(14, 24, 20)
+            BackColor = Color.FromArgb(14, 24, 20),
+            BorderStyle = BorderStyle.FixedSingle
         };
         Action updateSwarmLabel = () => {
             if (porygon == null || porygon.Agents.Count < 3) return;
@@ -8561,9 +8673,13 @@ public class HackerWallpaperForm : Form {
             var a1 = porygon.Agents[1];
             var a2 = porygon.Agents[2];
             lblSwarmStatus.Text = string.Format(
-                " PORYGON: LVL {0} ({1}XP) | PORYGON2: LVL {2} ({3}XP) | PORYGON-Z: LVL {4} ({5}XP)\n" +
-                " Flujos: {6} | Anomalías: {7} | Escena 3D: [{8}/3] {9} | GPU: {10}",
-                a0.Brain.Level, a0.Brain.XP, a1.Brain.Level, a1.Brain.XP, a2.Brain.Level, a2.Brain.XP,
+                " PORYGON: G{0} LVL {1} ({2:N0}XP) | PORYGON2: G{3} LVL {4} ({5:N0}XP)\n" +
+                " PORYGON-Z: G{6} LVL {7} ({8:N0}XP) | Cruces: {9} | Podas: {10}\n" +
+                " Flujos: {11:N0} | Anomalías: {12:N0} | Escena 3D: [{13}/3] {14} | GPU: {15}",
+                a0.Brain.Generation, a0.Brain.Level, a0.Brain.XP,
+                a1.Brain.Generation, a1.Brain.Level, a1.Brain.XP,
+                a2.Brain.Generation, a2.Brain.Level, a2.Brain.XP,
+                porygon.TotalCrossovers, porygon.TotalPrunedTraits,
                 a0.Brain.PacketsCollected + a1.Brain.PacketsCollected + a2.Brain.PacketsCollected,
                 a0.Brain.AnomaliesCleared + a1.Brain.AnomaliesCleared + a2.Brain.AnomaliesCleared,
                 Config.BgSceneMode + 1, GetBgSceneModeShortName(Config.BgSceneMode),
@@ -8573,43 +8689,33 @@ public class HackerWallpaperForm : Form {
 
         Button btnTrainWave = new Button {
             Text = "⚡ Simular Anomalía IDS (Ctrl+Alt+P)",
-            Location = new Point(22, 104),
-            Size = new Size(226, 30),
+            Location = new Point(22, 112),
+            Size = new Size(230, 30),
             FlatStyle = FlatStyle.Flat,
             BackColor = Color.FromArgb(20, 36, 30),
             ForeColor = Color.FromArgb(52, 168, 138),
             Font = new Font("Segoe UI", 8.5f, FontStyle.Bold)
         };
-        btnTrainWave.Click += (s, ev) => {
-            porygon.TriggerTrainingWave(screenW, screenH);
-            updateSwarmLabel();
-            this.Invalidate();
-        };
 
         Button btnCycleScene = new Button {
             Text = "🌲 Entorno 3D [1/3..3/3] (Ctrl+Alt+M)",
-            Location = new Point(256, 104),
-            Size = new Size(226, 30),
+            Location = new Point(260, 112),
+            Size = new Size(230, 30),
             FlatStyle = FlatStyle.Flat,
             BackColor = Color.FromArgb(28, 36, 24),
             ForeColor = Color.FromArgb(186, 138, 56),
             Font = new Font("Segoe UI", 8.5f, FontStyle.Bold)
         };
-        btnCycleScene.Click += (s, ev) => {
-            CycleBgSceneMode();
-            updateSwarmLabel();
-            this.Invalidate();
-        };
 
         Button btnGamerMode = new Button {
-            Location = new Point(22, 140),
-            Size = new Size(460, 34),
+            Location = new Point(22, 148),
+            Size = new Size(468, 34),
             FlatStyle = FlatStyle.Flat,
-            Font = new Font("Segoe UI", 9.2f, FontStyle.Bold)
+            Font = new Font("Segoe UI", 9.0f, FontStyle.Bold)
         };
         Action updateGamerBtn = () => {
             if (isGamerSuspended || Config.GamerMode) {
-                btnGamerMode.Text = "🎮 MODO GAMER ACTIVO (0.0% GPU // HIBERNACIÓN TOTAL) — Click o Ctrl+Alt+G para Reanudar";
+                btnGamerMode.Text = "🎮 MODO GAMER ACTIVO (0.0% GPU // HIBERNACIÓN TOTAL) — Click o Ctrl+Alt+G";
                 btnGamerMode.BackColor = Color.FromArgb(22, 92, 62);
                 btnGamerMode.ForeColor = Color.FromArgb(165, 255, 210);
             } else {
@@ -8619,11 +8725,6 @@ public class HackerWallpaperForm : Form {
             }
         };
         updateGamerBtn();
-        btnGamerMode.Click += (s, ev) => {
-            ToggleGamerMode();
-            updateGamerBtn();
-            updateSwarmLabel();
-        };
 
         configForm.Controls.Add(lblSwarm);
         configForm.Controls.Add(lblSwarmStatus);
@@ -8632,10 +8733,10 @@ public class HackerWallpaperForm : Form {
         configForm.Controls.Add(btnGamerMode);
 
         // --- PALETA DE COLORES ---
-        Label lblTheme = new Label { Text = "Paleta de Colores (Descanso Visual / Eye-Care Mate):", Location = new Point(22, 182), AutoSize = true };
+        Label lblTheme = new Label { Text = "Paleta de Colores (Descanso Visual / Eye-Care Mate):", Location = new Point(22, 188), AutoSize = true };
         ComboBox cbTheme = new ComboBox {
-            Location = new Point(22, 203),
-            Width = 460,
+            Location = new Point(22, 208),
+            Width = 468,
             DropDownStyle = ComboBoxStyle.DropDownList,
             BackColor = Color.FromArgb(16, 28, 24),
             ForeColor = Color.White
@@ -8655,11 +8756,11 @@ public class HackerWallpaperForm : Form {
         configForm.Controls.Add(lblTheme);
         configForm.Controls.Add(cbTheme);
 
-        Label lblSpeed = new Label { Text = string.Format("Velocidad de Lluvia de Código: {0}%", Config.RainSpeed), Location = new Point(22, 236), AutoSize = true };
+        Label lblSpeed = new Label { Text = string.Format("Velocidad de Lluvia de Código: {0}%", Config.RainSpeed), Location = new Point(22, 240), AutoSize = true };
         TrackBar tbSpeed = new TrackBar {
-            Location = new Point(22, 256),
+            Location = new Point(22, 260),
             AutoSize = false,
-            Size = new Size(460, 28),
+            Size = new Size(468, 26),
             Minimum = 0,
             Maximum = 200,
             TickStyle = TickStyle.None,
@@ -8673,11 +8774,11 @@ public class HackerWallpaperForm : Form {
         configForm.Controls.Add(lblSpeed);
         configForm.Controls.Add(tbSpeed);
 
-        Label lblDens = new Label { Text = string.Format("Densidad de Columnas: {0}", Config.RainDensity), Location = new Point(22, 288), AutoSize = true };
+        Label lblDens = new Label { Text = string.Format("Densidad de Columnas: {0}", Config.RainDensity), Location = new Point(22, 290), AutoSize = true };
         TrackBar tbDens = new TrackBar {
-            Location = new Point(22, 308),
+            Location = new Point(22, 310),
             AutoSize = false,
-            Size = new Size(460, 28),
+            Size = new Size(468, 26),
             Minimum = 20,
             Maximum = 110,
             TickStyle = TickStyle.None,
@@ -8696,7 +8797,7 @@ public class HackerWallpaperForm : Form {
         TrackBar tbScale = new TrackBar {
             Location = new Point(22, 360),
             AutoSize = false,
-            Size = new Size(460, 28),
+            Size = new Size(468, 26),
             Minimum = 50,
             Maximum = 160,
             TickStyle = TickStyle.None,
@@ -8711,7 +8812,7 @@ public class HackerWallpaperForm : Form {
         configForm.Controls.Add(tbScale);
 
         CheckBox chkAutoGamer = new CheckBox {
-            Text = "Auto-Activar Modo Gamer (0.0% GPU) al detectar Videojuegos en Pantalla Completa",
+            Text = "Auto-Activar Modo Gamer (0.0% GPU) en Videojuegos Pantalla Completa",
             Location = new Point(24, 396),
             AutoSize = true,
             ForeColor = Color.FromArgb(110, 242, 188),
@@ -8767,8 +8868,8 @@ public class HackerWallpaperForm : Form {
 
         Button btnClose = new Button {
             Text = "Guardar y Cerrar Panel",
-            Location = new Point(24, 576),
-            Size = new Size(458, 38),
+            Location = new Point(24, 582),
+            Size = new Size(466, 42),
             FlatStyle = FlatStyle.Flat,
             BackColor = Color.FromArgb(52, 168, 138),
             ForeColor = Color.FromArgb(8, 16, 14),
@@ -8784,6 +8885,308 @@ public class HackerWallpaperForm : Form {
         configForm.Controls.Add(chkRad);
         configForm.Controls.Add(chkPory);
         configForm.Controls.Add(btnClose);
+
+        // =========================================================================
+        // COLUMNA DERECHA (X = 510, Width = 558): AVANCE DE GENERACIONES Y MEJORAS
+        // =========================================================================
+        Label lblEvoTitle = new Label {
+            Text = "🧬 AVANCE DE GENERACIONES, GENOMA Y MEJORAS EVOLUTIVAS (EN VIVO)",
+            ForeColor = Color.FromArgb(88, 226, 184),
+            Font = new Font("Consolas", 9.8f, FontStyle.Bold),
+            Location = new Point(510, 12),
+            AutoSize = true
+        };
+        configForm.Controls.Add(lblEvoTitle);
+
+        Label lblEvoKpi = new Label {
+            Location = new Point(510, 34),
+            Size = new Size(558, 66),
+            Font = new Font("Consolas", 8.2f, FontStyle.Regular),
+            ForeColor = Color.FromArgb(214, 236, 224),
+            BackColor = Color.FromArgb(12, 22, 20),
+            BorderStyle = BorderStyle.FixedSingle
+        };
+        configForm.Controls.Add(lblEvoKpi);
+
+        // Custom Double-Buffered GDI+ Panel for Per-Agent Generational Progress, Improvements & 8-Gene Weights
+        Panel evoPanel = new Panel {
+            Location = new Point(510, 106),
+            Size = new Size(558, 326),
+            BackColor = Color.FromArgb(10, 16, 22),
+            BorderStyle = BorderStyle.FixedSingle
+        };
+        try {
+            typeof(Panel).InvokeMember("DoubleBuffered",
+                System.Reflection.BindingFlags.SetProperty | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic,
+                null, evoPanel, new object[] { true });
+        } catch { }
+
+        string[] geneShortNames = new string[] { "DL_Z", "UL_Z", "PING", "VT_PRT", "SYN_R", "ENTRP", "FN_B", "EXPLR" };
+
+        evoPanel.Paint += (s, pe) => {
+            Graphics g = pe.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
+            g.Clear(Color.FromArgb(9, 15, 20));
+
+            if (porygon == null || porygon.Agents.Count == 0) return;
+
+            int count = Math.Min(3, porygon.Agents.Count);
+            int cardH = 103;
+            using (Font fHeader = new Font("Consolas", 8.8f, FontStyle.Bold))
+            using (Font fBody = new Font("Consolas", 7.8f, FontStyle.Regular))
+            using (Font fTiny = new Font("Consolas", 7.1f, FontStyle.Regular))
+            using (SolidBrush txtMain = new SolidBrush(Color.FromArgb(224, 234, 230)))
+            using (SolidBrush txtSub = new SolidBrush(Color.FromArgb(164, 192, 184)))
+            using (SolidBrush txtGold = new SolidBrush(Color.FromArgb(245, 202, 78)))
+            using (SolidBrush txtGreen = new SolidBrush(Color.FromArgb(92, 236, 174)))
+            using (SolidBrush barTrack = new SolidBrush(Color.FromArgb(24, 38, 44))) {
+
+                for (int i = 0; i < count; i++) {
+                    Porygon3DAvatar.PorygonAgent ag = porygon.Agents[i];
+                    FlyBrainConnectome br = ag.Brain;
+                    int cy = 5 + i * (cardH + 4);
+                    Rectangle cardRect = new Rectangle(6, cy, evoPanel.Width - 14, cardH);
+
+                    using (SolidBrush cardBg = new SolidBrush(Color.FromArgb(16, 24, 30)))
+                    using (Pen cardBor = new Pen(Color.FromArgb(145, ag.AuraColor.R, ag.AuraColor.G, ag.AuraColor.B), 1.2f))
+                    using (SolidBrush agBrush = new SolidBrush(ag.AuraColor)) {
+                        g.FillRectangle(cardBg, cardRect);
+                        g.DrawRectangle(cardBor, cardRect);
+                        g.FillRectangle(agBrush, cardRect.X, cardRect.Y, 5, cardRect.Height);
+
+                        // Row 1: Agent Name, Generation, Stage, Level & LifeAge Progress Bar to Next Crossover
+                        string stageTag = br.GetLifeStageLabel();
+                        string hdr = string.Format("{0} // GEN G{1} [{2}] · LVL {3} ({4:N0} XP)",
+                            ag.Name, br.Generation, stageTag, br.Level, br.XP);
+                        g.DrawString(hdr, fHeader, agBrush, cardRect.X + 11, cardRect.Y + 5);
+
+                        // LifeAge Bar (0-100% toward G+1)
+                        int barX = cardRect.Right - 178;
+                        int barY = cardRect.Y + 6;
+                        int barW = 170;
+                        int barH = 14;
+                        float ageNorm = Math.Max(0f, Math.Min(1f, br.LifeAge / 100f));
+                        g.FillRectangle(barTrack, barX, barY, barW, barH);
+                        using (LinearGradientBrush ageGrad = new LinearGradientBrush(
+                            new Rectangle(barX, barY, Math.Max(2, barW), barH),
+                            Color.FromArgb(210, ag.AuraColor.R, ag.AuraColor.G, ag.AuraColor.B),
+                            Color.FromArgb(235, 245, 202, 78),
+                            LinearGradientMode.Horizontal)) {
+                            g.FillRectangle(ageGrad, barX, barY, (int)(barW * ageNorm), barH);
+                        }
+                        g.DrawRectangle(cardBor, barX, barY, barW, barH);
+                        string ageTxt = string.Format("CICLO:{0,2:0}% ➔ G{1}", br.LifeAge, br.Generation + 1);
+                        g.DrawString(ageTxt, fTiny, txtMain, barX + 6, barY + 1);
+
+                        // Row 2: Deltas vs Generation 1 Seed (76.0 Fit, 84.5% Acc, 1.00x Synaptic Gain)
+                        float dFit = br.FitnessScore - 76.0f;
+                        float dAcc = br.DetectionAccuracy - 84.5f;
+                        float dGainPct = (br.SynapticGain - 1.0f) * 100f;
+                        string row2 = string.Format(
+                            "MEJORAS vs G1: FIT {0:0.0} ({1:+0.0;-0.0;+0.0}) | ACC {2:0.0}% ({3:+0.0;-0.0;+0.0}%) | F2-AntiFN:{4:0.0}% | Sinapsis:x{5:0.00} (+{6:0}%)",
+                            br.FitnessScore, dFit, br.DetectionAccuracy, dAcc, br.F2Score, br.SynapticGain, dGainPct);
+                        g.DrawString(row2, fBody, txtGreen, cardRect.X + 11, cardRect.Y + 25);
+
+                        // Row 3: Confusion Matrix & Pruned Traits + Unlocked Skills
+                        string skills = br.GetUnlockedSkillsSummary();
+                        if (skills.Length > 35) skills = skills.Substring(0, 35) + "..";
+                        string row3 = string.Format(
+                            "IDS TP:{0} TN:{1} FN:{2} FP:{3} | σ-Mut:{4:0.000} | Podas:{5} ({6}) | Skills: {7}",
+                            br.TruePositives, br.TrueNegatives, br.FalseNegatives, br.FalsePositives,
+                            br.MutationSigma, br.PrunedTraitsCount, br.LastPrunedTrait ?? "NONE", skills);
+                        g.DrawString(row3, fTiny, txtSub, cardRect.X + 11, cardRect.Y + 43);
+
+                        // Row 4: 8-Gene Anomaly Genome Weights with visual mini-bars
+                        int gx0 = cardRect.X + 11;
+                        int gy0 = cardRect.Y + 62;
+                        int cellW = 65;
+                        for (int gIdx = 0; gIdx < 8; gIdx++) {
+                            float gw = (br.AnomalyGenome != null && gIdx < br.AnomalyGenome.Length) ? br.AnomalyGenome[gIdx] : 1.0f;
+                            int cx = gx0 + gIdx * cellW;
+                            float normW = Math.Max(0.05f, Math.Min(1.0f, gw / 3.2f));
+                            g.FillRectangle(barTrack, cx, gy0 + 14, cellW - 5, 6);
+                            Brush gBr = (gw >= 1.45f) ? txtGold : ((gw >= 1.0f) ? txtGreen : txtSub);
+                            g.FillRectangle(gBr, cx, gy0 + 14, (int)((cellW - 5) * normW), 6);
+                            g.DrawString(string.Format("{0}:{1:0.00}", geneShortNames[gIdx], gw), fTiny, gBr, cx, gy0);
+                        }
+
+                        // Row 5: Last Crossover Lineage Summary
+                        string crossInfo = string.Format("Último Cruce: {0} | Estado: {1}",
+                            br.LastCrossSummary ?? "G1(SEED)", br.ActiveStateName ?? "PATROL");
+                        if (crossInfo.Length > 86) crossInfo = crossInfo.Substring(0, 86);
+                        g.DrawString(crossInfo, fTiny, txtGold, cardRect.X + 11, cardRect.Y + 85);
+                    }
+                }
+            }
+        };
+        configForm.Controls.Add(evoPanel);
+
+        Button btnForceEvo = new Button {
+            Text = "🧬 Forzar Salto Generacional / Crossover (+1 Gen)",
+            Location = new Point(510, 438),
+            Size = new Size(274, 32),
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(20, 42, 34),
+            ForeColor = Color.FromArgb(98, 244, 190),
+            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold)
+        };
+
+        Button btnBoostLvl = new Button {
+            Text = "🚀 Subir Nivel / Boost Sináptico (+1 LVL)",
+            Location = new Point(794, 438),
+            Size = new Size(274, 32),
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(36, 32, 18),
+            ForeColor = Color.FromArgb(245, 202, 78),
+            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold)
+        };
+
+        configForm.Controls.Add(btnForceEvo);
+        configForm.Controls.Add(btnBoostLvl);
+
+        Label lblAuditLog = new Label {
+            Text = "Historial de Cruces Generacionales, Selección Natural y Poda de Rasgos Negativos:",
+            ForeColor = Color.FromArgb(186, 138, 56),
+            Font = new Font("Segoe UI", 8.8f, FontStyle.Bold),
+            Location = new Point(510, 476),
+            AutoSize = true
+        };
+        configForm.Controls.Add(lblAuditLog);
+
+        TextBox txtLineageLog = new TextBox {
+            Location = new Point(510, 496),
+            Size = new Size(558, 128),
+            Multiline = true,
+            ReadOnly = true,
+            ScrollBars = ScrollBars.Vertical,
+            BackColor = Color.FromArgb(8, 14, 18),
+            ForeColor = Color.FromArgb(196, 224, 212),
+            Font = new Font("Consolas", 7.8f, FontStyle.Regular),
+            BorderStyle = BorderStyle.FixedSingle
+        };
+        configForm.Controls.Add(txtLineageLog);
+
+        int lastHistoryCount = -1;
+        string lastHistoryTop = "";
+
+        Action updateEvoSection = () => {
+            if (porygon == null || porygon.Agents.Count == 0) return;
+            int maxGen = porygon.HighestGeneration;
+            float bestFit = porygon.BestSwarmFitness;
+            float avgAcc = porygon.AvgSwarmAccuracy;
+            float avgF2 = 0f, avgGain = 0f, avgSigma = 0f, avgAge = 0f;
+            int totPruned = 0;
+            for (int i = 0; i < porygon.Agents.Count; i++) {
+                FlyBrainConnectome b = porygon.Agents[i].Brain;
+                if (b.Generation > maxGen) maxGen = b.Generation;
+                if (b.FitnessScore > bestFit) bestFit = b.FitnessScore;
+                avgF2 += b.F2Score;
+                avgGain += b.SynapticGain;
+                avgSigma += b.MutationSigma;
+                avgAge += b.LifeAge;
+                totPruned += b.PrunedTraitsCount;
+            }
+            int cnt = porygon.Agents.Count;
+            avgF2 /= cnt;
+            avgGain /= cnt;
+            avgSigma /= cnt;
+            avgAge /= cnt;
+
+            float deltaFit = bestFit - 76.0f;
+            float deltaAcc = avgAcc - 84.5f;
+            float gainBonusPct = (avgGain - 1.0f) * 100f;
+            float sigmaReductionPct = Math.Max(0f, (0.080f - avgSigma) / 0.080f * 100f);
+
+            lblEvoKpi.Text = string.Format(
+                " LINAJE ACTUAL: G1 (Semilla) ➔ G{0} (Edad Media: {1:0}%) | Cruces Totales: {2} | Rasgos Podados: {3}\n" +
+                " MEJORAS ACUMULADAS: Fitness Élite {4:0.0} ({5:+0.0;-0.0;+0.0} vs G1) | Precisión Media {6:0.0}% ({7:+0.0;-0.0;+0.0}% vs G1)\n" +
+                " F2-Score Anti-FN: {8:0.0}% | Ganancia Sináptica: x{9:0.00} (+{10:0}%) | Estabilidad Genómica: +{11:0}% (σ={12:0.000})\n" +
+                " Entrenamiento CPU: {13:N0} steps/s | VirusTotal v3: {14} consultas ({15} IOCs / {16} limpios)",
+                maxGen, avgAge, porygon.TotalCrossovers, Math.Max(totPruned, porygon.TotalPrunedTraits),
+                bestFit, deltaFit, avgAcc, deltaAcc,
+                avgF2, avgGain, gainBonusPct, sigmaReductionPct, avgSigma,
+                porygon.CpuTrainingStepsPerSec, porygon.VtApiQueries, porygon.VtMaliciousHits, porygon.VtCleanVerified);
+
+            evoPanel.Invalidate();
+
+            lock (porygon.LineageAuditHistory) {
+                int hCnt = porygon.LineageAuditHistory.Count;
+                string topEntry = (hCnt > 0) ? porygon.LineageAuditHistory[hCnt - 1] : "";
+                if (hCnt != lastHistoryCount || topEntry != lastHistoryTop) {
+                    lastHistoryCount = hCnt;
+                    lastHistoryTop = topEntry;
+                    if (hCnt == 0) {
+                        txtLineageLog.Text =
+                            "[INFO] Los agentes evolucionan automáticamente al completar el 100% de su ciclo de vida (AGE),\r\n" +
+                            "o puedes pulsar [🧬 Forzar Salto Generacional / Crossover (+1 Gen)] arriba para cruzar y auditar ahora.\r\n" +
+                            "Cada generación aplica Selección Natural (Penalización FN 3.5x + Poda de Rasgos Negativos + Mutación Adaptativa).";
+                    } else {
+                        StringBuilder sb = new StringBuilder();
+                        for (int i = hCnt - 1; i >= 0; i--) {
+                            sb.AppendLine(porygon.LineageAuditHistory[i]);
+                        }
+                        txtLineageLog.Text = sb.ToString();
+                    }
+                }
+            }
+        };
+        updateEvoSection();
+
+        btnTrainWave.Click += (s, ev) => {
+            porygon.TriggerTrainingWave(screenW, screenH);
+            updateSwarmLabel();
+            updateEvoSection();
+            this.Invalidate();
+        };
+
+        btnCycleScene.Click += (s, ev) => {
+            CycleBgSceneMode();
+            updateSwarmLabel();
+            this.Invalidate();
+        };
+
+        btnGamerMode.Click += (s, ev) => {
+            ToggleGamerMode();
+            updateGamerBtn();
+            updateSwarmLabel();
+            updateEvoSection();
+        };
+
+        btnForceEvo.Click += (s, ev) => {
+            if (porygon != null) {
+                porygon.ForceEvolutionaryCrossoverAll();
+                hudConnectomeDirty = true;
+                hudBrain3DDirty = true;
+                updateSwarmLabel();
+                updateEvoSection();
+                this.Invalidate();
+            }
+        };
+
+        btnBoostLvl.Click += (s, ev) => {
+            if (porygon != null) {
+                porygon.BoostAllLevels();
+                hudConnectomeDirty = true;
+                hudBrain3DDirty = true;
+                updateSwarmLabel();
+                updateEvoSection();
+                this.Invalidate();
+            }
+        };
+
+        System.Windows.Forms.Timer cfgRefreshTimer = new System.Windows.Forms.Timer();
+        cfgRefreshTimer.Interval = 900;
+        cfgRefreshTimer.Tick += (s, ev) => {
+            if (configForm == null || configForm.IsDisposed || !configForm.Visible) return;
+            updateSwarmLabel();
+            updateGamerBtn();
+            updateEvoSection();
+        };
+        cfgRefreshTimer.Start();
+        configForm.FormClosed += (s, ev) => {
+            try { cfgRefreshTimer.Stop(); cfgRefreshTimer.Dispose(); } catch { }
+        };
 
         configForm.Show();
     }
