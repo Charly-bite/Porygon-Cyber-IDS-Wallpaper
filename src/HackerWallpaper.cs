@@ -2371,20 +2371,24 @@ public class Porygon3DAvatar {
                                 string k3d = MakeEdge3DKey(pos[va], pos[vb]);
                                 List<int> adj;
                                 if (edge3DMap.TryGetValue(k3d, out adj) && adj.Count >= 2) {
-                                    int otherT = (adj[0] == tIdx) ? adj[1] : adj[0];
-                                    float dotN = Math.Abs(Vec3.Dot(triNorms[tIdx], triNorms[otherT]));
-                                    bool sameFamily = (triIsPink[tIdx] == triIsPink[otherT]);
-                                    bool isCenterline = (Math.Abs(pos[va].X) < 0.02f && Math.Abs(pos[vb].X) < 0.02f);
-                                    bool isHorizontalRidge = (Math.Abs(pos[va].Y - pos[vb].Y) < 0.02f && Math.Abs(pos[va].Z - pos[vb].Z) < 0.02f);
-                                    bool isTailFin = (Math.Min(pos[va].Z, pos[vb].Z) < -1.55f);
-                                    if (!sameFamily) {
-                                        isContour = true;
-                                    } else if (isTailFin) {
-                                        isContour = isCenterline;
-                                    } else if (dotN < 0.900f || isHorizontalRidge) {
-                                        isContour = true;
-                                    } else if (!isCenterline) {
+                                    if (tIdx != adj[0]) {
                                         isContour = false;
+                                    } else {
+                                        int otherT = adj[1];
+                                        float dotN = Math.Abs(Vec3.Dot(triNorms[tIdx], triNorms[otherT]));
+                                        bool sameFamily = (triIsPink[tIdx] == triIsPink[otherT]);
+                                        bool isCenterline = (Math.Abs(pos[va].X) < 0.02f && Math.Abs(pos[vb].X) < 0.02f);
+                                        bool isHorizontalRidge = (Math.Abs(pos[va].Y - pos[vb].Y) < 0.02f && Math.Abs(pos[va].Z - pos[vb].Z) < 0.02f);
+                                        bool isTailFin = (Math.Min(pos[va].Z, pos[vb].Z) < -1.55f);
+                                        if (!sameFamily) {
+                                            isContour = true;
+                                        } else if (isTailFin) {
+                                            isContour = isCenterline;
+                                        } else if (dotN < 0.900f || isHorizontalRidge) {
+                                            isContour = true;
+                                        } else if (!isCenterline) {
+                                            isContour = false;
+                                        }
                                     }
                                 }
                             }
@@ -4252,11 +4256,11 @@ public class Porygon3DAvatar {
         }
         GpuGl.glEnd();
 
-        // Hardware Z-Buffered Cel-Shaded Black Contour Edges for Porygon (facets, color seams, and hexagonal eyes)
+        // Hardware Z-Buffered Subtle 1px Contour Edges for Porygon (matching the delicate ~1px seams of Porygon2 & Porygon-Z)
         if (bFaces.Count < 1000) {
-            GpuGl.glEnable(GpuGl.GL_LINE_SMOOTH);
-            GpuGl.glLineWidth(Math.Max(1.45f, 1.95f * zDepthScale));
-            GpuGl.glColor4ub(12, 15, 22, 245);
+            GpuGl.glDisable(GpuGl.GL_LINE_SMOOTH);
+            GpuGl.glLineWidth(1.0f);
+            GpuGl.glColor4ub(18, 22, 30, 68);
             GpuGl.glBegin(GpuGl.GL_LINES);
             for (int i = 0; i < bFaces.Count; i++) {
                 Face3D f = bFaces[i];
@@ -4264,7 +4268,7 @@ public class Porygon3DAvatar {
                 if (mask == 0) continue;
                 int i0 = f.Indices[0], i1 = f.Indices[1], i2 = f.Indices[2];
                 PointF p0 = pv[i0], p1 = pv[i1], p2 = pv[i2];
-                float zBias = f.DepthBias + 2.2f;
+                float zBias = f.DepthBias + 1.8f;
                 float z0 = tv[i0].Z + zBias;
                 float z1 = tv[i1].Z + zBias;
                 float z2 = tv[i2].Z + zBias;
@@ -4282,7 +4286,7 @@ public class Porygon3DAvatar {
                 }
             }
             GpuGl.glEnd();
-            GpuGl.glDisable(GpuGl.GL_LINE_SMOOTH);
+            GpuGl.glEnable(GpuGl.GL_LINE_SMOOTH);
         }
 
         GpuGl.glDisable(GpuGl.GL_DEPTH_TEST);
@@ -4608,49 +4612,40 @@ public class Porygon3DAvatar {
             }
             g.SmoothingMode = prevMode;
         } else {
-            float contourW = Math.Max(1.45f, 1.95f * zDepthScale * (userScale / 100f));
-            using (Pen contourPen = new Pen(Color.FromArgb(245, 12, 15, 22), contourW)) {
-                contourPen.StartCap = LineCap.Round;
-                contourPen.EndCap = LineCap.Round;
+            using (Pen contourPen = new Pen(Color.FromArgb(68, 18, 22, 30), 1.0f)) {
                 int cIdx = 0;
                 for (int i = 0; i < renderList.Count; i++) {
                     ProjectedFace pf = renderList[i];
-                    while (cIdx < i && renderList[cIdx].Depth + 3.8f <= pf.Depth) {
+                    while (cIdx < i && renderList[cIdx].Depth + (renderList[cIdx].IsEyeOverlay ? 3.8f : 11.5f) <= pf.Depth) {
                         ProjectedFace cf = renderList[cIdx++];
-                        if (cf.IsEyeOverlay && cf.ContourMask != 0) {
+                        if (cf.ContourMask != 0) {
+                            SmoothingMode prevSm = g.SmoothingMode;
+                            g.SmoothingMode = SmoothingMode.None;
                             byte cm = cf.ContourMask;
                             if ((cm & 1) != 0) g.DrawLine(contourPen, cf.Pts[0], cf.Pts[1]);
                             if ((cm & 2) != 0) g.DrawLine(contourPen, cf.Pts[1], cf.Pts[2]);
                             if ((cm & 4) != 0) g.DrawLine(contourPen, cf.Pts[2], cf.Pts[0]);
+                            g.SmoothingMode = prevSm;
                         }
                     }
                     using (SolidBrush fb = new SolidBrush(pf.ShadedColor))
                     using (Pen seamPen = new Pen(pf.ShadedColor, 1.0f)) {
                         g.FillPolygon(fb, pf.Pts);
-                        byte mask = pf.ContourMask;
-                        if (mask == 0) {
-                            g.DrawPolygon(seamPen, pf.Pts);
-                        } else {
-                            if ((mask & 1) == 0) g.DrawLine(seamPen, pf.Pts[0], pf.Pts[1]);
-                            if ((mask & 2) == 0) g.DrawLine(seamPen, pf.Pts[1], pf.Pts[2]);
-                            if ((mask & 4) == 0) g.DrawLine(seamPen, pf.Pts[2], pf.Pts[0]);
-                            if (!pf.IsEyeOverlay) {
-                                if ((mask & 1) != 0) g.DrawLine(contourPen, pf.Pts[0], pf.Pts[1]);
-                                if ((mask & 2) != 0) g.DrawLine(contourPen, pf.Pts[1], pf.Pts[2]);
-                                if ((mask & 4) != 0) g.DrawLine(contourPen, pf.Pts[2], pf.Pts[0]);
-                            }
-                        }
+                        g.DrawPolygon(seamPen, pf.Pts);
                     }
                 }
+                SmoothingMode prevSmEnd = g.SmoothingMode;
+                g.SmoothingMode = SmoothingMode.None;
                 while (cIdx < renderList.Count) {
                     ProjectedFace cf = renderList[cIdx++];
-                    if (cf.IsEyeOverlay && cf.ContourMask != 0) {
+                    if (cf.ContourMask != 0) {
                         byte cm = cf.ContourMask;
                         if ((cm & 1) != 0) g.DrawLine(contourPen, cf.Pts[0], cf.Pts[1]);
                         if ((cm & 2) != 0) g.DrawLine(contourPen, cf.Pts[1], cf.Pts[2]);
                         if ((cm & 4) != 0) g.DrawLine(contourPen, cf.Pts[2], cf.Pts[0]);
                     }
                 }
+                g.SmoothingMode = prevSmEnd;
             }
         }
 
