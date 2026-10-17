@@ -4,6 +4,7 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $installDir = Join-Path $env:LOCALAPPDATA "Programs\HackerWallpaper"
 New-Item -ItemType Directory -Path "$installDir\Models" -Force | Out-Null
+New-Item -ItemType Directory -Path "$installDir\web" -Force | Out-Null
 
 # Compile first
 & "$PSScriptRoot\build.ps1"
@@ -21,6 +22,9 @@ Copy-Item "$repoRoot\bin\HackerWallpaper.exe" "$installDir\HackerWallpaper.exe" 
 Copy-Item "$repoRoot\bin\HackerLockScreen.exe" "$installDir\HackerLockScreen.exe" -Force
 Copy-Item "$repoRoot\bin\TrayAutoHide.exe" "$installDir\TrayAutoHide.exe" -Force
 Copy-Item "$repoRoot\Models\*.glb" "$installDir\Models\" -Force
+if (Test-Path "$repoRoot\web") {
+    Copy-Item "$repoRoot\web\*" "$installDir\web\" -Recurse -Force
+}
 
 # Register auto-start in HKCU Run, Startup Folder, Start Menu Hotkeys, and Interactive Scheduled Task
 $runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
@@ -53,6 +57,14 @@ try {
     $lnkCtrlW.WorkingDirectory = $installDir
     $lnkCtrlW.Hotkey = "Ctrl+Alt+W"
     $lnkCtrlW.Save()
+
+    # Start Menu shortcut for Porygon Web SOC Dashboard (Ctrl+Alt+S)
+    $lnkWebSoc = $wsh.CreateShortcut("$startPrograms\Porygon Web SOC.lnk")
+    $lnkWebSoc.TargetPath = "$installDir\HackerWallpaper.exe"
+    $lnkWebSoc.Arguments = "--web"
+    $lnkWebSoc.WorkingDirectory = $installDir
+    $lnkWebSoc.Hotkey = "Ctrl+Alt+S"
+    $lnkWebSoc.Save()
 } catch { }
 
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME

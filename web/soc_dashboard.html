@@ -1,0 +1,993 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PORYGON CYBER-DEFENSE SOC // SIEM · Antivirus/EDR · Active IPS · Live TCP/PID</title>
+<style>
+  :root {
+    --bg-deep: #060b0e;
+    --bg-panel: #0c141b;
+    --bg-card: #101b24;
+    --bg-hover: #152430;
+    --border-teal: rgba(52, 168, 138, 0.42);
+    --border-gold: rgba(245, 202, 78, 0.45);
+    --border-red: rgba(248, 113, 113, 0.5);
+    --teal: #34d399;
+    --teal-dim: #2ca882;
+    --cyan: #38bdf8;
+    --gold: #facc15;
+    --amber: #f59e0b;
+    --red: #f87171;
+    --txt-main: #e2e8f0;
+    --txt-sub: #94a3b8;
+    --font-mono: 'Consolas', 'JetBrains Mono', 'Courier New', monospace;
+    --font-sans: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: radial-gradient(circle at 50% 0%, #0d1d22 0%, var(--bg-deep) 75%);
+    color: var(--txt-main);
+    font-family: var(--font-sans);
+    min-height: 100vh;
+    padding-bottom: 40px;
+  }
+  /* TOP NAVBAR */
+  .topbar {
+    background: rgba(9, 16, 22, 0.94);
+    border-bottom: 1px solid var(--border-teal);
+    padding: 12px 24px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    backdrop-filter: blur(8px);
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .brand-badge {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--teal);
+    box-shadow: 0 0 10px var(--teal);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.25); opacity: 0.65; }
+  }
+  .brand-title {
+    font-family: var(--font-mono);
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--teal);
+    letter-spacing: 0.5px;
+  }
+  .brand-sub {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--txt-sub);
+  }
+  .sys-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+  .pill {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    background: var(--bg-card);
+    border: 1px solid rgba(52, 168, 138, 0.3);
+    padding: 5px 10px;
+    border-radius: 4px;
+    color: var(--txt-main);
+  }
+  .pill strong { color: var(--teal); }
+  .pill.gold strong { color: var(--gold); }
+  .pill.cyan strong { color: var(--cyan); }
+
+  .container {
+    max-width: 1560px;
+    margin: 0 auto;
+    padding: 18px 22px;
+  }
+
+  /* LIVE BANNER */
+  .action-banner {
+    background: linear-gradient(90deg, rgba(16, 36, 32, 0.9), rgba(14, 24, 34, 0.9));
+    border: 1px solid var(--border-teal);
+    border-left: 4px solid var(--gold);
+    border-radius: 6px;
+    padding: 10px 16px;
+    margin-bottom: 16px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+  }
+  .action-banner .status-text { color: var(--gold); font-weight: 600; }
+  .action-banner .log-path { color: var(--txt-sub); font-size: 11.5px; }
+
+  /* ACTION TOOLBAR */
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 18px;
+    align-items: center;
+  }
+  .btn {
+    font-family: var(--font-sans);
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 8px 14px;
+    border-radius: 5px;
+    cursor: pointer;
+    border: 1px solid var(--border-teal);
+    background: #122822;
+    color: #6ee7b7;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    text-decoration: none;
+  }
+  .btn:hover { background: #193830; transform: translateY(-1px); }
+  .btn:active { transform: translateY(0); }
+  .btn-cyan { background: #122436; border-color: rgba(56, 189, 248, 0.45); color: #7dd3fc; }
+  .btn-cyan:hover { background: #19334d; }
+  .btn-gold { background: #282210; border-color: var(--border-gold); color: var(--gold); }
+  .btn-gold:hover { background: #383016; }
+  .btn-red { background: #32161b; border-color: var(--border-red); color: #fca5a5; }
+  .btn-red:hover { background: #451d24; }
+  .btn-sm { padding: 4px 9px; font-size: 11.5px; font-family: var(--font-mono); }
+
+  /* TRIAD CARDS */
+  .triad-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    margin-bottom: 18px;
+  }
+  @media (max-width: 1100px) { .triad-grid { grid-template-columns: 1fr; } }
+  .agent-card {
+    background: var(--bg-panel);
+    border: 1px solid var(--border-teal);
+    border-radius: 7px;
+    padding: 13px 16px;
+    position: relative;
+    overflow: hidden;
+  }
+  .agent-card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 4px;
+    background: var(--teal);
+  }
+  .agent-card.p2::before { background: var(--gold); }
+  .agent-card.pz::before { background: var(--red); }
+  .agent-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+    font-family: var(--font-mono);
+  }
+  .agent-name { font-size: 14px; font-weight: 700; color: var(--teal); }
+  .agent-card.p2 .agent-name { color: var(--gold); }
+  .agent-card.pz .agent-name { color: var(--red); }
+  .agent-role {
+    font-size: 11px;
+    padding: 2px 7px;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.06);
+    color: var(--txt-main);
+  }
+  .agent-stats {
+    font-family: var(--font-mono);
+    font-size: 11.8px;
+    color: var(--txt-sub);
+    line-height: 1.55;
+  }
+  .agent-stats strong { color: var(--txt-main); }
+
+  /* TABS */
+  .tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid rgba(52, 168, 138, 0.25);
+    padding-bottom: 8px;
+    flex-wrap: wrap;
+  }
+  .tab-btn {
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    font-weight: 700;
+    padding: 8px 16px;
+    border-radius: 5px;
+    cursor: pointer;
+    background: var(--bg-panel);
+    color: var(--txt-sub);
+    border: 1px solid rgba(255,255,255,0.08);
+    transition: all 0.15s;
+  }
+  .tab-btn:hover { color: var(--txt-main); background: var(--bg-hover); }
+  .tab-btn.active {
+    background: rgba(52, 168, 138, 0.18);
+    color: var(--teal);
+    border-color: var(--teal);
+  }
+
+  /* PANELS & TABLES */
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  @media (max-width: 1180px) { .grid-2 { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--bg-panel);
+    border: 1px solid var(--border-teal);
+    border-radius: 7px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .panel-header {
+    padding: 11px 15px;
+    background: rgba(16, 29, 38, 0.85);
+    border-bottom: 1px solid rgba(52, 168, 138, 0.25);
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+  }
+  .panel-title {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--teal);
+  }
+  .panel-title.gold { color: var(--gold); }
+  .panel-title.red { color: var(--red); }
+  .panel-title.cyan { color: var(--cyan); }
+
+  .panel-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .input-txt {
+    background: #081016;
+    border: 1px solid rgba(52, 168, 138, 0.4);
+    color: var(--txt-main);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 6px 10px;
+    border-radius: 4px;
+    outline: none;
+  }
+  .input-txt:focus { border-color: var(--teal); }
+
+  .table-wrap {
+    max-height: 390px;
+    overflow-y: auto;
+  }
+  .table-wrap.tall { max-height: 540px; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-mono);
+    font-size: 11.8px;
+  }
+  th {
+    position: sticky;
+    top: 0;
+    background: #0d1821;
+    color: var(--txt-sub);
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 1px solid rgba(52, 168, 138, 0.3);
+    font-weight: 700;
+    z-index: 2;
+  }
+  td {
+    padding: 7px 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    vertical-align: top;
+    word-break: break-word;
+  }
+  tr:hover td { background: rgba(52, 168, 138, 0.06); }
+
+  /* BADGES */
+  .badge {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 10.5px;
+    font-weight: 700;
+    font-family: var(--font-mono);
+  }
+  .b-crit { background: rgba(248, 113, 113, 0.2); color: #fca5a5; border: 1px solid rgba(248, 113, 113, 0.5); }
+  .b-high { background: rgba(250, 204, 21, 0.18); color: #fde047; border: 1px solid rgba(250, 204, 21, 0.45); }
+  .b-info { background: rgba(52, 211, 153, 0.15); color: #6ee7b7; border: 1px solid rgba(52, 211, 153, 0.35); }
+  .b-mitre { background: rgba(56, 189, 248, 0.15); color: #7dd3fc; border: 1px solid rgba(56, 189, 248, 0.35); }
+
+  /* DROPZONE */
+  .scan-bar {
+    padding: 12px 15px;
+    background: rgba(12, 22, 30, 0.9);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+  }
+  .drop-zone {
+    border: 1px dashed var(--gold);
+    background: rgba(250, 204, 21, 0.05);
+    color: var(--gold);
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    cursor: pointer;
+  }
+  .drop-zone:hover { background: rgba(250, 204, 21, 0.12); }
+
+  /* TOAST */
+  #toast {
+    position: fixed;
+    bottom: 22px;
+    right: 22px;
+    background: #0d1f1c;
+    border: 1px solid var(--teal);
+    border-left: 5px solid var(--teal);
+    color: var(--txt-main);
+    padding: 12px 18px;
+    border-radius: 6px;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.65);
+    display: none;
+    z-index: 999;
+    max-width: 480px;
+  }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+  <!-- TOP BAR -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-badge" id="connDot"></div>
+      <div>
+        <div class="brand-title">🛡️ PORYGON CYBER-DEFENSE SOC // WEB COMMAND CENTER</div>
+        <div class="brand-sub" id="subStatus">SIEM + Antivirus/EDR + Active IPS Firewall + Live Kernel TCP/PID Mapper (Modo Híbrido)</div>
+      </div>
+    </div>
+    <div class="sys-pills">
+      <div class="pill">CPU: <strong id="kCpu">--%</strong></div>
+      <div class="pill gold">GPU: <strong id="kGpu">--%</strong> (<span id="kFps">--</span> FPS)</div>
+      <div class="pill">RAM: <strong id="kRam">--%</strong></div>
+      <div class="pill cyan">NET: <strong id="kNet">-- KB/s</strong> | PING: <strong id="kPing">--ms</strong></div>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- STATUS BANNER -->
+    <div class="action-banner">
+      <div>⚡ ESTADO SOC: <span class="status-text" id="bannerText">CONECTANDO CON PORYGON CYBER-DEFENSE ENGINE...</span></div>
+      <div class="log-path">SIEM JSONL: <span id="jsonlPath">C:\Users\Admin\Porygon-Cyber-IDS-Wallpaper\logs\siem_security_events.jsonl</span></div>
+    </div>
+
+    <!-- GLOBAL ACTION TOOLBAR -->
+    <div class="toolbar">
+      <button class="btn" onclick="triggerAudit()">🔍 Auditar Red TCP/PID + Registro + Startup Ahora</button>
+      <button class="btn btn-cyan" onclick="swarmAction('train_wave')">⚡ Simular Oleada IDS</button>
+      <button class="btn btn-gold" onclick="swarmAction('force_evo')">🧬 Forzar Cruce Generacional (+1 Gen)</button>
+      <button class="btn btn-gold" onclick="swarmAction('boost_lvl')">🚀 Subir Nivel Sináptico (+1 LVL)</button>
+      <button class="btn btn-cyan" onclick="swarmAction('cycle_scene')">🌲 Cambiar Escena 3D (<span id="lblScene">1/3</span>)</button>
+      <button class="btn" id="btnGamer" onclick="swarmAction('toggle_gamer')">🎮 Modo Gamer 0% GPU</button>
+      <a class="btn btn-gold" href="/api/siem-jsonl" target="_blank">📥 Ver / Descargar SIEM JSONL</a>
+    </div>
+
+    <!-- 3 PORYGON EVOLUTION CARDS -->
+    <div class="triad-grid">
+      <div class="agent-card p1">
+        <div class="agent-header">
+          <span class="agent-name" id="ag0Name">PORYGON // GEN G1</span>
+          <span class="agent-role">NIDS + PID MAPPER + SIEM</span>
+        </div>
+        <div class="agent-stats" id="ag0Stats">
+          Procesos TCP Auditados: <strong id="kPidCnt">0</strong> | Alertas SIEM: <strong id="kSiemCnt">0</strong><br>
+          F2-Score Anti-FN: <strong>--%</strong> | Fitness: <strong>--</strong> | Precisión: <strong>--%</strong>
+        </div>
+      </div>
+
+      <div class="agent-card p2">
+        <div class="agent-header">
+          <span class="agent-name" id="ag1Name">PORYGON2 // GEN G1</span>
+          <span class="agent-role">REAL-TIME AV / EDR ENGINE</span>
+        </div>
+        <div class="agent-stats" id="ag1Stats">
+          Archivos Analizados (SHA-256 + Entropía): <strong id="kAvCnt">0</strong><br>
+          Candidato Cuarentena: <strong id="kCandFile">Ninguno</strong>
+        </div>
+      </div>
+
+      <div class="agent-card pz">
+        <div class="agent-header">
+          <span class="agent-name" id="ag2Name">PORYGON-Z // GEN G1</span>
+          <span class="agent-role">ACTIVE IPS FIREWALL + VAULT</span>
+        </div>
+        <div class="agent-stats" id="ag2Stats">
+          Acciones IPS: <strong id="kIpsCnt">0</strong> | IPs Bloqueadas: <strong id="kFwCnt">0</strong> | En Cuarentena: <strong id="kQuarCnt">0</strong><br>
+          Candidato Bloqueo IP: <strong id="kCandIp">Ninguna</strong>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW TABS -->
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('all', this)">🛡️ Vista Unificada SOC (4 Consolas)</button>
+      <button class="tab-btn" onclick="switchTab('tcp', this)">🌐 Conexiones Activas TCP ↔ PID / Authenticode (<span id="tabTcpCnt">0</span>)</button>
+      <button class="tab-btn" onclick="switchTab('siem', this)">📡 Eventos SIEM & MITRE ATT&CK (<span id="tabSiemCnt">0</span>)</button>
+      <button class="tab-btn" onclick="switchTab('av', this)">🧬 Escáner Antivirus / EDR (<span id="tabAvCnt">0</span>)</button>
+      <button class="tab-btn" onclick="switchTab('ips', this)">🔥 Firewall IPS & Bóveda de Cuarentena</button>
+    </div>
+
+    <!-- SECTION: LIVE TCP <-> PID / AUTHENTICODE TABLE -->
+    <section id="secTcp" class="panel" style="margin-bottom: 16px;">
+      <div class="panel-header">
+        <div class="panel-title cyan">🌐 CONEXIONES TCP ACTIVAS EN TIEMPO REAL ↔ PROCESO / PID / FIRMA AUTHENTICODE (GetExtendedTcpTable)</div>
+        <div class="panel-controls">
+          <input type="text" id="tcpFilter" class="input-txt" placeholder="Filtrar por proceso, PID, IP o puerto..." oninput="renderTcpTable()">
+          <button class="btn btn-sm btn-cyan" onclick="fetchState()">🔄 Actualizar Tabla</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>PID</th>
+              <th>Proceso (.exe)</th>
+              <th>Firma Authenticode</th>
+              <th>Socket Local</th>
+              <th>IP Remota : Puerto</th>
+              <th>Protocolo / Estado</th>
+              <th>Riesgo</th>
+              <th>Acciones 1-Click</th>
+            </tr>
+          </thead>
+          <tbody id="tcpBody">
+            <tr><td colspan="8" style="color:var(--txt-sub);">Cargando tabla extendida TCP/PID del kernel...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ROW 1: SIEM EVENTS & ANTIVIRUS / EDR -->
+    <div class="grid-2" id="secSiemAv">
+      <!-- PANEL 1: SIEM -->
+      <section class="panel" id="panelSiem">
+        <div class="panel-header">
+          <div class="panel-title">📡 EVENTOS SIEM & CORRELACIÓN MITRE ATT&CK</div>
+          <div class="panel-controls">
+            <select id="siemSevFilter" class="input-txt" onchange="renderSiemTable()">
+              <option value="ALL">Todas las Severidades</option>
+              <option value="CRITICAL">CRITICAL</option>
+              <option value="HIGH">HIGH</option>
+              <option value="INFO">INFO</option>
+            </select>
+            <input type="text" id="siemSearch" class="input-txt" placeholder="Buscar MITRE, proceso, IP..." oninput="renderSiemTable()">
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Hora</th>
+                <th>Sev / MITRE</th>
+                <th>Agente / Proceso</th>
+                <th>Objetivo & Detalle</th>
+                <th>Acción</th>
+              </tr>
+            </thead>
+            <tbody id="siemBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- PANEL 2: ANTIVIRUS / EDR -->
+      <section class="panel" id="panelAv">
+        <div class="panel-header">
+          <div class="panel-title gold">🧬 ANTIVIRUS / EDR EN TIEMPO REAL — PORYGON2 (SHA-256 + Entropía)</div>
+          <div class="panel-controls">
+            <input type="text" id="avSearch" class="input-txt" placeholder="Filtrar archivo o SHA-256..." oninput="renderAvTable()">
+          </div>
+        </div>
+        <!-- ON-DEMAND FILE SCANNER FROM BROWSER -->
+        <div class="scan-bar">
+          <input type="text" id="customScanPath" class="input-txt" style="flex:1; min-width:220px;" placeholder="Ruta local a escanear (ej. C:\Users\Admin\Downloads\archivo.exe)">
+          <button class="btn btn-sm btn-gold" onclick="scanLocalPath()">🔍 Escanear Ruta</button>
+          <label class="drop-zone">
+            📂 Subir / Analizar Archivo desde Navegador
+            <input type="file" id="fileUploadInput" style="display:none" onchange="uploadAndScanFile(this)">
+          </label>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Hora</th>
+                <th>Veredicto / Riesgo</th>
+                <th>Archivo & Indicadores</th>
+                <th>Entropía / SHA-256</th>
+                <th>Acción</th>
+              </tr>
+            </thead>
+            <tbody id="avBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <!-- ROW 2: FIREWALL IPS & QUARANTINE VAULT -->
+    <div class="grid-2" id="secIpsQuar">
+      <!-- PANEL 3: FIREWALL IPS -->
+      <section class="panel">
+        <div class="panel-header">
+          <div class="panel-title red">🔥 IPS ACTIVO // REGLAS DE BLOQUEO EN WINDOWS FIREWALL (PORYGON-Z)</div>
+          <div class="panel-controls">
+            <input type="text" id="manualBlockIp" class="input-txt" placeholder="IP a bloquear (ej. 217.20.155.41)" style="width:185px;">
+            <button class="btn btn-sm btn-red" onclick="blockIpManual()">🔥 Bloquear IP</button>
+            <button class="btn btn-sm btn-gold" onclick="blockCandidateIp()">⚡ Bloquear Candidata</button>
+          </div>
+        </div>
+        <div class="table-wrap" style="max-height:250px;">
+          <table>
+            <thead>
+              <tr>
+                <th>Regla Windows Firewall</th>
+                <th>Dirección IP Remota Bloqueada</th>
+                <th>Estado</th>
+                <th>Acción 1-Click</th>
+              </tr>
+            </thead>
+            <tbody id="fwBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- PANEL 4: QUARANTINE VAULT -->
+      <section class="panel">
+        <div class="panel-header">
+          <div class="panel-title gold">☣️ BÓVEDA DE CUARENTENA AV (.qz) — PORYGON2 / PORYGON-Z</div>
+          <div class="panel-controls">
+            <button class="btn btn-sm btn-gold" onclick="quarantineCandidateFile()">☣️ Aislar Último Archivo Sospechoso</button>
+          </div>
+        </div>
+        <div class="table-wrap" style="max-height:250px;">
+          <table>
+            <thead>
+              <tr>
+                <th>ID / Fecha</th>
+                <th>Archivo</th>
+                <th>Ruta Original & SHA-256</th>
+                <th>Acción 1-Click</th>
+              </tr>
+            </thead>
+            <tbody id="quarBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <div id="toast"></div>
+
+<script>
+  let lastState = null;
+  let activeTab = 'all';
+
+  function showToast(msg, isAlert) {
+    const t = document.getElementById('toast');
+    t.style.borderColor = isAlert ? 'var(--red)' : 'var(--teal)';
+    t.style.borderLeftColor = isAlert ? 'var(--red)' : 'var(--gold)';
+    t.innerHTML = msg;
+    t.style.display = 'block';
+    clearTimeout(window._toastTimer);
+    window._toastTimer = setTimeout(() => { t.style.display = 'none'; }, 3600);
+  }
+
+  function switchTab(tab, btn) {
+    activeTab = tab;
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+
+    const secTcp = document.getElementById('secTcp');
+    const secSiemAv = document.getElementById('secSiemAv');
+    const panelSiem = document.getElementById('panelSiem');
+    const panelAv = document.getElementById('panelAv');
+    const secIpsQuar = document.getElementById('secIpsQuar');
+
+    secTcp.classList.remove('hidden');
+    secSiemAv.classList.remove('hidden');
+    panelSiem.classList.remove('hidden');
+    panelAv.classList.remove('hidden');
+    secIpsQuar.classList.remove('hidden');
+    secSiemAv.style.gridTemplateColumns = '1fr 1fr';
+
+    if (tab === 'tcp') {
+      secSiemAv.classList.add('hidden');
+      secIpsQuar.classList.add('hidden');
+    } else if (tab === 'siem') {
+      secTcp.classList.add('hidden');
+      panelAv.classList.add('hidden');
+      secIpsQuar.classList.add('hidden');
+      secSiemAv.style.gridTemplateColumns = '1fr';
+    } else if (tab === 'av') {
+      secTcp.classList.add('hidden');
+      panelSiem.classList.add('hidden');
+      secIpsQuar.classList.add('hidden');
+      secSiemAv.style.gridTemplateColumns = '1fr';
+    } else if (tab === 'ips') {
+      secTcp.classList.add('hidden');
+      secSiemAv.classList.add('hidden');
+    }
+  }
+
+  async function apiPost(url, bodyObj) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bodyObj || {})
+      });
+      const data = await res.json();
+      if (data && data.message) {
+        showToast(data.message, !data.ok);
+      }
+      await fetchState();
+      return data;
+    } catch (e) {
+      showToast('Error comunicando con el servicio SOC: ' + e.message, true);
+    }
+  }
+
+  function triggerAudit() {
+    showToast('🔍 Ejecutando auditoría rápida TCP/PID + Registro Run + Startup + Downloads...', false);
+    apiPost('/api/audit', {});
+  }
+
+  function swarmAction(act) {
+    apiPost('/api/swarm-action', { action: act });
+  }
+
+  function blockIp(ip, reason) {
+    if (!ip) return;
+    apiPost('/api/block-ip', { ip: ip, reason: reason || 'Web SOC 1-Click Block' });
+  }
+
+  function blockIpManual() {
+    const ip = document.getElementById('manualBlockIp').value.trim();
+    if (!ip) { showToast('Escribe una dirección IP para bloquear.', true); return; }
+    blockIp(ip, 'Bloqueo manual desde Web SOC');
+  }
+
+  function blockCandidateIp() {
+    if (!lastState || !lastState.candidateBlockIp) {
+      showToast('No hay ninguna IP sospechosa candidata pendiente.', true);
+      return;
+    }
+    blockIp(lastState.candidateBlockIp, '1-Click Web SOC Candidate Block');
+  }
+
+  function unblockIp(ip) {
+    apiPost('/api/unblock-ip', { ip: ip });
+  }
+
+  function quarantinePath(path) {
+    if (!path) return;
+    apiPost('/api/quarantine-file', { path: path });
+  }
+
+  function quarantineCandidateFile() {
+    if (!lastState || !lastState.candidateQuarantineFile) {
+      showToast('No hay ningún archivo sospechoso candidato pendiente.', true);
+      return;
+    }
+    quarantinePath(lastState.candidateQuarantineFile);
+  }
+
+  function restoreQuarantine(id) {
+    apiPost('/api/restore-quarantine', { id: id });
+  }
+
+  function scanLocalPath() {
+    const p = document.getElementById('customScanPath').value.trim();
+    if (!p) { showToast('Introduce la ruta completa del archivo local a escanear.', true); return; }
+    apiPost('/api/scan-file', { path: p });
+  }
+
+  function scanProcessExe(path) {
+    if (!path || path.indexOf(':') < 0) {
+      showToast('Ruta de proceso protegida por el kernel de Windows.', true);
+      return;
+    }
+    document.getElementById('customScanPath').value = path;
+    apiPost('/api/scan-file', { path: path });
+  }
+
+  async function uploadAndScanFile(input) {
+    if (!input.files || !input.files[0]) return;
+    const file = input.files[0];
+    showToast('🧬 Analizando ' + file.name + ' con Porygon2 (SHA-256 + Entropía)...', false);
+    const reader = new FileReader();
+    reader.onload = async function(evt) {
+      const base64 = evt.target.result.split(',')[1] || '';
+      await apiPost('/api/scan-upload', { fileName: file.name, base64: base64 });
+      input.value = '';
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function esc(s) {
+    if (s === null || s === undefined) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function renderTcpTable() {
+    if (!lastState || !lastState.activeConnections) return;
+    const q = (document.getElementById('tcpFilter').value || '').toLowerCase();
+    const rows = lastState.activeConnections.filter(c => {
+      if (!q) return true;
+      return (c.processName || '').toLowerCase().includes(q) ||
+             String(c.pid).includes(q) ||
+             (c.remoteEp || '').toLowerCase().includes(q) ||
+             (c.localEp || '').toLowerCase().includes(q) ||
+             (c.signer || '').toLowerCase().includes(q);
+    });
+    document.getElementById('tabTcpCnt').textContent = rows.length;
+    const tb = document.getElementById('tcpBody');
+    if (rows.length === 0) {
+      tb.innerHTML = '<tr><td colspan="8" style="color:var(--txt-sub);">Ninguna conexión coincide con el filtro.</td></tr>';
+      return;
+    }
+    tb.innerHTML = rows.map(c => {
+      const sevClass = c.risk >= 75 ? 'b-crit' : (c.risk >= 45 ? 'b-high' : 'b-info');
+      const signBadge = c.isSigned
+        ? `<span class="badge b-info">✔ SIGNED</span> <span style="color:var(--txt-sub);font-size:11px;">${esc(c.signer)}</span>`
+        : `<span class="badge b-crit">⚠ UNSIGNED</span>`;
+      const remIpOnly = (c.remoteEp || '').split(':')[0];
+      const safePath = (c.exePath || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      return `<tr>
+        <td><strong>${c.pid}</strong></td>
+        <td>
+          <strong style="color:${c.isLolBin ? 'var(--gold)' : 'var(--txt-main)'}">${esc(c.processName)}.exe</strong>
+          ${c.isLolBin ? '<span class="badge b-high">LOLBIN</span>' : ''}
+          <div style="color:var(--txt-sub);font-size:10.5px;">${esc(c.exePath)}</div>
+        </td>
+        <td>${signBadge}</td>
+        <td>${esc(c.localEp)}</td>
+        <td><strong style="color:var(--cyan)">${esc(c.remoteEp)}</strong></td>
+        <td>${esc(c.proto)} <span style="color:var(--txt-sub)">[${esc(c.state)}]</span></td>
+        <td><span class="badge ${sevClass}">${c.risk}%</span></td>
+        <td style="white-space:nowrap;">
+          <button class="btn btn-sm btn-red" onclick="blockIp('${esc(remIpOnly)}', 'TCP Table Block (${esc(c.processName)})')">🔥 Bloquear IP</button>
+          <button class="btn btn-sm btn-gold" onclick="scanProcessExe('${safePath}')">🔍 Analizar .exe</button>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  function renderSiemTable() {
+    if (!lastState || !lastState.siemEvents) return;
+    const sevF = document.getElementById('siemSevFilter').value;
+    const q = (document.getElementById('siemSearch').value || '').toLowerCase();
+    const rows = lastState.siemEvents.filter(e => {
+      if (sevF !== 'ALL' && e.severity !== sevF) return false;
+      if (!q) return true;
+      return (e.summary || '').toLowerCase().includes(q) ||
+             (e.process || '').toLowerCase().includes(q) ||
+             (e.target || '').toLowerCase().includes(q) ||
+             (e.mitre || '').toLowerCase().includes(q) ||
+             (e.module || '').toLowerCase().includes(q);
+    });
+    document.getElementById('tabSiemCnt').textContent = rows.length;
+    const tb = document.getElementById('siemBody');
+    if (rows.length === 0) {
+      tb.innerHTML = '<tr><td colspan="5" style="color:var(--txt-sub);">Sin eventos SIEM que coincidan con el filtro.</td></tr>';
+      return;
+    }
+    tb.innerHTML = rows.map(e => {
+      const bCls = e.severity === 'CRITICAL' ? 'b-crit' : (e.severity === 'HIGH' ? 'b-high' : 'b-info');
+      const isIp = /^\d{1,3}(\.\d{1,3}){3}/.test(e.target || '');
+      const isFile = (e.target || '').indexOf(':\\') > 0 && !e.target.startsWith('HK');
+      const safeTarget = (e.target || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      let actBtn = `<span class="badge b-info">${esc(e.action)}</span>`;
+      if (isIp) {
+        const ipOnly = e.target.split(':')[0];
+        actBtn += ` <button class="btn btn-sm btn-red" onclick="blockIp('${esc(ipOnly)}', 'SIEM Alert Block')">🔥 Bloquear</button>`;
+      } else if (isFile && e.action !== 'QUARANTINED' && e.action !== 'AUTO_QUARANTINED') {
+        actBtn += ` <button class="btn btn-sm btn-gold" onclick="quarantinePath('${safeTarget}')">☣️ Aislar</button>`;
+      }
+      return `<tr>
+        <td style="white-space:nowrap;color:var(--txt-sub);">${esc(e.timestamp)}</td>
+        <td style="white-space:nowrap;">
+          <span class="badge ${bCls}">${esc(e.severity)}</span>
+          <span class="badge b-mitre">${esc(e.mitre)}</span>
+        </td>
+        <td>
+          <strong>${esc(e.agent)}</strong> <span style="color:var(--txt-sub)">// ${esc(e.module)}</span><br>
+          <span style="color:var(--gold)">${esc(e.process)}</span>
+        </td>
+        <td>
+          <div style="color:var(--cyan);font-weight:600;">${esc(e.target)}</div>
+          <div style="color:var(--txt-sub);font-size:11px;">${esc(e.summary)}</div>
+        </td>
+        <td style="white-space:nowrap;">${actBtn}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  function renderAvTable() {
+    if (!lastState || !lastState.avScans) return;
+    const q = (document.getElementById('avSearch').value || '').toLowerCase();
+    const rows = lastState.avScans.filter(r => {
+      if (!q) return true;
+      return (r.fileName || '').toLowerCase().includes(q) ||
+             (r.sha256 || '').toLowerCase().includes(q) ||
+             (r.verdict || '').toLowerCase().includes(q) ||
+             (r.fullPath || '').toLowerCase().includes(q);
+    });
+    document.getElementById('tabAvCnt').textContent = rows.length;
+    const tb = document.getElementById('avBody');
+    if (rows.length === 0) {
+      tb.innerHTML = '<tr><td colspan="5" style="color:var(--txt-sub);">Pulsa [🔍 Auditar Red TCP/PID + Registro + Startup Ahora] o sube un archivo para analizarlo.</td></tr>';
+      return;
+    }
+    tb.innerHTML = rows.map(r => {
+      const bCls = r.risk >= 80 ? 'b-crit' : (r.risk >= 50 ? 'b-high' : 'b-info');
+      const safePath = (r.fullPath || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      return `<tr>
+        <td style="white-space:nowrap;color:var(--txt-sub);">${esc(r.timestamp)}</td>
+        <td>
+          <span class="badge ${bCls}">${esc(r.verdict)} (${r.risk}%)</span><br>
+          <span class="badge b-mitre" style="margin-top:3px;">${esc(r.mitre)}</span>
+        </td>
+        <td>
+          <strong style="color:var(--txt-main)">${esc(r.fileName)}</strong> <span style="color:var(--txt-sub)">(${Number(r.sizeBytes || 0).toLocaleString()} B)</span>
+          <div style="color:var(--gold);font-size:11px;">${esc(r.detail)}</div>
+          <div style="color:var(--txt-sub);font-size:10.5px;">${esc(r.fullPath)}</div>
+        </td>
+        <td>
+          <div>Entropía: <strong>${r.entropy} bits/B</strong></div>
+          <div style="color:var(--txt-sub);font-size:10.5px;" title="${esc(r.sha256)}">SHA256: ${esc((r.sha256 || '').substring(0, 16))}...</div>
+        </td>
+        <td style="white-space:nowrap;">
+          <button class="btn btn-sm btn-gold" onclick="quarantinePath('${safePath}')">☣️ Cuarentena</button>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  function renderFwAndQuar() {
+    if (!lastState) return;
+    const fwTb = document.getElementById('fwBody');
+    const ips = lastState.blockedIps || [];
+    if (ips.length === 0) {
+      fwTb.innerHTML = '<tr><td colspan="4" style="color:var(--txt-sub);">Ninguna IP bloqueada actualmente en Windows Firewall.</td></tr>';
+    } else {
+      fwTb.innerHTML = ips.map(ip => `<tr>
+        <td><code>PorygonIPS_Block_${esc(ip)}</code></td>
+        <td><strong style="color:var(--red)">${esc(ip)}</strong></td>
+        <td><span class="badge b-crit">BLOCKED IN/OUT</span></td>
+        <td><button class="btn btn-sm" onclick="unblockIp('${esc(ip)}')">🔓 Desbloquear en Firewall</button></td>
+      </tr>`).join('');
+    }
+
+    const qTb = document.getElementById('quarBody');
+    const qFiles = lastState.quarantinedFiles || [];
+    if (qFiles.length === 0) {
+      qTb.innerHTML = '<tr><td colspan="4" style="color:var(--txt-sub);">Bóveda de Cuarentena vacía.</td></tr>';
+    } else {
+      qTb.innerHTML = qFiles.map(q => `<tr>
+        <td>
+          <strong>${esc(q.id)}</strong>
+          <div style="color:var(--txt-sub);font-size:10.5px;">${esc(q.timestamp)}</div>
+        </td>
+        <td><strong style="color:var(--gold)">${esc(q.fileName)}</strong></td>
+        <td>
+          <div style="font-size:11px;">${esc(q.originalPath)}</div>
+          <div style="color:var(--txt-sub);font-size:10.5px;">SHA256: ${esc((q.sha256 || '').substring(0, 20))}...</div>
+        </td>
+        <td><button class="btn btn-sm" onclick="restoreQuarantine('${esc(q.id)}')">♻️ Restaurar Archivo</button></td>
+      </tr>`).join('');
+    }
+  }
+
+  async function fetchState() {
+    try {
+      const res = await fetch('/api/state');
+      const st = await res.json();
+      lastState = st;
+
+      document.getElementById('connDot').style.background = 'var(--teal)';
+      document.getElementById('kCpu').textContent = st.cpu + '%';
+      document.getElementById('kGpu').textContent = st.gpu + '%';
+      document.getElementById('kFps').textContent = st.fps;
+      document.getElementById('kRam').textContent = st.ramPct + '% (' + st.ramUsed + 'G)';
+      document.getElementById('kNet').textContent = '↓' + st.downKbps + ' ↑' + st.upKbps + ' KB/s';
+      document.getElementById('kPing').textContent = st.pingMs + 'ms';
+
+      document.getElementById('bannerText').textContent = st.lastActionBanner || 'HYBRID_DEFENSE_ONLINE';
+      document.getElementById('jsonlPath').textContent = st.jsonlPath || '';
+      document.getElementById('lblScene').textContent = (st.bgSceneMode + 1) + '/3 ' + st.bgSceneName;
+
+      const btnG = document.getElementById('btnGamer');
+      if (st.gamerMode) {
+        btnG.textContent = '🎮 MODO GAMER ACTIVO (0% GPU)';
+        btnG.className = 'btn btn-gold';
+      } else {
+        btnG.textContent = '🎮 Modo Gamer 0% GPU';
+        btnG.className = 'btn';
+      }
+
+      if (st.agents && st.agents.length >= 3) {
+        const a0 = st.agents[0], a1 = st.agents[1], a2 = st.agents[2];
+        document.getElementById('ag0Name').textContent = `${a0.name} // GEN G${a0.gen} · LVL ${a0.lvl}`;
+        document.getElementById('ag0Stats').innerHTML =
+          `Procesos TCP Auditados: <strong>${st.totalPidAudits}</strong> | Alertas SIEM: <strong>${st.totalSiemAlerts}</strong><br>` +
+          `F2-Score Anti-FN: <strong>${a0.f2}%</strong> | Fitness: <strong>${a0.fit}</strong> | Precisión: <strong>${a0.acc}%</strong>`;
+
+        document.getElementById('ag1Name').textContent = `${a1.name} // GEN G${a1.gen} · LVL ${a1.lvl}`;
+        document.getElementById('ag1Stats').innerHTML =
+          `Archivos Escaneados (SHA-256 + Entropía): <strong>${st.totalAvScans}</strong> | Candidato: <strong>${esc(st.candidateQuarantineName || 'Ninguno')}</strong><br>` +
+          `F2-Score Anti-FN: <strong>${a1.f2}%</strong> | Fitness: <strong>${a1.fit}</strong> | Precisión: <strong>${a1.acc}%</strong>`;
+
+        document.getElementById('ag2Name').textContent = `${a2.name} // GEN G${a2.gen} · LVL ${a2.lvl}`;
+        document.getElementById('ag2Stats').innerHTML =
+          `Acciones IPS: <strong>${st.totalIpsActions}</strong> | IPs Bloqueadas: <strong>${(st.blockedIps||[]).length}</strong> | Cuarentena: <strong>${(st.quarantinedFiles||[]).length}</strong><br>` +
+          `Candidato Bloqueo IP: <strong style="color:var(--red)">${esc(st.candidateBlockIp || 'Ninguna')}</strong> (${esc(st.candidateBlockProc || '-')})`;
+      }
+
+      const manualIpInput = document.getElementById('manualBlockIp');
+      if (!manualIpInput.value && st.candidateBlockIp) {
+        manualIpInput.value = st.candidateBlockIp;
+      }
+
+      renderTcpTable();
+      renderSiemTable();
+      renderAvTable();
+      renderFwAndQuar();
+    } catch (e) {
+      document.getElementById('connDot').style.background = 'var(--red)';
+    }
+  }
+
+  fetchState();
+  setInterval(fetchState, 1500);
+</script>
+</body>
+</html>

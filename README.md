@@ -57,14 +57,22 @@ Cada evolución de la tríada **Porygon** ejecuta un módulo real de defensa sob
    * Calcula el hash **`SHA-256` real**, mide la **Entropía de Shannon ($0\text{–}8\text{ bits/byte}$)** para detectar binarios empaquetados/cifrados (`H >= 7.30b`, `MITRE T1027`), verifica la firma `Authenticode` e inspecciona indicadores estáticos de evasión (`FromBase64String`, `-enc`, `AmsiUtils`, `DownloadString`, `VirtualAlloc`).
 3. **`PORYGON-Z` — IPS Activo en Windows Firewall + Bóveda de Cuarentena AV (Modo Híbrido):**
    * **Política Híbrida Inteligente:** Bloquea automáticamente en Windows Firewall (`netsh advfirewall firewall add rule name="PorygonIPS_Block_<IP>"`) o aísla en la Bóveda de Cuarentena (`.qz`) únicamente amenazas críticas confirmadas (`Score >= 0.92` / `0.94`), protegiendo siempre IPs LAN/DNS (`RFC1918`, `127.0.0.1`, `1.1.1.1`, `8.8.8.8`) y binarios del sistema.
-   * **Botones 1-Click en el HUD y Centro de Comando SOC (`Ctrl + Alt + S`):** Incluye botones interactivos **`[SIEM/IPS]`**, **`[SCAN]`**, **`[BLOCK IP]`** y **`[QUAR]`** directamente en la tarjeta HUD del escritorio, además de la ventana dedicada **`ShowSiemCommandCenterWindow`** para auditar eventos SIEM, escanear archivos bajo demanda, desbloquear IPs del Firewall o restaurar archivos en cuarentena con un clic.
+   * **Botones 1-Click en el HUD y Centro de Comando Web SOC (`Ctrl + Alt + S`):** Incluye botones interactivos **`[SIEM/IPS]`**, **`[SCAN]`**, **`[BLOCK IP]`** y **`[QUAR]`** directamente en la tarjeta HUD del escritorio, además del servicio web completo en **`http://localhost:5090/`**.
+
+### 6. 🌐 Servicio Web SOC / SIEM / EDR / IPS en Tiempo Real (`http://localhost:5090/`)
+`HackerWallpaper.exe` levanta automáticamente al iniciar un **Servidor HTTP/REST Multi-Hilo embebido (`TcpListener` en `0.0.0.0:5090`, cero permisos de administrador para URL ACL y 0 MB de procesos extra)** que sirve el panel web interactivo [`web/soc_dashboard.html`](web/soc_dashboard.html):
+* **Tabla en Vivo `TCP <-> PID / Authenticode`:** Muestra todas las conexiones activas del kernel (`GetExtendedTcpTable`), el proceso propietario (`PID`, ruta `.exe`), firma digital (`Microsoft`, `Fortinet`, `UNSIGNED`, `LOLBIN`) y botones por fila para **`[🔥 Bloquear IP]`** o **`[🔍 Analizar .exe]`**.
+* **Consola SIEM & Correlación MITRE ATT&CK:** Filtro en tiempo real por severidad (`ALL`, `CRITICAL`, `HIGH`, `INFO`), buscador instantáneo, descarga directa de `siem_security_events.jsonl` y botones de respuesta en 1 clic.
+* **Escáner Antivirus / EDR (`Porygon2`) con Subida Drag & Drop desde el Navegador:** Escanea rutas locales o permite **arrastrar/subir cualquier archivo desde el navegador (`POST /api/scan-upload`)** para calcular al instante su hash `SHA-256`, Entropía de Shannon (`0–8 bits/byte`), firma `Authenticode` y heurística estática.
+* **Gestor Web de Firewall IPS y Bóveda de Cuarentena (`.qz`):** Bloquea o desbloquea IPs en Windows Firewall y aísla o restaura archivos en cuarentena a su ruta original desde el navegador.
+* **Control Remoto del Enjambre 3D y Wallpaper:** Botones web para *Auditar Ahora*, *Simular Oleada IDS*, *Forzar Cruce +1 Gen*, *Subir Nivel +1 LVL*, *Cambiar Escena 3D (`1/3..3/3`)* y *Activar/Desactivar Modo Gamer 0% GPU*.
 
 ---
 
 ## ⌨️ Atajos de Teclado Globales
 | Atajo | Acción |
 | :--- | :--- |
-| **`Ctrl + Alt + S`** | Abre el **Centro de Comando SOC / SIEM / IPS / Antivirus / Bóveda de Cuarentena**. |
+| **`Ctrl + Alt + S`** | Abre el **Web SOC Dashboard (`http://localhost:5090/`)** en tu navegador predeterminado (también accesible haciendo clic en **`[SIEM/IPS]`** en el HUD). |
 | **`Ctrl + Alt + W`** | Abre el **Panel de Configuración y Evolución Genómica en Vivo**. |
 | **`Ctrl + Alt + G`** | Activa / desactiva el **Modo Gamer (0.0% GPU // Hibernación Total)**. |
 | **`Ctrl + Alt + M`** | Alterna en vivo entre los **3 Entornos 3D Procedurales de Fondo** (`SELVA+OSC` $\rightarrow$ `TOPO+MESH` $\rightarrow$ `MYCELIUM`). |
@@ -84,7 +92,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1
 ```
 
 ## 📁 Estructura del Repositorio
-* `src/HackerWallpaper.cs` — Motor principal OpenGL + GDI+ del Wallpaper, 3 Entornos 3D Poligonales, Renderizador 3D GLB, Conectoma Anatómico 3D `FlyBrainConnectome`, Detector Estadístico IDS, Integración VirusTotal v3 y Radar 360°.
+* `src/HackerWallpaper.cs` — Motor principal OpenGL + GDI+ del Wallpaper, Servidor HTTP/REST Web SOC (`:5090`), Motor `PorygonCyberDefenseEngine` (NIDS+PID, AV/EDR, SIEM, Firewall IPS y Cuarentena), 3 Entornos 3D Poligonales y Conectoma Anatómico 3D `FlyBrainConnectome`.
+* `web/soc_dashboard.html` — Aplicación Web Single-Page Cyberpunk para operar el SOC / SIEM / Antivirus / IPS / Cuarentena desde cualquier navegador en `http://localhost:5090/`.
 * `src/HackerLockScreen.cs` — Protector / Pantalla de bloqueo animada Cyberpunk.
 * `src/TrayAutoHide.cs` — Utilidad ligera para auto-ocultar iconos secundarios de la bandeja del sistema sin alterar la composición DWM (`Shell_TrayWnd`).
 * `Models/` — Modelos 3D `.glb` de `Porygon`, `Porygon2` y `Porygon-Z`.

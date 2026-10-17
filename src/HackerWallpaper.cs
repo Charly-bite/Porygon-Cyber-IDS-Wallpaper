@@ -555,6 +555,23 @@ public static class PorygonCyberDefenseEngine {
         public string Reason;
     }
 
+    public class LiveTcpConnectionRow {
+        public int Pid;
+        public string ProcessName;
+        public string ExePath;
+        public bool IsSigned;
+        public string Signer;
+        public bool IsLolBin;
+        public string LocalEp;
+        public string RemoteEp;
+        public string Proto;
+        public string State;
+        public int RiskPct;
+    }
+
+    public const int WebSocPort = 5090;
+    public static string WebSocUrl { get { return "http://localhost:" + WebSocPort + "/"; } }
+
     public static readonly object SyncLock = new object();
     private static Dictionary<int, ProcessSecurityInfo> pidCache = new Dictionary<int, ProcessSecurityInfo>();
     private static Dictionary<string, string> baselineRunRegistry = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -566,6 +583,7 @@ public static class PorygonCyberDefenseEngine {
     public static List<AvScanReport> RecentAvScans = new List<AvScanReport>();
     public static List<string> BlockedFirewallIps = new List<string>();
     public static List<QuarantineRecord> QuarantinedFiles = new List<QuarantineRecord>();
+    public static List<LiveTcpConnectionRow> ActiveTcpRows = new List<LiveTcpConnectionRow>();
 
     // Active Hybrid IPS / AV Candidates for 1-Click HUD Response
     public static string LastCandidateBlockIp = "";
@@ -582,16 +600,20 @@ public static class PorygonCyberDefenseEngine {
     public static int TotalAvFilesScanned = 0;
     public static int TotalSiemAlerts = 0;
     public static int TotalIpsActions = 0;
-    public static string LastActionBanner = "HYBRID_DEFENSE_ONLINE // NIDS+PID | AV_WATCHER | SIEM | IPS";
+    public static string LastActionBanner = "HYBRID_DEFENSE_ONLINE // WEB SOC ACTIVO EN http://localhost:5090";
 
     private static List<FileSystemWatcher> activeWatchers = new List<FileSystemWatcher>();
     private static Queue<string> pendingAvFiles = new Queue<string>();
     private static HashSet<string> recentlyScannedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     private static Thread avWorkerThread = null;
+    private static Thread webSocThread = null;
+    private static TcpListener webSocListener = null;
     private static bool engineInitialized = false;
 
-    // Callback to inject 3D threat orbs into Porygon3DAvatar when AV/SIEM detects a threat
+    // Callbacks to interact with HackerWallpaperForm & Porygon3DAvatar
     public static Action<int, string, string, string, string, string, string, float> OnInject3DThreatOrb = null;
+    public static Func<Dictionary<string, object>> OnQueryFormState = null;
+    public static Action<string> OnSwarmWebAction = null;
 
     private static string AppBaseDir {
         get {
@@ -638,11 +660,12 @@ public static class PorygonCyberDefenseEngine {
             LoadPersistedIpsAndQuarantine();
             AuditRegistryPersistence(true);
             StartRealtimeAvWatchers();
+            StartWebSocServer();
 
             RecordSiemEvent("PORYGON", "SIEM_INIT", "INFO", "T1046", "HackerWallpaper.exe",
-                "LOCAL_HOST", "", 0.05f,
-                "Tríada Porygon Cyber Defense iniciada (GetExtendedTcpTable PID + AV Watcher + SIEM + Hybrid IPS)",
-                "ACTIVE");
+                "http://localhost:5090", "", 0.05f,
+                "Servicio Web Porygon Cyber Defense SOC activo en http://localhost:5090 (NIDS+PID + AV Watcher + SIEM + Hybrid IPS)",
+                "WEB_SOC_ONLINE");
 
             // Perform an initial non-blocking background audit of recent Downloads/Startup files
             ThreadPool.QueueUserWorkItem(_ => {
@@ -1479,6 +1502,350 @@ public static class PorygonCyberDefenseEngine {
         } catch {
             return false;
         }
+    }
+
+    // =========================================================================
+    // MODULE 5: EMBEDDED HTTP/REST WEB SOC SERVICE (http://localhost:5090/)
+    // =========================================================================
+    public static void OpenWebSocInBrowser() {
+        try {
+            Process.Start(new ProcessStartInfo(WebSocUrl) { UseShellExecute = true });
+        } catch {
+            try { Process.Start("cmd.exe", "/c start " + WebSocUrl); } catch { }
+        }
+    }
+
+    private static string ResolveWebDashboardHtmlPath() {
+        string p1 = @"C:\Users\Admin\Porygon-Cyber-IDS-Wallpaper\web\soc_dashboard.html";
+        if (File.Exists(p1)) return p1;
+        string p2 = Path.Combine(AppBaseDir, "web", "soc_dashboard.html");
+        if (File.Exists(p2)) return p2;
+        string p3 = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "web", "soc_dashboard.html");
+        if (File.Exists(p3)) return p3;
+        return p1;
+    }
+
+    private static void StartWebSocServer() {
+        if (webSocThread != null) return;
+        webSocThread = new Thread(WebSocListenLoop);
+        webSocThread.IsBackground = true;
+        webSocThread.Start();
+    }
+
+    private static void WebSocListenLoop() {
+        try {
+            webSocListener = new TcpListener(IPAddress.Any, WebSocPort);
+            webSocListener.Start();
+            while (true) {
+                TcpClient client = webSocListener.AcceptTcpClient();
+                ThreadPool.QueueUserWorkItem(_ => HandleWebSocClient(client));
+            }
+        } catch { }
+    }
+
+    private static void HandleWebSocClient(TcpClient client) {
+        try {
+            client.ReceiveTimeout = 6000;
+            client.SendTimeout = 6000;
+            using (NetworkStream ns = client.GetStream()) {
+                string method, path, body;
+                if (!ReadHttpRequest(ns, out method, out path, out body)) return;
+
+                if (method == "OPTIONS") {
+                    WriteHttpResponse(ns, "200 OK", "text/plain", new byte[0]);
+                    return;
+                }
+
+                string cleanPath = path.Split('?')[0];
+                JavaScriptSerializer ser = new JavaScriptSerializer();
+                ser.MaxJsonLength = 32 * 1024 * 1024;
+
+                if (method == "GET" && (cleanPath == "/" || cleanPath == "/index.html" || cleanPath == "/soc")) {
+                    string htmlPath = ResolveWebDashboardHtmlPath();
+                    string html = File.Exists(htmlPath)
+                        ? File.ReadAllText(htmlPath, Encoding.UTF8)
+                        : "<html><body style='background:#081016;color:#34d399;font-family:monospace'><h2>Porygon Web SOC Online</h2><p>Archivo web/soc_dashboard.html no encontrado.</p></body></html>";
+                    WriteHttpResponse(ns, "200 OK", "text/html; charset=utf-8", Encoding.UTF8.GetBytes(html));
+                    return;
+                }
+
+                if (method == "GET" && cleanPath == "/api/siem-jsonl") {
+                    string p = File.Exists(ProjectSiemJsonlPath) ? ProjectSiemJsonlPath : SiemJsonlPath;
+                    string txt = File.Exists(p) ? File.ReadAllText(p, Encoding.UTF8) : "";
+                    WriteHttpResponse(ns, "200 OK", "text/plain; charset=utf-8", Encoding.UTF8.GetBytes(txt));
+                    return;
+                }
+
+                if (method == "GET" && cleanPath == "/api/state") {
+                    Dictionary<string, object> st = BuildWebStateDictionary();
+                    string json = ser.Serialize(st);
+                    WriteHttpResponse(ns, "200 OK", "application/json; charset=utf-8", Encoding.UTF8.GetBytes(json));
+                    return;
+                }
+
+                if (method == "POST") {
+                    Dictionary<string, object> req = null;
+                    if (!string.IsNullOrEmpty(body)) {
+                        try { req = ser.Deserialize<Dictionary<string, object>>(body); } catch { }
+                    }
+                    if (req == null) req = new Dictionary<string, object>();
+
+                    bool ok = false;
+                    string msg = "Comando procesado.";
+
+                    if (cleanPath == "/api/audit") {
+                        RunQuickDirectoryAudit(true);
+                        ok = true;
+                        msg = "✅ Auditoría completa (TCP/PID + Registro Run + Startup + Downloads) finalizada.";
+                    } else if (cleanPath == "/api/block-ip") {
+                        string ip = req.ContainsKey("ip") && req["ip"] != null ? req["ip"].ToString().Trim() : "";
+                        string reason = req.ContainsKey("reason") && req["reason"] != null ? req["reason"].ToString() : "Web SOC Block";
+                        ok = BlockRemoteIpInFirewall(ip, reason, false);
+                        msg = ok
+                            ? ("🔥 IP " + ip + " aislada en Windows Firewall (Regla PorygonIPS_Block_" + ip.Split(':')[0] + ").")
+                            : ("🛡️ IP " + ip + " protegida por Lista Blanca (LAN/DNS) o formato inválido.");
+                    } else if (cleanPath == "/api/unblock-ip") {
+                        string ip = req.ContainsKey("ip") && req["ip"] != null ? req["ip"].ToString().Trim() : "";
+                        ok = UnblockRemoteIpInFirewall(ip);
+                        msg = ok ? ("🔓 IP " + ip + " desbloqueada en Windows Firewall.") : "No se pudo desbloquear la IP.";
+                    } else if (cleanPath == "/api/quarantine-file") {
+                        string fpath = req.ContainsKey("path") && req["path"] != null ? req["path"].ToString().Trim() : "";
+                        AvScanReport rep = InspectFileArtifact(fpath, true);
+                        string sha = (rep != null) ? rep.Sha256 : "";
+                        float sc = (rep != null) ? rep.RiskScore : 0.85f;
+                        ok = QuarantineFile(fpath, "Web SOC 1-Click Quarantine", sha, sc);
+                        msg = ok
+                            ? ("☣️ Archivo aislado en Bóveda de Cuarentena: " + Path.GetFileName(fpath))
+                            : "🛡️ No se aisló el archivo (ruta no encontrada o binario protegido del sistema).";
+                    } else if (cleanPath == "/api/restore-quarantine") {
+                        string qid = req.ContainsKey("id") && req["id"] != null ? req["id"].ToString().Trim() : "";
+                        ok = RestoreQuarantinedFile(qid);
+                        msg = ok ? ("♻️ Archivo restaurado exitosamente a su ubicación original (ID: " + qid + ").") : "No se encontró el archivo en cuarentena.";
+                    } else if (cleanPath == "/api/scan-file") {
+                        string fpath = req.ContainsKey("path") && req["path"] != null ? req["path"].ToString().Trim().Trim('"') : "";
+                        AvScanReport rep = InspectFileArtifact(fpath, true);
+                        ok = (rep != null);
+                        msg = ok
+                            ? string.Format("🧬 Porygon2 AV: {0} -> {1} (Riesgo: {2:0}%, Entropía: {3:0.00}b, SHA256: {4}...)",
+                                rep.FileName, rep.Verdict, rep.RiskScore * 100f, rep.EntropyBits, rep.Sha256.Substring(0, 12))
+                            : "No se pudo abrir o analizar la ruta indicada: " + fpath;
+                    } else if (cleanPath == "/api/scan-upload") {
+                        string fName = req.ContainsKey("fileName") && req["fileName"] != null ? Path.GetFileName(req["fileName"].ToString()) : "uploaded_sample.bin";
+                        string b64 = req.ContainsKey("base64") && req["base64"] != null ? req["base64"].ToString() : "";
+                        if (!string.IsNullOrEmpty(b64)) {
+                            string sbDir = Path.Combine(Path.GetTempPath(), "PorygonAvSandbox");
+                            if (!Directory.Exists(sbDir)) Directory.CreateDirectory(sbDir);
+                            string sbPath = Path.Combine(sbDir, fName);
+                            byte[] rawBytes = Convert.FromBase64String(b64);
+                            File.WriteAllBytes(sbPath, rawBytes);
+                            AvScanReport rep = InspectFileArtifact(sbPath, true);
+                            ok = (rep != null);
+                            msg = ok
+                                ? string.Format("🧬 Muestra Analizada [{0}]: {1} | Riesgo: {2:0}% | Entropía: {3:0.00} bits/B | SHA-256: {4}",
+                                    rep.FileName, rep.Verdict, rep.RiskScore * 100f, rep.EntropyBits, rep.Sha256.Substring(0, 16))
+                                : "Error analizando muestra subida.";
+                        } else {
+                            msg = "Archivo vacío.";
+                        }
+                    } else if (cleanPath == "/api/swarm-action") {
+                        string act = req.ContainsKey("action") && req["action"] != null ? req["action"].ToString() : "";
+                        if (OnSwarmWebAction != null) {
+                            OnSwarmWebAction(act);
+                            ok = true;
+                            msg = "⚡ Acción ejecutada en el Enjambre 3D: " + act.ToUpperInvariant();
+                        }
+                    }
+
+                    Dictionary<string, object> resp = new Dictionary<string, object>();
+                    resp["ok"] = ok;
+                    resp["message"] = msg;
+                    WriteHttpResponse(ns, "200 OK", "application/json; charset=utf-8", Encoding.UTF8.GetBytes(ser.Serialize(resp)));
+                    return;
+                }
+
+                WriteHttpResponse(ns, "404 Not Found", "text/plain", Encoding.UTF8.GetBytes("Not Found"));
+            }
+        } catch {
+        } finally {
+            try { client.Close(); } catch { }
+        }
+    }
+
+    private static Dictionary<string, object> BuildWebStateDictionary() {
+        Dictionary<string, object> st = new Dictionary<string, object>();
+        if (OnQueryFormState != null) {
+            try {
+                Dictionary<string, object> formSt = OnQueryFormState();
+                if (formSt != null) {
+                    foreach (var kv in formSt) st[kv.Key] = kv.Value;
+                }
+            } catch { }
+        }
+
+        lock (SyncLock) {
+            st["totalPidAudits"] = TotalNidsProcessAudits;
+            st["totalAvScans"] = TotalAvFilesScanned;
+            st["totalSiemAlerts"] = TotalSiemAlerts;
+            st["totalIpsActions"] = TotalIpsActions;
+            st["lastActionBanner"] = LastActionBanner ?? "HYBRID_DEFENSE_ONLINE";
+            st["jsonlPath"] = ProjectSiemJsonlPath;
+            st["candidateBlockIp"] = LastCandidateBlockIp ?? "";
+            st["candidateBlockProc"] = LastCandidateBlockProc ?? "";
+            st["candidateQuarantineFile"] = LastCandidateQuarantineFile ?? "";
+            st["candidateQuarantineName"] = string.IsNullOrEmpty(LastCandidateQuarantineFile) ? "Ninguno" : Path.GetFileName(LastCandidateQuarantineFile);
+
+            List<Dictionary<string, object>> tcpList = new List<Dictionary<string, object>>();
+            for (int i = 0; i < ActiveTcpRows.Count; i++) {
+                var r = ActiveTcpRows[i];
+                var d = new Dictionary<string, object>();
+                d["pid"] = r.Pid;
+                d["processName"] = r.ProcessName ?? "System";
+                d["exePath"] = r.ExePath ?? "";
+                d["isSigned"] = r.IsSigned;
+                d["signer"] = r.Signer ?? "";
+                d["isLolBin"] = r.IsLolBin;
+                d["localEp"] = r.LocalEp ?? "";
+                d["remoteEp"] = r.RemoteEp ?? "";
+                d["proto"] = r.Proto ?? "";
+                d["state"] = r.State ?? "";
+                d["risk"] = r.RiskPct;
+                tcpList.Add(d);
+            }
+            st["activeConnections"] = tcpList;
+
+            List<Dictionary<string, object>> siemList = new List<Dictionary<string, object>>();
+            for (int i = RecentSiemEvents.Count - 1; i >= 0; i--) {
+                var e = RecentSiemEvents[i];
+                var d = new Dictionary<string, object>();
+                d["timestamp"] = e.Timestamp;
+                d["agent"] = e.AgentName;
+                d["module"] = e.Module;
+                d["severity"] = e.Severity;
+                d["mitre"] = e.MitreId;
+                d["process"] = e.ProcessInfo;
+                d["target"] = e.Target;
+                d["sha256"] = e.Sha256;
+                d["risk"] = (int)Math.Round(e.RiskScore * 100f);
+                d["summary"] = e.Summary;
+                d["action"] = e.ActionTaken;
+                siemList.Add(d);
+            }
+            st["siemEvents"] = siemList;
+
+            List<Dictionary<string, object>> avList = new List<Dictionary<string, object>>();
+            for (int i = RecentAvScans.Count - 1; i >= 0; i--) {
+                var r = RecentAvScans[i];
+                var d = new Dictionary<string, object>();
+                d["timestamp"] = r.Timestamp;
+                d["fileName"] = r.FileName;
+                d["fullPath"] = r.FullPath;
+                d["sha256"] = r.Sha256;
+                d["sizeBytes"] = r.FileSizeBytes;
+                d["entropy"] = r.EntropyBits.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+                d["isSigned"] = r.IsSigned;
+                d["signer"] = r.SignerName;
+                d["risk"] = (int)Math.Round(r.RiskScore * 100f);
+                d["verdict"] = r.Verdict;
+                d["mitre"] = r.MitreTactic;
+                d["detail"] = r.Detail;
+                avList.Add(d);
+            }
+            st["avScans"] = avList;
+
+            st["blockedIps"] = new List<string>(BlockedFirewallIps);
+
+            List<Dictionary<string, object>> qList = new List<Dictionary<string, object>>();
+            for (int i = QuarantinedFiles.Count - 1; i >= 0; i--) {
+                var q = QuarantinedFiles[i];
+                var d = new Dictionary<string, object>();
+                d["id"] = q.Id;
+                d["timestamp"] = q.Timestamp;
+                d["fileName"] = q.FileName;
+                d["originalPath"] = q.OriginalPath;
+                d["sha256"] = q.Sha256;
+                qList.Add(d);
+            }
+            st["quarantinedFiles"] = qList;
+        }
+        return st;
+    }
+
+    private static bool ReadHttpRequest(NetworkStream ns, out string method, out string path, out string body) {
+        method = "GET";
+        path = "/";
+        body = "";
+        using (MemoryStream ms = new MemoryStream()) {
+            byte[] buf = new byte[8192];
+            int headerEnd = -1;
+            int contentLen = 0;
+
+            while (headerEnd < 0) {
+                int r = ns.Read(buf, 0, buf.Length);
+                if (r <= 0) return false;
+                ms.Write(buf, 0, r);
+                byte[] cur = ms.ToArray();
+                for (int i = 0; i <= cur.Length - 4; i++) {
+                    if (cur[i] == 13 && cur[i + 1] == 10 && cur[i + 2] == 13 && cur[i + 3] == 10) {
+                        headerEnd = i + 4;
+                        break;
+                    }
+                }
+                if (ms.Length > 65536) return false;
+            }
+
+            byte[] allBytes = ms.ToArray();
+            string headerStr = Encoding.ASCII.GetString(allBytes, 0, headerEnd);
+            string[] lines = headerStr.Split(new string[] { "\r\n" }, StringSplitOptions.RemoveEmptyEntries);
+            if (lines.Length == 0) return false;
+
+            string[] reqParts = lines[0].Split(' ');
+            if (reqParts.Length >= 2) {
+                method = reqParts[0].ToUpperInvariant();
+                path = reqParts[1];
+            }
+
+            for (int i = 1; i < lines.Length; i++) {
+                if (lines[i].StartsWith("Content-Length:", StringComparison.OrdinalIgnoreCase)) {
+                    int.TryParse(lines[i].Substring(15).Trim(), out contentLen);
+                }
+            }
+
+            int bodyBytesRead = allBytes.Length - headerEnd;
+            while (bodyBytesRead < contentLen && contentLen < 25 * 1024 * 1024) {
+                int r = ns.Read(buf, 0, buf.Length);
+                if (r <= 0) break;
+                ms.Write(buf, 0, r);
+                bodyBytesRead += r;
+            }
+
+            if (contentLen > 0) {
+                byte[] finalBytes = ms.ToArray();
+                int actualLen = Math.Min(contentLen, finalBytes.Length - headerEnd);
+                if (actualLen > 0) {
+                    body = Encoding.UTF8.GetString(finalBytes, headerEnd, actualLen);
+                }
+            }
+            return true;
+        }
+    }
+
+    private static void WriteHttpResponse(NetworkStream ns, string status, string contentType, byte[] payload) {
+        if (payload == null) payload = new byte[0];
+        string hdr =
+            "HTTP/1.1 " + status + "\r\n" +
+            "Content-Type: " + contentType + "\r\n" +
+            "Content-Length: " + payload.Length + "\r\n" +
+            "Access-Control-Allow-Origin: *\r\n" +
+            "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n" +
+            "Access-Control-Allow-Headers: Content-Type\r\n" +
+            "Cache-Control: no-cache, no-store\r\n" +
+            "Connection: close\r\n\r\n";
+        byte[] hdrBytes = Encoding.ASCII.GetBytes(hdr);
+        ns.Write(hdrBytes, 0, hdrBytes.Length);
+        if (payload.Length > 0) {
+            ns.Write(payload, 0, payload.Length);
+        }
+        ns.Flush();
     }
 }
 
@@ -6306,7 +6673,7 @@ public class HackerWallpaperForm : Form {
         RebuildBackground();
         RebuildRainColumns();
 
-        // Hook PorygonCyberDefenseEngine (NIDS+PID / AV Watcher / SIEM / Hybrid IPS) to 3D Cyberspace
+        // Hook PorygonCyberDefenseEngine (NIDS+PID / AV Watcher / SIEM / Hybrid IPS / Web SOC) to 3D Cyberspace
         PorygonCyberDefenseEngine.OnInject3DThreatOrb = (kind, remEp, locSkt, proto, tcpSt, anomType, anomDet, score) => {
             try {
                 if (porygon != null) {
@@ -6319,6 +6686,59 @@ public class HackerWallpaperForm : Form {
                 }
                 hudConnectomeDirty = true;
                 hudTelemetryDirty = true;
+            } catch { }
+        };
+        PorygonCyberDefenseEngine.OnQueryFormState = () => {
+            Dictionary<string, object> d = new Dictionary<string, object>();
+            lock (telemetryLock) {
+                d["cpu"] = cpuUsage.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+                d["gpu"] = (isGamerSuspended ? 0.0f : gpuUsagePct).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+                d["fps"] = isGamerSuspended ? 0 : currentFps;
+                d["ramPct"] = ramPercent;
+                d["ramUsed"] = ramUsedGB.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+                d["downKbps"] = netDownKbps.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+                d["upKbps"] = netUpKbps.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+                d["pingMs"] = pingMs;
+                d["bgSceneMode"] = Config != null ? Config.BgSceneMode : 0;
+                d["bgSceneName"] = GetBgSceneModeShortName(Config != null ? Config.BgSceneMode : 0);
+                d["gamerMode"] = isGamerSuspended || (Config != null && Config.GamerMode);
+            }
+            List<Dictionary<string, object>> agList = new List<Dictionary<string, object>>();
+            if (porygon != null) {
+                for (int i = 0; i < porygon.Agents.Count; i++) {
+                    var ag = porygon.Agents[i];
+                    var b = ag.Brain;
+                    var ad = new Dictionary<string, object>();
+                    ad["name"] = ag.Name;
+                    ad["gen"] = b.Generation;
+                    ad["lvl"] = b.Level;
+                    ad["f2"] = b.F2Score.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+                    ad["fit"] = b.FitnessScore.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+                    ad["acc"] = b.DetectionAccuracy.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+                    agList.Add(ad);
+                }
+            }
+            d["agents"] = agList;
+            return d;
+        };
+        PorygonCyberDefenseEngine.OnSwarmWebAction = (act) => {
+            try {
+                this.BeginInvoke((MethodInvoker)delegate {
+                    if (act == "train_wave" && porygon != null) {
+                        porygon.TriggerTrainingWave(screenW, screenH);
+                    } else if (act == "force_evo" && porygon != null) {
+                        porygon.ForceEvolutionaryCrossoverAll();
+                    } else if (act == "boost_lvl" && porygon != null) {
+                        porygon.BoostAllLevels();
+                    } else if (act == "cycle_scene") {
+                        CycleBgSceneMode();
+                    } else if (act == "toggle_gamer") {
+                        ToggleGamerMode();
+                    }
+                    hudConnectomeDirty = true;
+                    hudBrain3DDirty = true;
+                    hudTelemetryDirty = true;
+                });
             } catch { }
         };
         PorygonCyberDefenseEngine.Initialize();
@@ -6690,6 +7110,7 @@ public class HackerWallpaperForm : Form {
             bool socOnline = IsLocalSocPortOpen();
 
             List<RadarBlip> newBlips = new List<RadarBlip>();
+            List<PorygonCyberDefenseEngine.LiveTcpConnectionRow> newTcpRows = new List<PorygonCyberDefenseEngine.LiveTcpConnectionRow>();
             HashSet<string> seenHosts = new HashSet<string>();
 
             newBlips.Add(new RadarBlip {
@@ -6826,6 +7247,22 @@ public class HackerWallpaperForm : Form {
                         PorygonCyberDefenseEngine.RegisterCandidateBlockIp(fullRem, procTag, anomType + " [" + signBadge + "]", anomScore, true);
                     }
 
+                    if (newTcpRows.Count < 80) {
+                        newTcpRows.Add(new PorygonCyberDefenseEngine.LiveTcpConnectionRow {
+                            Pid = ownPid,
+                            ProcessName = string.IsNullOrEmpty(procSec.ProcessName) ? "System" : procSec.ProcessName,
+                            ExePath = procSec.ExePath ?? "",
+                            IsSigned = procSec.IsSigned,
+                            Signer = procSec.SignerName ?? signBadge,
+                            IsLolBin = procSec.IsLolBin,
+                            LocalEp = ipv4 + ":" + locPort,
+                            RemoteEp = fullRem,
+                            Proto = ClassifyPortProtocol(remPort),
+                            State = st.ToString().ToUpperInvariant(),
+                            RiskPct = (int)Math.Round(anomScore * 100f)
+                        });
+                    }
+
                     // Feed real connection node into Porygon 3D Cyberspace!
                     if (porygon != null && (nodeKind > 0 || porygon.Packets.Count < 8 || rng.NextDouble() < 0.35)) {
                         porygon.InjectRealNetworkNode(screenW, screenH, nodeKind,
@@ -6854,6 +7291,11 @@ public class HackerWallpaperForm : Form {
                         });
                     }
                 }
+            }
+
+            newTcpRows.Sort((a, b) => b.RiskPct.CompareTo(a.RiskPct));
+            lock (PorygonCyberDefenseEngine.SyncLock) {
+                PorygonCyberDefenseEngine.ActiveTcpRows = newTcpRows;
             }
 
             if (telemetryCycles >= 2) baselineInitialized = true;
@@ -7074,7 +7516,11 @@ public class HackerWallpaperForm : Form {
         if (hk == HOTKEY_ID || hk == HOTKEY_GAMER_ID) {
             ShowConfigWindow();
         } else if (hk == HOTKEY_SIEM_ID) {
-            ShowSiemCommandCenterWindow();
+            PorygonCyberDefenseEngine.OpenWebSocInBrowser();
+            ShowCyberActionToast(
+                "[ PORYGON WEB SOC // SERVICIO ACTIVO EN http://localhost:5090 ]",
+                "Abriendo Centro de Comando Web (SIEM + AV/EDR + IPS Firewall + Cuarentena) en tu navegador...",
+                Color.FromArgb(52, 211, 153));
         } else if (hk == HOTKEY_MODEL_ID) {
             TriggerPorygonTrainingWave();
         } else if (hk == HOTKEY_BRAIN_FULL_ID) {
@@ -7949,7 +8395,11 @@ public class HackerWallpaperForm : Form {
                     int relX = pt.X - bx;
                     int relY = pt.Y - by;
                     if (relY <= 28 && relX >= bw - 268 && relX < bw - 202) {
-                        ShowSiemCommandCenterWindow();
+                        PorygonCyberDefenseEngine.OpenWebSocInBrowser();
+                        ShowCyberActionToast(
+                            "[ PORYGON WEB SOC // http://localhost:5090 ABIERTO EN NAVEGADOR ]",
+                            "Panel Web interactivo SIEM + AV/EDR + Firewall IPS + Cuarentena activo en puerto 5090",
+                            Color.FromArgb(52, 211, 153));
                         return;
                     } else if (relY <= 28 && relX >= bw - 202 && relX < bw - 156) {
                         ThreadPool.QueueUserWorkItem(_ => PorygonCyberDefenseEngine.RunQuickDirectoryAudit(true));
@@ -10587,7 +11037,7 @@ public class HackerWallpaperForm : Form {
                 if (statusLine.Length > 84) statusLine = statusLine.Substring(0, 84);
                 g.DrawString(statusLine, fontHudSmall, c1B, bx + 10, by + bh - 33);
 
-                string footer = "HYBRID_SOC: [NIDS+PID] + [AV_ENTROPY_SHA256] + [SIEM_JSONL] + [FW_IPS] // CTRL+ALT+S";
+                string footer = "WEB_SOC: http://localhost:5090 // [NIDS+PID] + [AV_EDR] + [SIEM] + [FW_IPS] // CTRL+ALT+S";
                 g.DrawString(footer, fontHudSmall, txtB, bx + 10, by + bh - 17);
             }
         }
@@ -11907,15 +12357,9 @@ public class HackerWallpaperForm : Form {
             }
         };
 
+        btnOpenJsonl.Text = "🌐 Abrir Web SOC (:5090)";
         btnOpenJsonl.Click += (s, ev) => {
-            try {
-                string p = File.Exists(PorygonCyberDefenseEngine.ProjectSiemJsonlPath)
-                    ? PorygonCyberDefenseEngine.ProjectSiemJsonlPath
-                    : PorygonCyberDefenseEngine.SiemJsonlPath;
-                if (File.Exists(p)) {
-                    Process.Start("notepad.exe", "\"" + p + "\"");
-                }
-            } catch { }
+            PorygonCyberDefenseEngine.OpenWebSocInBrowser();
         };
 
         System.Windows.Forms.Timer siemTimer = new System.Windows.Forms.Timer { Interval = 1000 };
@@ -12027,6 +12471,7 @@ public class HackerWallpaperForm : Form {
             Environment.Exit(0);
             return;
         }
+        bool wantWeb    = (args != null && args.Length > 0 && (args[0].ToLowerInvariant().Contains("web") || args[0].ToLowerInvariant().Contains("soc")));
         bool wantConfig = (args != null && args.Length > 0 && args[0].ToLowerInvariant().Contains("config"));
         bool wantGamer  = (args != null && args.Length > 0 && args[0].ToLowerInvariant().Contains("gamer"));
         bool createdNew;
@@ -12037,12 +12482,17 @@ public class HackerWallpaperForm : Form {
         bool mutexNew;
         using (Mutex mutex = new Mutex(true, "Global\\AntigravityHackerWallpaperMutex", out mutexNew)) {
             if (!mutexNew) {
-                if (wantGamer) {
+                if (wantWeb) {
+                    PorygonCyberDefenseEngine.OpenWebSocInBrowser();
+                } else if (wantGamer) {
                     gamerEvt.Set();
                 } else if (wantConfig) {
                     evt.Set();
                 }
                 return;
+            }
+            if (wantWeb) {
+                PorygonCyberDefenseEngine.OpenWebSocInBrowser();
             }
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
