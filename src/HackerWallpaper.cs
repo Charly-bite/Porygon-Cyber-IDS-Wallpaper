@@ -7,23 +7,27 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Drawing.Text;
 using System.IO;
+using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 using System.Windows.Forms;
+using Microsoft.Win32;
 
-[assembly: AssemblyTitle("Porygon 3D Desktop Wallpaper")]
-[assembly: AssemblyDescription("3D OpenGL Multi-Monitor Desktop Wallpaper and Network Visualizer")]
+[assembly: AssemblyTitle("Porygon 3D Cyber Defense Suite (IDS / IPS / AV / SIEM)")]
+[assembly: AssemblyDescription("3D OpenGL Multi-Monitor Desktop Wallpaper & Autonomous Porygon IDS/IPS/AV/SIEM Engine")]
 [assembly: AssemblyCompany("Charly-bite Visual Studio")]
-[assembly: AssemblyProduct("Porygon 3D Wallpaper Suite")]
+[assembly: AssemblyProduct("Porygon 3D Cyber Defense Suite")]
 [assembly: AssemblyCopyright("Copyright (c) 2026")]
-[assembly: AssemblyVersion("2.4.1.0")]
-[assembly: AssemblyFileVersion("2.4.1.0")]
+[assembly: AssemblyVersion("2.5.0.0")]
+[assembly: AssemblyFileVersion("2.5.0.0")]
 
 public class WallpaperConfig {
     public int ThemeIndex = 0;       // 0=Matte Bio-Forest & Amber, 1=Matte Matrix, 2=Matte Red Team, 3=Matte Ice Stealth
@@ -474,6 +478,1007 @@ public static class GpuGl {
         glTexCoord2f(u0, v1); glVertex2f(x, y + h);
         glEnd();
         glDisable(GL_TEXTURE_2D);
+    }
+}
+
+// ============================================================================
+// PORYGON CYBER DEFENSE ENGINE (REAL NIDS/PID + AV/EDR + SIEM + HYBRID IPS)
+//   - PORYGON   (Stage 1): NIDS Socket<->PID Mapper + SIEM Event/Registry Correlator
+//   - PORYGON2  (Stage 2): Real-Time AV/EDR (FileSystemWatcher + SHA-256 + Entropy + Authenticode)
+//   - PORYGON-Z (Stage 3): Hybrid Active IPS (Windows Firewall Block + Quarantine Vault)
+// ============================================================================
+public static class PorygonCyberDefenseEngine {
+    private const int AF_INET = 2;
+    private const int TCP_TABLE_OWNER_PID_ALL = 5;
+
+    [DllImport("iphlpapi.dll", SetLastError = true)]
+    private static extern uint GetExtendedTcpTable(IntPtr pTcpTable, ref int dwOutBufLen, bool sort, int ipVersion, int tblClass, uint reserved);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MIB_TCPROW_OWNER_PID {
+        public uint dwState;
+        public uint dwLocalAddr;
+        public uint dwLocalPort;
+        public uint dwRemoteAddr;
+        public uint dwRemotePort;
+        public uint dwOwningPid;
+    }
+
+    public class ProcessSecurityInfo {
+        public int Pid;
+        public string ProcessName = "system";
+        public string ExePath = "";
+        public bool IsSigned = true;
+        public string SignerName = "Microsoft Windows";
+        public bool IsLolBin = false;
+        public bool IsUserTempOrDownloads = false;
+        public DateTime CachedAtUtc = DateTime.UtcNow;
+    }
+
+    public class AvScanReport {
+        public string Timestamp;
+        public string FileName;
+        public string FullPath;
+        public string Sha256;
+        public long FileSizeBytes;
+        public float EntropyBits;
+        public bool IsSigned;
+        public string SignerName;
+        public float RiskScore;
+        public string Verdict;      // CLEAN_SIGNED, UNSIGNED_LOW, SUSPICIOUS_PACKED, MALICIOUS_PAYLOAD, QUARANTINED
+        public string MitreTactic;  // e.g. T1027, T1059, T1547.001, T1204
+        public string Detail;
+    }
+
+    public class SiemSecurityEvent {
+        public string Timestamp;
+        public string AgentName;    // PORYGON, PORYGON2, PORYGON-Z
+        public string Module;       // NIDS_EDR, AV_SCAN, SIEM_REG, SIEM_EVTLOG, IPS_FIREWALL, IPS_QUARANTINE
+        public string Severity;     // INFO, MEDIUM, HIGH, CRITICAL
+        public string MitreId;      // T1071, T1059, T1547.001, T1027, M1037...
+        public string ProcessInfo;  // e.g. powershell.exe [PID:4812]
+        public string Target;       // Remote IP:Port or FilePath or RegistryKey
+        public string Sha256;
+        public float RiskScore;
+        public string Summary;
+        public string ActionTaken;  // MONITORED, ALERT_READY, AUTO_BLOCKED, AUTO_QUARANTINED, USER_BLOCKED, USER_QUARANTINED
+    }
+
+    public class QuarantineRecord {
+        public string Id;
+        public string Timestamp;
+        public string OriginalPath;
+        public string QuarantinePath;
+        public string FileName;
+        public string Sha256;
+        public float RiskScore;
+        public string Reason;
+    }
+
+    public static readonly object SyncLock = new object();
+    private static Dictionary<int, ProcessSecurityInfo> pidCache = new Dictionary<int, ProcessSecurityInfo>();
+    private static Dictionary<string, string> baselineRunRegistry = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    private static bool registryBaselineReady = false;
+    private static DateTime lastEventLogPollUtc = DateTime.UtcNow.AddMinutes(-5);
+    private static int lastEventLogIndex = -1;
+
+    public static List<SiemSecurityEvent> RecentSiemEvents = new List<SiemSecurityEvent>();
+    public static List<AvScanReport> RecentAvScans = new List<AvScanReport>();
+    public static List<string> BlockedFirewallIps = new List<string>();
+    public static List<QuarantineRecord> QuarantinedFiles = new List<QuarantineRecord>();
+
+    // Active Hybrid IPS / AV Candidates for 1-Click HUD Response
+    public static string LastCandidateBlockIp = "";
+    public static string LastCandidateBlockReason = "Ninguna IP crítica pendiente";
+    public static string LastCandidateBlockProc = "";
+    public static float LastCandidateBlockScore = 0f;
+
+    public static string LastCandidateQuarantineFile = "";
+    public static string LastCandidateQuarantineSha = "";
+    public static string LastCandidateQuarantineReason = "Ningún archivo sospechoso pendiente";
+    public static float LastCandidateQuarantineScore = 0f;
+
+    public static int TotalNidsProcessAudits = 0;
+    public static int TotalAvFilesScanned = 0;
+    public static int TotalSiemAlerts = 0;
+    public static int TotalIpsActions = 0;
+    public static string LastActionBanner = "HYBRID_DEFENSE_ONLINE // NIDS+PID | AV_WATCHER | SIEM | IPS";
+
+    private static List<FileSystemWatcher> activeWatchers = new List<FileSystemWatcher>();
+    private static Queue<string> pendingAvFiles = new Queue<string>();
+    private static HashSet<string> recentlyScannedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    private static Thread avWorkerThread = null;
+    private static bool engineInitialized = false;
+
+    // Callback to inject 3D threat orbs into Porygon3DAvatar when AV/SIEM detects a threat
+    public static Action<int, string, string, string, string, string, string, float> OnInject3DThreatOrb = null;
+
+    private static string AppBaseDir {
+        get {
+            string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "HackerWallpaper");
+            if (!Directory.Exists(dir)) {
+                try { Directory.CreateDirectory(dir); } catch { }
+            }
+            return dir;
+        }
+    }
+
+    public static string SiemJsonlPath {
+        get { return Path.Combine(AppBaseDir, "siem_security_events.jsonl"); }
+    }
+
+    public static string ProjectSiemJsonlPath {
+        get { return @"C:\Users\Admin\Porygon-Cyber-IDS-Wallpaper\logs\siem_security_events.jsonl"; }
+    }
+
+    public static string QuarantineDir {
+        get {
+            string q = Path.Combine(AppBaseDir, "Quarantine");
+            if (!Directory.Exists(q)) {
+                try { Directory.CreateDirectory(q); } catch { }
+            }
+            return q;
+        }
+    }
+
+    private static string BlockedIpsPath {
+        get { return Path.Combine(AppBaseDir, "ips_blocked_list.txt"); }
+    }
+
+    private static string QuarantineManifestPath {
+        get { return Path.Combine(AppBaseDir, "quarantine_manifest.txt"); }
+    }
+
+    public static void Initialize() {
+        lock (SyncLock) {
+            if (engineInitialized) return;
+            engineInitialized = true;
+        }
+        try {
+            LoadPersistedIpsAndQuarantine();
+            AuditRegistryPersistence(true);
+            StartRealtimeAvWatchers();
+
+            RecordSiemEvent("PORYGON", "SIEM_INIT", "INFO", "T1046", "HackerWallpaper.exe",
+                "LOCAL_HOST", "", 0.05f,
+                "Tríada Porygon Cyber Defense iniciada (GetExtendedTcpTable PID + AV Watcher + SIEM + Hybrid IPS)",
+                "ACTIVE");
+
+            // Perform an initial non-blocking background audit of recent Downloads/Startup files
+            ThreadPool.QueueUserWorkItem(_ => {
+                try {
+                    Thread.Sleep(1200);
+                    RunQuickDirectoryAudit(false);
+                } catch { }
+            });
+        } catch { }
+    }
+
+    private static void LoadPersistedIpsAndQuarantine() {
+        try {
+            if (File.Exists(BlockedIpsPath)) {
+                string[] lines = File.ReadAllLines(BlockedIpsPath, Encoding.UTF8);
+                lock (SyncLock) {
+                    BlockedFirewallIps.Clear();
+                    for (int i = 0; i < lines.Length; i++) {
+                        string ip = lines[i].Trim();
+                        if (!string.IsNullOrEmpty(ip) && !BlockedFirewallIps.Contains(ip)) {
+                            BlockedFirewallIps.Add(ip);
+                        }
+                    }
+                }
+            }
+            if (File.Exists(QuarantineManifestPath)) {
+                string[] qlines = File.ReadAllLines(QuarantineManifestPath, Encoding.UTF8);
+                lock (SyncLock) {
+                    QuarantinedFiles.Clear();
+                    for (int i = 0; i < qlines.Length; i++) {
+                        string[] p = qlines[i].Split('|');
+                        if (p.Length >= 7) {
+                            QuarantinedFiles.Add(new QuarantineRecord {
+                                Id = p[0],
+                                Timestamp = p[1],
+                                FileName = p[2],
+                                OriginalPath = p[3],
+                                QuarantinePath = p[4],
+                                Sha256 = p[5],
+                                RiskScore = 0.85f,
+                                Reason = p[6]
+                            });
+                        }
+                    }
+                }
+            }
+        } catch { }
+    }
+
+    private static void SavePersistedIpsAndQuarantine() {
+        try {
+            List<string> ipsSnap;
+            List<QuarantineRecord> qSnap;
+            lock (SyncLock) {
+                ipsSnap = new List<string>(BlockedFirewallIps);
+                qSnap = new List<QuarantineRecord>(QuarantinedFiles);
+            }
+            File.WriteAllLines(BlockedIpsPath, ipsSnap.ToArray(), Encoding.UTF8);
+            List<string> qLines = new List<string>();
+            for (int i = 0; i < qSnap.Count; i++) {
+                QuarantineRecord r = qSnap[i];
+                qLines.Add(string.Join("|", new string[] {
+                    r.Id ?? "", r.Timestamp ?? "", r.FileName ?? "", r.OriginalPath ?? "", r.QuarantinePath ?? "", r.Sha256 ?? "", r.Reason ?? ""
+                }));
+            }
+            File.WriteAllLines(QuarantineManifestPath, qLines.ToArray(), Encoding.UTF8);
+        } catch { }
+    }
+
+    // =========================================================================
+    // MODULE 1: REAL SOCKET <-> PID & AUTHENTICODE MAPPER (GetExtendedTcpTable)
+    // =========================================================================
+    private static int ConvertNetworkPort(uint netPort) {
+        return (int)(((netPort & 0xFF) << 8) | ((netPort >> 8) & 0xFF));
+    }
+
+    public static Dictionary<string, int> QueryExtendedTcpPidMap() {
+        Dictionary<string, int> map = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        int buffSize = 0;
+        uint ret = GetExtendedTcpTable(IntPtr.Zero, ref buffSize, false, AF_INET, TCP_TABLE_OWNER_PID_ALL, 0);
+        if (buffSize <= 0) return map;
+
+        IntPtr buffPtr = Marshal.AllocHGlobal(buffSize);
+        try {
+            ret = GetExtendedTcpTable(buffPtr, ref buffSize, false, AF_INET, TCP_TABLE_OWNER_PID_ALL, 0);
+            if (ret != 0) return map;
+
+            int numEntries = Marshal.ReadInt32(buffPtr);
+            IntPtr rowPtr = (IntPtr)((long)buffPtr + 4);
+            int rowSize = Marshal.SizeOf(typeof(MIB_TCPROW_OWNER_PID));
+
+            for (int i = 0; i < numEntries; i++) {
+                MIB_TCPROW_OWNER_PID row = (MIB_TCPROW_OWNER_PID)Marshal.PtrToStructure(rowPtr, typeof(MIB_TCPROW_OWNER_PID));
+                int pid = (int)row.dwOwningPid;
+                if (pid > 0) {
+                    IPAddress locIp = new IPAddress(row.dwLocalAddr);
+                    IPAddress remIp = new IPAddress(row.dwRemoteAddr);
+                    int locPort = ConvertNetworkPort(row.dwLocalPort);
+                    int remPort = ConvertNetworkPort(row.dwRemotePort);
+
+                    string exactKey = locIp.ToString() + ":" + locPort + "|" + remIp.ToString() + ":" + remPort;
+                    string remKey = remIp.ToString() + ":" + remPort;
+                    map[exactKey] = pid;
+                    if (!map.ContainsKey(remKey)) map[remKey] = pid;
+                }
+                rowPtr = (IntPtr)((long)rowPtr + rowSize);
+            }
+        } catch {
+        } finally {
+            Marshal.FreeHGlobal(buffPtr);
+        }
+        return map;
+    }
+
+    public static ProcessSecurityInfo ResolveProcessSecurityInfo(int pid) {
+        if (pid <= 4) {
+            return new ProcessSecurityInfo {
+                Pid = pid, ProcessName = "System", ExePath = "NT Kernel & System", IsSigned = true, SignerName = "Microsoft Windows Kernel"
+            };
+        }
+        DateTime now = DateTime.UtcNow;
+        lock (SyncLock) {
+            ProcessSecurityInfo cached;
+            if (pidCache.TryGetValue(pid, out cached)) {
+                if ((now - cached.CachedAtUtc).TotalSeconds < 45.0) {
+                    return cached;
+                }
+            }
+        }
+
+        ProcessSecurityInfo info = new ProcessSecurityInfo { Pid = pid, CachedAtUtc = now };
+        try {
+            using (Process p = Process.GetProcessById(pid)) {
+                info.ProcessName = p.ProcessName ?? ("pid_" + pid);
+                try {
+                    if (p.MainModule != null) {
+                        info.ExePath = p.MainModule.FileName ?? "";
+                    }
+                } catch {
+                    // Protected OS services (svchost, lsass, csrss) throw access denied on MainModule from non-elevated user context
+                    info.ExePath = @"C:\Windows\System32\" + info.ProcessName + ".exe";
+                    info.IsSigned = true;
+                    info.SignerName = "Windows Protected Service";
+                }
+            }
+        } catch {
+            info.ProcessName = "terminated_pid_" + pid;
+        }
+
+        string lowerName = (info.ProcessName ?? "").ToLowerInvariant();
+        string lowerPath = (info.ExePath ?? "").ToLowerInvariant();
+
+        if (lowerName == "powershell" || lowerName == "pwsh" || lowerName == "cmd" ||
+            lowerName == "wscript" || lowerName == "cscript" || lowerName == "mshta" ||
+            lowerName == "rundll32" || lowerName == "regsvr32" || lowerName == "certutil" || lowerName == "bitsadmin") {
+            info.IsLolBin = true;
+        }
+
+        if (lowerPath.Contains("\\temp\\") || lowerPath.Contains("\\downloads\\") || lowerPath.Contains("\\users\\public\\")) {
+            info.IsUserTempOrDownloads = true;
+        }
+
+        if (!string.IsNullOrEmpty(info.ExePath) && File.Exists(info.ExePath)) {
+            if (lowerPath.StartsWith(@"c:\windows\system32\") || lowerPath.StartsWith(@"c:\windows\syswow64\")) {
+                info.IsSigned = true;
+                info.SignerName = "Microsoft Windows";
+            } else {
+                try {
+                    X509Certificate cert = X509Certificate.CreateFromSignedFile(info.ExePath);
+                    if (cert != null) {
+                        info.IsSigned = true;
+                        string subj = cert.Subject ?? "Signed Binary";
+                        int cnIdx = subj.IndexOf("CN=", StringComparison.OrdinalIgnoreCase);
+                        if (cnIdx >= 0) {
+                            int endIdx = subj.IndexOf(',', cnIdx);
+                            info.SignerName = (endIdx > cnIdx) ? subj.Substring(cnIdx + 3, endIdx - cnIdx - 3).Trim('"') : subj.Substring(cnIdx + 3).Trim('"');
+                        } else {
+                            info.SignerName = subj;
+                        }
+                    } else {
+                        info.IsSigned = false;
+                        info.SignerName = "UNSIGNED";
+                    }
+                } catch {
+                    info.IsSigned = false;
+                    info.SignerName = "UNSIGNED";
+                }
+            }
+        }
+
+        lock (SyncLock) {
+            TotalNidsProcessAudits++;
+            if (pidCache.Count > 250) pidCache.Clear();
+            pidCache[pid] = info;
+        }
+        return info;
+    }
+
+    // =========================================================================
+    // MODULE 2: PORYGON2 REAL-TIME ANTIVIRUS / EDR (FileSystemWatcher + SHA256 + Entropy)
+    // =========================================================================
+    private static readonly HashSet<string> WatchedExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
+        ".exe", ".dll", ".ps1", ".bat", ".cmd", ".vbs", ".js", ".hta", ".scr", ".msi", ".wsf", ".jar"
+    };
+
+    private static void StartRealtimeAvWatchers() {
+        string userProf = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        string[] dirs = new string[] {
+            Path.Combine(userProf, "Downloads"),
+            Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
+            Path.GetTempPath(),
+            Environment.GetFolderPath(Environment.SpecialFolder.Startup)
+        };
+
+        for (int i = 0; i < dirs.Length; i++) {
+            string d = dirs[i];
+            if (string.IsNullOrEmpty(d) || !Directory.Exists(d)) continue;
+            try {
+                FileSystemWatcher fsw = new FileSystemWatcher(d);
+                fsw.IncludeSubdirectories = false;
+                fsw.NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.CreationTime;
+                FileSystemEventHandler onFs = (s, e) => EnqueueFileForAvScan(e.FullPath);
+                RenamedEventHandler onRen = (s, e) => EnqueueFileForAvScan(e.FullPath);
+                fsw.Created += onFs;
+                fsw.Changed += onFs;
+                fsw.Renamed += onRen;
+                fsw.EnableRaisingEvents = true;
+                activeWatchers.Add(fsw);
+            } catch { }
+        }
+
+        avWorkerThread = new Thread(AvWorkerLoop);
+        avWorkerThread.IsBackground = true;
+        avWorkerThread.Priority = ThreadPriority.BelowNormal;
+        avWorkerThread.Start();
+    }
+
+    public static void EnqueueFileForAvScan(string fullPath) {
+        if (string.IsNullOrEmpty(fullPath)) return;
+        try {
+            string ext = Path.GetExtension(fullPath);
+            if (string.IsNullOrEmpty(ext) || !WatchedExtensions.Contains(ext)) return;
+            if (fullPath.IndexOf("\\Quarantine\\", StringComparison.OrdinalIgnoreCase) >= 0) return;
+
+            lock (SyncLock) {
+                if (pendingAvFiles.Count < 60 && !pendingAvFiles.Contains(fullPath)) {
+                    pendingAvFiles.Enqueue(fullPath);
+                }
+            }
+        } catch { }
+    }
+
+    private static void AvWorkerLoop() {
+        while (true) {
+            string nextFile = null;
+            lock (SyncLock) {
+                if (pendingAvFiles.Count > 0) {
+                    nextFile = pendingAvFiles.Dequeue();
+                }
+            }
+            if (nextFile != null) {
+                Thread.Sleep(380); // Wait for browser/writer to flush file handle
+                InspectFileArtifact(nextFile, false);
+            } else {
+                Thread.Sleep(650);
+            }
+        }
+    }
+
+    public static AvScanReport InspectFileArtifact(string filePath, bool isManualScan) {
+        if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) return null;
+        try {
+            FileInfo fi = new FileInfo(filePath);
+            if (fi.Length <= 0 || fi.Length > 150 * 1024 * 1024) return null; // Skip empty or >150MB ISOs
+
+            string dedupKey = filePath + "|" + fi.Length + "|" + fi.LastWriteTimeUtc.Ticks;
+            if (!isManualScan) {
+                lock (SyncLock) {
+                    if (recentlyScannedFiles.Contains(dedupKey)) return null;
+                    if (recentlyScannedFiles.Count > 300) recentlyScannedFiles.Clear();
+                    recentlyScannedFiles.Add(dedupKey);
+                }
+            }
+
+            // 1. Compute SHA-256 and Shannon Entropy on first 64 KB
+            string sha256Hex = "";
+            float entropy = 0f;
+            string asciiPreview = "";
+            using (FileStream fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)) {
+                int sampleLen = (int)Math.Min(65536L, fi.Length);
+                byte[] sampleBuf = new byte[sampleLen];
+                int bytesRead = fs.Read(sampleBuf, 0, sampleLen);
+                entropy = ComputeShannonEntropy(sampleBuf, bytesRead);
+                asciiPreview = Encoding.ASCII.GetString(sampleBuf, 0, bytesRead);
+
+                fs.Position = 0;
+                using (SHA256 sha = SHA256.Create()) {
+                    byte[] hashBytes = sha.ComputeHash(fs);
+                    StringBuilder sb = new StringBuilder(64);
+                    for (int i = 0; i < hashBytes.Length; i++) sb.Append(hashBytes[i].ToString("x2"));
+                    sha256Hex = sb.ToString();
+                }
+            }
+
+            // 2. Verify Authenticode Digital Signature
+            bool isSigned = false;
+            string signerName = "UNSIGNED";
+            try {
+                X509Certificate cert = X509Certificate.CreateFromSignedFile(filePath);
+                if (cert != null) {
+                    isSigned = true;
+                    string subj = cert.Subject ?? "Signed";
+                    int cnIdx = subj.IndexOf("CN=", StringComparison.OrdinalIgnoreCase);
+                    if (cnIdx >= 0) {
+                        int endIdx = subj.IndexOf(',', cnIdx);
+                        signerName = (endIdx > cnIdx) ? subj.Substring(cnIdx + 3, endIdx - cnIdx - 3).Trim('"') : subj.Substring(cnIdx + 3).Trim('"');
+                    } else {
+                        signerName = subj;
+                    }
+                }
+            } catch {
+                isSigned = false;
+            }
+
+            // 3. Heuristic & Static Payload Scoring
+            string ext = (fi.Extension ?? "").ToLowerInvariant();
+            string lowerPath = filePath.ToLowerInvariant();
+            bool inStartup = lowerPath.Contains("\\startup\\");
+            bool inTempOrDl = lowerPath.Contains("\\temp\\") || lowerPath.Contains("\\downloads\\");
+
+            float risk = 0.08f;
+            string mitre = "T1204";
+            List<string> indicators = new List<string>();
+
+            if (!isSigned) {
+                risk += 0.30f;
+                indicators.Add("UNSIGNED");
+            } else {
+                indicators.Add("SIGNED:" + (signerName.Length > 14 ? signerName.Substring(0, 14) : signerName));
+            }
+
+            if (entropy >= 7.30f && !isSigned) {
+                risk += 0.36f;
+                mitre = "T1027"; // Obfuscated / Packed Binary
+                indicators.Add(string.Format("HIGH_ENTROPY({0:0.00}b)", entropy));
+            } else if (entropy >= 6.95f && !isSigned) {
+                risk += 0.18f;
+                indicators.Add(string.Format("ENTROPY({0:0.00}b)", entropy));
+            }
+
+            if (inStartup && !isSigned) {
+                risk += 0.34f;
+                mitre = "T1547.001";
+                indicators.Add("STARTUP_PERSISTENCE");
+            } else if (inTempOrDl && !isSigned && (ext == ".exe" || ext == ".scr" || ext == ".hta" || ext == ".vbs" || ext == ".ps1" || ext == ".bat")) {
+                risk += 0.16f;
+                indicators.Add("USER_DROP_ZONE");
+            }
+
+            // Check script / payload evasion signatures
+            string lowerText = asciiPreview.ToLowerInvariant();
+            if (lowerText.Contains("frombase64string") || lowerText.Contains("-encodedcommand") || lowerText.Contains(" -enc ")) {
+                risk += 0.35f;
+                mitre = "T1059.001";
+                indicators.Add("B64_ENCODED_CMD");
+            }
+            if (lowerText.Contains("amsiutils") || lowerText.Contains("amsiinitfailed") || lowerText.Contains("etweventwrite")) {
+                risk += 0.48f;
+                mitre = "T1562.001";
+                indicators.Add("AMSI_ETW_BYPASS");
+            }
+            if (lowerText.Contains("downloadstring") || lowerText.Contains("invoke-expression") || lowerText.Contains("iex(") || lowerText.Contains("urldownloadtofile")) {
+                risk += 0.32f;
+                mitre = "T1105";
+                indicators.Add("REMOTE_CRADLE_EXEC");
+            }
+            if (lowerText.Contains("mimikatz") || lowerText.Contains("sekurlsa") || lowerText.Contains("virtualalloc") && !isSigned) {
+                risk += 0.42f;
+                mitre = "T1055";
+                indicators.Add("SHELLCODE_MEM_API");
+            }
+
+            risk = Math.Max(0.04f, Math.Min(0.99f, risk));
+            string verdict = "CLEAN_SIGNED";
+            if (risk >= 0.90f) verdict = "MALICIOUS_PAYLOAD";
+            else if (risk >= 0.58f) verdict = "SUSPICIOUS_ARTIFACT";
+            else if (!isSigned) verdict = "UNSIGNED_LOW_RISK";
+
+            string detail = string.Join(" + ", indicators.ToArray()) + string.Format(" | H:{0:0.00}b | SHA256:{1}", entropy, sha256Hex.Substring(0, 12));
+
+            AvScanReport rep = new AvScanReport {
+                Timestamp = DateTime.Now.ToString("HH:mm:ss"),
+                FileName = fi.Name,
+                FullPath = filePath,
+                Sha256 = sha256Hex,
+                FileSizeBytes = fi.Length,
+                EntropyBits = entropy,
+                IsSigned = isSigned,
+                SignerName = signerName,
+                RiskScore = risk,
+                Verdict = verdict,
+                MitreTactic = mitre,
+                Detail = detail
+            };
+
+            lock (SyncLock) {
+                TotalAvFilesScanned++;
+                RecentAvScans.Add(rep);
+                while (RecentAvScans.Count > 60) RecentAvScans.RemoveAt(0);
+
+                if (risk >= 0.52f) {
+                    LastCandidateQuarantineFile = filePath;
+                    LastCandidateQuarantineSha = sha256Hex;
+                    LastCandidateQuarantineScore = risk;
+                    LastCandidateQuarantineReason = string.Format("{0} [{1}] ({2:0}%)", fi.Name, verdict, risk * 100f);
+                }
+            }
+
+            // Hybrid Mode Policy:
+            // - Confirmed critical malicious payload (Risk >= 0.92) -> Auto-Quarantine via Porygon-Z!
+            // - Suspicious artifact (0.55 <= Risk < 0.92) -> Alert in SIEM + Spawn 3D Orb + Stage for 1-Click [QUARANTINE]
+            string actionTaken = "VERIFIED";
+            if (risk >= 0.92f) {
+                bool qOk = QuarantineFile(filePath, "AUTO_HYBRID_AV // " + verdict, sha256Hex, risk);
+                actionTaken = qOk ? "AUTO_QUARANTINED" : "ALERT_HIGH";
+                rep.Verdict = qOk ? "QUARANTINED" : rep.Verdict;
+            } else if (risk >= 0.55f) {
+                actionTaken = "READY_1CLICK_QUARANTINE";
+            }
+
+            if (risk >= 0.52f || isManualScan) {
+                string sev = (risk >= 0.85f) ? "CRITICAL" : (risk >= 0.55f ? "HIGH" : "INFO");
+                RecordSiemEvent("PORYGON2", "AV_EDR", sev, mitre, fi.Name, filePath, sha256Hex, risk,
+                    string.Format("AV Scan {0}: {1} ({2})", fi.Name, verdict, detail), actionTaken);
+
+                if (OnInject3DThreatOrb != null && risk >= 0.52f) {
+                    OnInject3DThreatOrb(risk >= 0.72f ? 2 : 1,
+                        "FILE://" + fi.Name,
+                        "SHA256:" + sha256Hex.Substring(0, 10),
+                        "AV_EDR/" + mitre,
+                        verdict,
+                        "AV_" + verdict,
+                        detail,
+                        risk);
+                }
+            }
+
+            return rep;
+        } catch {
+            return null;
+        }
+    }
+
+    private static float ComputeShannonEntropy(byte[] buf, int length) {
+        if (buf == null || length <= 0) return 0f;
+        int[] counts = new int[256];
+        for (int i = 0; i < length; i++) counts[buf[i]]++;
+        double ent = 0.0;
+        double invLen = 1.0 / length;
+        for (int i = 0; i < 256; i++) {
+            if (counts[i] > 0) {
+                double p = counts[i] * invLen;
+                ent -= p * (Math.Log(p) / Math.Log(2.0));
+            }
+        }
+        return (float)ent;
+    }
+
+    public static void RunQuickDirectoryAudit(bool manualTrigger) {
+        try {
+            string dl = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+            string startup = Environment.GetFolderPath(Environment.SpecialFolder.Startup);
+            string[] checkDirs = new string[] { startup, dl };
+            int scanned = 0;
+            for (int d = 0; d < checkDirs.Length; d++) {
+                if (!Directory.Exists(checkDirs[d])) continue;
+                string[] files = Directory.GetFiles(checkDirs[d]);
+                for (int f = 0; f < files.Length && scanned < 8; f++) {
+                    string ext = Path.GetExtension(files[f]);
+                    if (!string.IsNullOrEmpty(ext) && WatchedExtensions.Contains(ext)) {
+                        InspectFileArtifact(files[f], manualTrigger);
+                        scanned++;
+                    }
+                }
+            }
+            AuditRegistryPersistence(false);
+            PollWindowsEventLogs();
+            if (manualTrigger) {
+                lock (SyncLock) {
+                    LastActionBanner = string.Format("ACTIVE_AUDIT_OK // {0} archivos + Registro Run + TCP/PID auditados", scanned);
+                }
+            }
+        } catch { }
+    }
+
+    // =========================================================================
+    // MODULE 3: PORYGON SIEM ENGINE (Registry Run Persistence + Windows EventLog + JSONL)
+    // =========================================================================
+    public static void AuditRegistryPersistence(bool isInitialBaseline) {
+        try {
+            string[] subKeys = new string[] {
+                @"Software\Microsoft\Windows\CurrentVersion\Run",
+                @"Software\Microsoft\Windows\CurrentVersion\RunOnce"
+            };
+            RegistryKey[] roots = new RegistryKey[] { Registry.CurrentUser, Registry.LocalMachine };
+            string[] rootNames = new string[] { "HKCU", "HKLM" };
+
+            for (int r = 0; r < roots.Length; r++) {
+                for (int k = 0; k < subKeys.Length; k++) {
+                    try {
+                        using (RegistryKey rk = roots[r].OpenSubKey(subKeys[k], false)) {
+                            if (rk == null) continue;
+                            string[] valNames = rk.GetValueNames();
+                            for (int v = 0; v < valNames.Length; v++) {
+                                string name = valNames[v] ?? "";
+                                string val = (rk.GetValue(name) ?? "").ToString();
+                                string fullKeyId = rootNames[r] + "\\" + subKeys[k] + "\\" + name;
+
+                                bool isNewOrModified = false;
+                                lock (SyncLock) {
+                                    string prevVal;
+                                    if (!baselineRunRegistry.TryGetValue(fullKeyId, out prevVal)) {
+                                        baselineRunRegistry[fullKeyId] = val;
+                                        if (registryBaselineReady && !isInitialBaseline) {
+                                            isNewOrModified = true;
+                                        }
+                                    } else if (!string.Equals(prevVal, val, StringComparison.OrdinalIgnoreCase)) {
+                                        baselineRunRegistry[fullKeyId] = val;
+                                        isNewOrModified = true;
+                                    }
+                                }
+
+                                string lowerVal = val.ToLowerInvariant();
+                                bool suspiciousCmd = lowerVal.Contains("\\temp\\") || lowerVal.Contains("-enc") ||
+                                                     lowerVal.Contains("frombase64") || lowerVal.Contains("wscript") ||
+                                                     lowerVal.Contains("mshta") || lowerVal.Contains("rundll32");
+
+                                if (isNewOrModified || (isInitialBaseline && suspiciousCmd)) {
+                                    float score = suspiciousCmd ? 0.91f : 0.72f;
+                                    string sev = suspiciousCmd ? "CRITICAL" : "HIGH";
+                                    RecordSiemEvent("PORYGON", "SIEM_PERSISTENCE", sev, "T1547.001", name, fullKeyId, "", score,
+                                        string.Format("Persistencia en Registro detectada [{0}] -> {1}", name, val),
+                                        "SIEM_ALERT");
+
+                                    if (OnInject3DThreatOrb != null) {
+                                        OnInject3DThreatOrb(2, "REG://" + name, rootNames[r] + ":RUN", "MITRE/T1547.001", "AUTORUN_KEY",
+                                            "REGISTRY_PERSISTENCE", val, score);
+                                    }
+                                }
+                            }
+                        }
+                    } catch { }
+                }
+            }
+            lock (SyncLock) {
+                registryBaselineReady = true;
+            }
+        } catch { }
+    }
+
+    public static void PollWindowsEventLogs() {
+        DateTime now = DateTime.UtcNow;
+        if ((now - lastEventLogPollUtc).TotalSeconds < 16.0) return;
+        lastEventLogPollUtc = now;
+
+        try {
+            using (EventLog sysLog = new EventLog("System")) {
+                int cnt = sysLog.Entries.Count;
+                if (cnt <= 0) return;
+                if (lastEventLogIndex < 0) {
+                    lastEventLogIndex = Math.Max(0, cnt - 4);
+                    return;
+                }
+                int startIdx = Math.Max(lastEventLogIndex + 1, cnt - 10);
+                for (int i = startIdx; i < cnt; i++) {
+                    EventLogEntry entry = sysLog.Entries[i];
+                    lastEventLogIndex = i;
+                    long evId = entry.InstanceId & 0xFFFF;
+                    // Event ID 7045: A new service was installed in the system (MITRE T1543.003)
+                    if (evId == 7045 || entry.EntryType == EventLogEntryType.Error) {
+                        string src = entry.Source ?? "System";
+                        string msg = (entry.Message ?? "").Replace("\r", " ").Replace("\n", " ");
+                        if (msg.Length > 90) msg = msg.Substring(0, 90) + "...";
+                        bool isServiceInstall = (evId == 7045);
+                        float score = isServiceInstall ? 0.84f : 0.48f;
+                        string mitre = isServiceInstall ? "T1543.003" : "T1082";
+                        RecordSiemEvent("PORYGON", "SIEM_EVTLOG", isServiceInstall ? "HIGH" : "INFO", mitre,
+                            src + " [ID:" + evId + "]", "WIN_EVENT_LOG", "", score, msg, "CORRELATED");
+                    }
+                }
+            }
+        } catch { }
+    }
+
+    public static void RecordSiemEvent(string agent, string module, string severity, string mitreId,
+        string processInfo, string target, string sha256, float riskScore, string summary, string actionTaken) {
+        string ts = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+        string shortTs = DateTime.Now.ToString("HH:mm:ss");
+
+        SiemSecurityEvent ev = new SiemSecurityEvent {
+            Timestamp = shortTs,
+            AgentName = agent ?? "PORYGON",
+            Module = module ?? "SIEM",
+            Severity = severity ?? "INFO",
+            MitreId = mitreId ?? "T1071",
+            ProcessInfo = processInfo ?? "system",
+            Target = target ?? "",
+            Sha256 = sha256 ?? "",
+            RiskScore = riskScore,
+            Summary = summary ?? "",
+            ActionTaken = actionTaken ?? "LOGGED"
+        };
+
+        lock (SyncLock) {
+            TotalSiemAlerts++;
+            RecentSiemEvents.Add(ev);
+            while (RecentSiemEvents.Count > 100) RecentSiemEvents.RemoveAt(0);
+        }
+
+        try {
+            string safeProc = (ev.ProcessInfo ?? "").Replace("\"", "'").Replace("\\", "\\\\");
+            string safeTarget = (ev.Target ?? "").Replace("\"", "'").Replace("\\", "\\\\");
+            string safeSum = (ev.Summary ?? "").Replace("\"", "'").Replace("\\", "\\\\");
+            string jsonl = string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                "{{\"timestamp\":\"{0}\",\"agent\":\"{1}\",\"module\":\"{2}\",\"severity\":\"{3}\",\"mitre\":\"{4}\",\"process\":\"{5}\",\"target\":\"{6}\",\"sha256\":\"{7}\",\"risk\":{8:0.00},\"action\":\"{9}\",\"summary\":\"{10}\"}}\r\n",
+                ts, ev.AgentName, ev.Module, ev.Severity, ev.MitreId, safeProc, safeTarget, ev.Sha256, ev.RiskScore, ev.ActionTaken, safeSum);
+
+            File.AppendAllText(SiemJsonlPath, jsonl, Encoding.UTF8);
+            string projDir = Path.GetDirectoryName(ProjectSiemJsonlPath);
+            if (Directory.Exists(projDir)) {
+                File.AppendAllText(ProjectSiemJsonlPath, jsonl, Encoding.UTF8);
+            }
+        } catch { }
+    }
+
+    // =========================================================================
+    // MODULE 4: PORYGON-Z HYBRID ACTIVE IPS (Windows Firewall Block + Quarantine Vault)
+    // =========================================================================
+    public static bool IsSafeWhitelistedIp(string ip) {
+        if (string.IsNullOrEmpty(ip)) return true;
+        string cleanIp = ip.Split(':')[0].Trim();
+        if (cleanIp == "0.0.0.0" || cleanIp == "127.0.0.1" || cleanIp == "::1" ||
+            cleanIp == "1.1.1.1" || cleanIp == "1.0.0.1" || cleanIp == "8.8.8.8" || cleanIp == "8.8.4.4") {
+            return true;
+        }
+        if (cleanIp.StartsWith("127.") || cleanIp.StartsWith("10.") || cleanIp.StartsWith("192.168.") || cleanIp.StartsWith("169.254.")) {
+            return true;
+        }
+        if (cleanIp.StartsWith("172.")) {
+            string[] parts = cleanIp.Split('.');
+            int secondOctet;
+            if (parts.Length >= 2 && int.TryParse(parts[1], out secondOctet) && secondOctet >= 16 && secondOctet <= 31) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static void RegisterCandidateBlockIp(string remoteEndpoint, string processLabel, string reason, float score, bool allowAutoBlockInHybrid) {
+        if (string.IsNullOrEmpty(remoteEndpoint)) return;
+        string cleanIp = remoteEndpoint.Split(':')[0].Trim();
+        if (IsSafeWhitelistedIp(cleanIp)) return;
+
+        lock (SyncLock) {
+            if (score >= LastCandidateBlockScore || string.IsNullOrEmpty(LastCandidateBlockIp)) {
+                LastCandidateBlockIp = cleanIp;
+                LastCandidateBlockProc = processLabel ?? "unknown";
+                LastCandidateBlockReason = reason ?? "Suspicious flow";
+                LastCandidateBlockScore = score;
+            }
+        }
+
+        // In Hybrid Mode, if score >= 0.94 (e.g., VirusTotal confirmed malicious IP or LOLBin on C2 port), Porygon-Z auto-blocks!
+        if (allowAutoBlockInHybrid && score >= 0.94f) {
+            bool alreadyBlocked = false;
+            lock (SyncLock) { alreadyBlocked = BlockedFirewallIps.Contains(cleanIp); }
+            if (!alreadyBlocked) {
+                BlockRemoteIpInFirewall(cleanIp, "AUTO_HYBRID_IPS // " + reason, true);
+            }
+        }
+    }
+
+    public static bool BlockRemoteIpInFirewall(string remoteIp, string reason, bool isAuto) {
+        if (string.IsNullOrEmpty(remoteIp)) return false;
+        string cleanIp = remoteIp.Split(':')[0].Trim();
+        if (IsSafeWhitelistedIp(cleanIp)) {
+            lock (SyncLock) {
+                LastActionBanner = "IPS_SAFEGUARD // IP protegida en lista blanca (" + cleanIp + ")";
+            }
+            return false;
+        }
+
+        try {
+            string ruleName = "PorygonIPS_Block_" + cleanIp;
+            RunNetshSilent(string.Format("advfirewall firewall delete rule name=\"{0}\"", ruleName));
+            RunNetshSilent(string.Format("advfirewall firewall add rule name=\"{0}\" dir=out action=block remoteip={1} enable=yes", ruleName, cleanIp));
+            RunNetshSilent(string.Format("advfirewall firewall add rule name=\"{0}\" dir=in action=block remoteip={1} enable=yes", ruleName, cleanIp));
+
+            lock (SyncLock) {
+                if (!BlockedFirewallIps.Contains(cleanIp)) {
+                    BlockedFirewallIps.Add(cleanIp);
+                }
+                TotalIpsActions++;
+                LastActionBanner = string.Format("IPS_BLOCKED // Porygon-Z aisló IP {0} en Windows Firewall ({1})",
+                    cleanIp, isAuto ? "AUTO-HYBRID" : "1-CLICK");
+            }
+            SavePersistedIpsAndQuarantine();
+
+            RecordSiemEvent("PORYGON-Z", "IPS_FIREWALL", "CRITICAL", "M1037", LastCandidateBlockProc,
+                cleanIp, "", 0.95f,
+                string.Format("Regla de bloqueo creada en Windows Firewall ({0}): {1}", ruleName, reason),
+                isAuto ? "AUTO_FW_BLOCKED" : "USER_FW_BLOCKED");
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    public static bool UnblockRemoteIpInFirewall(string remoteIp) {
+        if (string.IsNullOrEmpty(remoteIp)) return false;
+        string cleanIp = remoteIp.Split(':')[0].Trim();
+        try {
+            string ruleName = "PorygonIPS_Block_" + cleanIp;
+            RunNetshSilent(string.Format("advfirewall firewall delete rule name=\"{0}\"", ruleName));
+            lock (SyncLock) {
+                BlockedFirewallIps.Remove(cleanIp);
+                LastActionBanner = "IPS_UNBLOCKED // Regla de Firewall eliminada para " + cleanIp;
+            }
+            SavePersistedIpsAndQuarantine();
+            RecordSiemEvent("PORYGON-Z", "IPS_FIREWALL", "INFO", "M1037", "USER_ADMIN",
+                cleanIp, "", 0.10f, "IP desbloqueada en Windows Firewall: " + cleanIp, "FW_UNBLOCKED");
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    private static void RunNetshSilent(string args) {
+        try {
+            ProcessStartInfo psi = new ProcessStartInfo("netsh.exe", args) {
+                CreateNoWindow = true,
+                UseShellExecute = false,
+                WindowStyle = ProcessWindowStyle.Hidden
+            };
+            using (Process p = Process.Start(psi)) {
+                if (p != null) p.WaitForExit(2500);
+            }
+        } catch { }
+    }
+
+    public static bool QuarantineFile(string filePath, string reason, string sha256, float score) {
+        if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) return false;
+        try {
+            string lower = filePath.ToLowerInvariant();
+            // Never quarantine system binaries or our own suite
+            if (lower.StartsWith(@"c:\windows\") || lower.StartsWith(@"c:\program files") || lower.Contains("hackerwallpaper")) {
+                return false;
+            }
+
+            // If a process is currently running from this exact path, terminate it first
+            try {
+                Process[] procs = Process.GetProcesses();
+                for (int i = 0; i < procs.Length; i++) {
+                    try {
+                        if (procs[i].Id > 4 && procs[i].MainModule != null &&
+                            string.Equals(procs[i].MainModule.FileName, filePath, StringComparison.OrdinalIgnoreCase)) {
+                            procs[i].Kill();
+                        }
+                    } catch { } finally {
+                        procs[i].Dispose();
+                    }
+                }
+            } catch { }
+
+            string fileName = Path.GetFileName(filePath);
+            string qId = DateTime.Now.ToString("yyyyMMdd_HHmmss") + "_" + (Math.Abs(filePath.GetHashCode()) % 10000);
+            string qDest = Path.Combine(QuarantineDir, qId + "_" + fileName + ".qz");
+            File.Move(filePath, qDest);
+
+            QuarantineRecord rec = new QuarantineRecord {
+                Id = qId,
+                Timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
+                FileName = fileName,
+                OriginalPath = filePath,
+                QuarantinePath = qDest,
+                Sha256 = sha256 ?? "",
+                RiskScore = score,
+                Reason = reason ?? "AV Quarantine"
+            };
+
+            lock (SyncLock) {
+                QuarantinedFiles.Add(rec);
+                TotalIpsActions++;
+                if (string.Equals(LastCandidateQuarantineFile, filePath, StringComparison.OrdinalIgnoreCase)) {
+                    LastCandidateQuarantineFile = "";
+                }
+                LastActionBanner = "AV_QUARANTINED // Porygon2 aisló " + fileName + " en Bóveda de Cuarentena";
+            }
+            SavePersistedIpsAndQuarantine();
+
+            RecordSiemEvent("PORYGON2", "IPS_QUARANTINE", "CRITICAL", "T1204", fileName,
+                filePath, sha256, score, "Archivo aislado en Bóveda de Cuarentena: " + qDest, "QUARANTINED");
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    public static bool RestoreQuarantinedFile(string quarantineId) {
+        QuarantineRecord target = null;
+        lock (SyncLock) {
+            for (int i = 0; i < QuarantinedFiles.Count; i++) {
+                if (QuarantinedFiles[i].Id == quarantineId) {
+                    target = QuarantinedFiles[i];
+                    break;
+                }
+            }
+        }
+        if (target == null || !File.Exists(target.QuarantinePath)) return false;
+        try {
+            string destDir = Path.GetDirectoryName(target.OriginalPath);
+            if (!Directory.Exists(destDir)) Directory.CreateDirectory(destDir);
+            if (File.Exists(target.OriginalPath)) File.Delete(target.OriginalPath);
+            File.Move(target.QuarantinePath, target.OriginalPath);
+
+            lock (SyncLock) {
+                QuarantinedFiles.Remove(target);
+                LastActionBanner = "AV_RESTORED // Archivo restaurado desde cuarentena: " + target.FileName;
+            }
+            SavePersistedIpsAndQuarantine();
+            RecordSiemEvent("PORYGON2", "IPS_QUARANTINE", "INFO", "T1204", target.FileName,
+                target.OriginalPath, target.Sha256, 0.10f, "Archivo restaurado por el usuario desde cuarentena", "RESTORED");
+            return true;
+        } catch {
+            return false;
+        }
     }
 }
 
@@ -4921,6 +5926,7 @@ public class HackerWallpaperForm : Form {
     const int HOTKEY_OPACITY_DOWN_ID = 9005;
     const int HOTKEY_BG_MODE_ID = 9006;
     const int HOTKEY_GAMER_ID = 9007;
+    const int HOTKEY_SIEM_ID = 9008;
     const uint MOD_ALT = 0x0001;
     const uint MOD_CONTROL = 0x0002;
     const int WH_MOUSE_LL = 14;
@@ -4950,6 +5956,7 @@ public class HackerWallpaperForm : Form {
     private Form toastForm;
     private System.Windows.Forms.Timer toastTimer;
     private Form configForm;
+    private Form siemForm;
     private Random rng = new Random();
 
     private Porygon3DAvatar porygon;
@@ -5298,6 +6305,24 @@ public class HackerWallpaperForm : Form {
         }
         RebuildBackground();
         RebuildRainColumns();
+
+        // Hook PorygonCyberDefenseEngine (NIDS+PID / AV Watcher / SIEM / Hybrid IPS) to 3D Cyberspace
+        PorygonCyberDefenseEngine.OnInject3DThreatOrb = (kind, remEp, locSkt, proto, tcpSt, anomType, anomDet, score) => {
+            try {
+                if (porygon != null) {
+                    porygon.InjectRealNetworkNode(screenW, screenH, kind, remEp, locSkt, proto, tcpSt, anomType, anomDet, score, netDownKbps + netUpKbps);
+                }
+                lock (telemetryLock) {
+                    string ts = DateTime.Now.ToString("HH:mm:ss");
+                    liveLogLines.Add(string.Format("[{0}] [IDS_DETECT] {1} -> {2} ({3:0}%)", ts, anomType, remEp, score * 100f));
+                    while (liveLogLines.Count > 5) liveLogLines.RemoveAt(0);
+                }
+                hudConnectomeDirty = true;
+                hudTelemetryDirty = true;
+            } catch { }
+        };
+        PorygonCyberDefenseEngine.Initialize();
+
         UpdateRealTelemetry(null);
 
         renderTimer = new System.Windows.Forms.Timer();
@@ -5647,7 +6672,13 @@ public class HackerWallpaperForm : Form {
             emaPingMs += alpha * diffPg;
             varPingMs = (1f - alpha) * (varPingMs + alpha * diffPg * diffPg);
 
-            // Inspect Active TCP Connections & Feed Real Nodes to the 3 Porygons!
+            // Inspect Active TCP Connections + Real PID/Authenticode Mapping via GetExtendedTcpTable & Feed to the 3 Porygons!
+            if (telemetryCycles % 5 == 0) {
+                PorygonCyberDefenseEngine.AuditRegistryPersistence(false);
+                PorygonCyberDefenseEngine.PollWindowsEventLogs();
+            }
+            Dictionary<string, int> tcpPidMap = PorygonCyberDefenseEngine.QueryExtendedTcpPidMap();
+
             IPGlobalProperties ipGlobal = IPGlobalProperties.GetIPGlobalProperties();
             TcpConnectionInformation[] tcpConns = ipGlobal.GetActiveTcpConnections();
             int estCount = 0;
@@ -5666,7 +6697,7 @@ public class HackerWallpaperForm : Form {
                 DistNorm = 0.28f,
                 Label = "1.1.1.1:53",
                 FullRemoteEp = "1.1.1.1:53",
-                LocalEp = ipv4 + ":UDP/53",
+                LocalEp = ipv4 + ":UDP/53 [svchost/DNS]",
                 Proto = "DNS/RESOLVER",
                 RingZone = "RING1:CORE_DNS",
                 AnomalyScore = 0.04f,
@@ -5676,6 +6707,7 @@ public class HackerWallpaperForm : Form {
 
             for (int i = 0; i < tcpConns.Length; i++) {
                 TcpState st = tcpConns[i].State;
+                string locIpRaw = tcpConns[i].LocalEndPoint.Address.ToString();
                 string remIp = tcpConns[i].RemoteEndPoint.Address.ToString();
                 int remPort = tcpConns[i].RemoteEndPoint.Port;
                 int locPort = tcpConns[i].LocalEndPoint.Port;
@@ -5687,13 +6719,25 @@ public class HackerWallpaperForm : Form {
                 if (st == TcpState.Established || st == TcpState.SynSent) {
                     if (st == TcpState.Established) estCount++;
                     string fullRem = remIp + ":" + remPort;
-                    string fullLoc = ipv4 + ":" + locPort;
-                    string proto = ClassifyPortProtocol(remPort);
+                    string exactKey = locIpRaw + ":" + locPort + "|" + fullRem;
+
+                    int ownPid = 0;
+                    if (!tcpPidMap.TryGetValue(exactKey, out ownPid)) {
+                        tcpPidMap.TryGetValue(fullRem, out ownPid);
+                    }
+                    PorygonCyberDefenseEngine.ProcessSecurityInfo procSec = PorygonCyberDefenseEngine.ResolveProcessSecurityInfo(ownPid);
+                    string procShort = string.IsNullOrEmpty(procSec.ProcessName) ? "System" : procSec.ProcessName;
+                    if (procShort.Length > 13) procShort = procShort.Substring(0, 13);
+                    string signBadge = procSec.IsSigned ? "SIGNED" : "UNSIGNED";
+                    string procTag = (ownPid > 0) ? string.Format("{0}.exe[{1}]", procShort, ownPid) : "System[4]";
+
+                    string fullLoc = string.Format("{0}:{1} [{2} {3}]", ipv4, locPort, procTag, signBadge);
+                    string proto = ClassifyPortProtocol(remPort) + " // " + procShort;
                     bool isLan = remIp.StartsWith("192.168.") || remIp.StartsWith("10.") || remIp.StartsWith("172.");
                     bool isStandardPort = (remPort == 443 || remPort == 80 || remPort == 53 || remPort == 123);
 
                     if (sampleConn == null) {
-                        sampleConn = string.Format("TCP_{0} {1} -> {2}", st.ToString().ToUpper(), fullLoc, fullRem);
+                        sampleConn = string.Format("TCP_{0} {1} -> {2}", st.ToString().ToUpper(), procTag, fullRem);
                     }
 
                     bool isNewHost = false;
@@ -5708,28 +6752,47 @@ public class HackerWallpaperForm : Form {
                     // Determine if this real connection is an Anomaly (Kind=2), New Host (Kind=1), or Normal Flow (Kind=0)
                     int nodeKind = 0;
                     string anomType = "BASELINE_FLOW";
-                    string anomDetail = "Encrypted/standard socket within baseline profile";
-                    float anomScore = 0.08f;
+                    string anomDetail = string.Format("Proc: {0} ({1}) -> {2}", procTag, procSec.SignerName ?? signBadge, fullRem);
+                    float anomScore = procSec.IsSigned ? 0.06f : 0.22f;
 
-                    if (!isStandardPort && !isLan) {
+                    if (procSec.IsUserTempOrDownloads && !procSec.IsSigned && !isLan) {
+                        unusualPortCount++;
+                        nodeKind = 2;
+                        anomType = "EDR_TEMP_UNSIGNED_C2";
+                        anomDetail = string.Format("Binario sin firma en Temp/Downloads ({0}) conectado a {1}", procTag, fullRem);
+                        anomScore = 0.93f;
+                        anomalyHeadline = "TEMP_UNSIGNED: " + procTag + "->" + remIp;
+                        if (!string.IsNullOrEmpty(procSec.ExePath)) {
+                            PorygonCyberDefenseEngine.EnqueueFileForAvScan(procSec.ExePath);
+                        }
+                        PorygonCyberDefenseEngine.RecordSiemEvent("PORYGON", "NIDS_EDR", "CRITICAL", "T1071", procTag, fullRem, "", anomScore, anomDetail, "ALERT_READY");
+                    } else if (procSec.IsLolBin && !isLan) {
+                        unusualPortCount++;
+                        nodeKind = 2;
+                        anomType = "EDR_LOLBIN_NET";
+                        anomDetail = string.Format("LOLBin {0} realizando conexión externa hacia {1}", procTag, fullRem);
+                        anomScore = 0.89f;
+                        anomalyHeadline = "LOLBIN_NET: " + procTag + "->" + remIp;
+                        PorygonCyberDefenseEngine.RecordSiemEvent("PORYGON", "NIDS_EDR", "HIGH", "T1059", procTag, fullRem, "", anomScore, anomDetail, "ALERT_READY");
+                    } else if (!isStandardPort && !isLan) {
                         unusualPortCount++;
                         nodeKind = 2;
                         anomType = "NON_STD_PORT_" + remPort;
-                        anomDetail = "External connection on non-standard TCP port " + remPort;
-                        anomScore = (remPort == 22 || remPort == 3389 || remPort == 4444 || remPort == 445) ? 0.94f : 0.78f;
-                        anomalyHeadline = "PORT_ALERT: " + fullRem;
+                        anomDetail = string.Format("Proceso {0} ({1}) en puerto inusual {2}", procTag, signBadge, fullRem);
+                        anomScore = (remPort == 22 || remPort == 3389 || remPort == 4444 || remPort == 445) ? 0.94f : (procSec.IsSigned ? 0.74f : 0.88f);
+                        anomalyHeadline = "PORT_ALERT: " + procShort + "->" + fullRem;
                     } else if (st == TcpState.SynSent) {
                         nodeKind = 2;
                         anomType = "HALF_OPEN_SYN";
-                        anomDetail = "Outbound SYN_SENT handshake pending response";
+                        anomDetail = string.Format("Handshake SYN_SENT saliente por {0}", procTag);
                         anomScore = 0.76f;
-                        anomalyHeadline = "SYN_BURST: " + fullRem;
-                    } else if (isNewHost) {
+                        anomalyHeadline = "SYN_BURST: " + procShort + "->" + fullRem;
+                    } else if (isNewHost || !procSec.IsSigned) {
                         nodeKind = 1;
-                        anomType = "NEW_EXTERNAL_HOST";
-                        anomDetail = "First time seeing remote IP " + remIp + " in session";
-                        anomScore = 0.54f;
-                        if (anomalyHeadline == "BASELINE_NORMAL") anomalyHeadline = "NEW_HOST: " + remIp;
+                        anomType = !procSec.IsSigned ? "UNSIGNED_PROC_FLOW" : "NEW_EXTERNAL_HOST";
+                        anomDetail = string.Format("Flujo {0} ({1}) hacia {2}", procTag, signBadge, remIp);
+                        anomScore = !procSec.IsSigned ? 0.62f : 0.52f;
+                        if (anomalyHeadline == "BASELINE_NORMAL" && isNewHost) anomalyHeadline = "NEW_HOST: " + procShort + "->" + remIp;
                     }
 
                     // If this is a newly seen external IP and local SOC API is online, let Porygon query VirusTotal API
@@ -5750,13 +6813,17 @@ public class HackerWallpaperForm : Form {
                                     if (vtMal > 0 || vtSc >= 0.45f) {
                                         nodeKind = 2;
                                         anomType = "VT_MALICIOUS_" + vtMal;
-                                        anomDetail = vtSum;
-                                        anomScore = Math.Max(anomScore, Math.Min(0.99f, 0.72f + vtSc * 0.27f));
+                                        anomDetail = vtSum + " // Proc:" + procTag;
+                                        anomScore = Math.Max(anomScore, Math.Min(0.99f, 0.78f + vtSc * 0.21f));
                                         anomalyHeadline = "VT_HIT: " + remIp + " (MAL:" + vtMal + ")";
                                     }
                                 }
                             }
                         } catch { }
+                    }
+
+                    if (nodeKind == 2 && !isLan) {
+                        PorygonCyberDefenseEngine.RegisterCandidateBlockIp(fullRem, procTag, anomType + " [" + signBadge + "]", anomScore, true);
                     }
 
                     // Feed real connection node into Porygon 3D Cyberspace!
@@ -5776,7 +6843,7 @@ public class HackerWallpaperForm : Form {
                         newBlips.Add(new RadarBlip {
                             AngleDeg = ang,
                             DistNorm = dist,
-                            Label = shortIp + ":" + remPort,
+                            Label = procShort + "@" + shortIp,
                             FullRemoteEp = fullRem,
                             LocalEp = fullLoc,
                             Proto = proto,
@@ -6006,6 +7073,8 @@ public class HackerWallpaperForm : Form {
 
         if (hk == HOTKEY_ID || hk == HOTKEY_GAMER_ID) {
             ShowConfigWindow();
+        } else if (hk == HOTKEY_SIEM_ID) {
+            ShowSiemCommandCenterWindow();
         } else if (hk == HOTKEY_MODEL_ID) {
             TriggerPorygonTrainingWave();
         } else if (hk == HOTKEY_BRAIN_FULL_ID) {
@@ -6034,6 +7103,7 @@ public class HackerWallpaperForm : Form {
             RegisterHotKey(hkHwnd, HOTKEY_OPACITY_DOWN_ID, MOD_CONTROL | MOD_ALT, (uint)Keys.Down);
             RegisterHotKey(hkHwnd, HOTKEY_BG_MODE_ID, MOD_CONTROL | MOD_ALT, (uint)Keys.M);
             RegisterHotKey(hkHwnd, HOTKEY_GAMER_ID, MOD_CONTROL | MOD_ALT, (uint)Keys.G);
+            RegisterHotKey(hkHwnd, HOTKEY_SIEM_ID, MOD_CONTROL | MOD_ALT, (uint)Keys.S);
         } catch { }
     }
 
@@ -6058,11 +7128,74 @@ public class HackerWallpaperForm : Form {
             UnregisterHotKey(hkHwnd, HOTKEY_OPACITY_DOWN_ID);
             UnregisterHotKey(hkHwnd, HOTKEY_BG_MODE_ID);
             UnregisterHotKey(hkHwnd, HOTKEY_GAMER_ID);
+            UnregisterHotKey(hkHwnd, HOTKEY_SIEM_ID);
             try { hotkeySink.DestroyHandle(); } catch { }
             hotkeySink = null;
         }
         if (porygon != null) porygon.SaveBrainStates();
         base.OnFormClosing(e);
+    }
+
+    public void ShowCyberActionToast(string titleTxt, string subTxt, Color accent) {
+        try {
+            if (toastTimer != null) {
+                toastTimer.Stop();
+                toastTimer.Dispose();
+                toastTimer = null;
+            }
+            if (toastForm != null && !toastForm.IsDisposed) {
+                toastForm.Close();
+                toastForm.Dispose();
+                toastForm = null;
+            }
+
+            Screen primaryScr = Screen.PrimaryScreen;
+            Rectangle pb = (primaryScr != null) ? primaryScr.Bounds : new Rectangle(0, 0, 1920, 1080);
+            int tw = 610;
+            int th = 66;
+            int tx = pb.Left + (pb.Width - tw) / 2;
+            int ty = pb.Top + 32;
+
+            toastForm = new Form {
+                FormBorderStyle = FormBorderStyle.None,
+                StartPosition = FormStartPosition.Manual,
+                Bounds = new Rectangle(tx, ty, tw, th),
+                TopMost = true,
+                ShowInTaskbar = false,
+                BackColor = Color.FromArgb(8, 16, 15),
+                Opacity = 0.95
+            };
+
+            toastForm.Paint += (s, pe) => {
+                Graphics g = pe.Graphics;
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
+                using (Pen borderPen = new Pen(accent, 2.0f))
+                using (SolidBrush titleBr = new SolidBrush(accent))
+                using (SolidBrush subBr = new SolidBrush(Color.FromArgb(215, 232, 228)))
+                using (Font fTitle = new Font("Consolas", 10.5f, FontStyle.Bold))
+                using (Font fSub = new Font("Segoe UI", 8.8f, FontStyle.Regular)) {
+                    g.DrawRectangle(borderPen, 1, 1, tw - 3, th - 3);
+                    g.FillRectangle(titleBr, 0, 0, 8, th);
+                    g.DrawString(titleTxt, fTitle, titleBr, 20, 11);
+                    g.DrawString(subTxt, fSub, subBr, 20, 36);
+                }
+            };
+
+            toastForm.Show();
+            int ex = GetWindowLong(toastForm.Handle, GWL_EXSTYLE);
+            SetWindowLong(toastForm.Handle, GWL_EXSTYLE, ex | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT);
+
+            toastTimer = new System.Windows.Forms.Timer();
+            toastTimer.Interval = 2600;
+            toastTimer.Tick += (s, ev) => {
+                try {
+                    if (toastTimer != null) { toastTimer.Stop(); toastTimer.Dispose(); toastTimer = null; }
+                    if (toastForm != null && !toastForm.IsDisposed) { toastForm.Close(); toastForm.Dispose(); toastForm = null; }
+                } catch { }
+            };
+            toastTimer.Start();
+        } catch { }
     }
 
     public void ToggleGamerMode() {
@@ -6815,8 +7948,45 @@ public class HackerWallpaperForm : Form {
                 if (connRect.Contains(pt)) {
                     int relX = pt.X - bx;
                     int relY = pt.Y - by;
-                    if (relY <= 28 && relX >= bw - 222 && relX <= bw - 150) {
+                    if (relY <= 28 && relX >= bw - 268 && relX < bw - 202) {
+                        ShowSiemCommandCenterWindow();
+                        return;
+                    } else if (relY <= 28 && relX >= bw - 202 && relX < bw - 156) {
+                        ThreadPool.QueueUserWorkItem(_ => PorygonCyberDefenseEngine.RunQuickDirectoryAudit(true));
+                        ShowCyberActionToast(
+                            "[ PORYGON2 AV/SIEM // AUDITORÍA RÁPIDA EN EJECUCIÓN ]",
+                            "Escaneando Downloads, Startup, Claves de Registro Run y Tabla TCP/PID...",
+                            Color.FromArgb(52, 211, 153));
+                        hudConnectomeDirty = true;
+                        return;
+                    } else if (relY <= 28 && relX >= bw - 156 && relX <= bw - 104) {
                         ShowConfigWindow();
+                        return;
+                    } else if (!connectomeCollapsed && relY >= bh - 54 && relY <= bh - 32 && relX >= bw - 144 && relX < bw - 72) {
+                        string candIp = PorygonCyberDefenseEngine.LastCandidateBlockIp;
+                        if (!string.IsNullOrEmpty(candIp)) {
+                            bool ok = PorygonCyberDefenseEngine.BlockRemoteIpInFirewall(candIp, "1-Click HUD IPS Block (" + PorygonCyberDefenseEngine.LastCandidateBlockReason + ")", false);
+                            ShowCyberActionToast(
+                                ok ? "[ PORYGON-Z IPS // IP AISLADA EN WINDOWS FIREWALL ]" : "[ PORYGON-Z IPS // PROTECCIÓN DE LISTA BLANCA ]",
+                                ok ? ("Regla creada en Firewall para bloquear tráfico hacia/desde " + candIp) : ("No se bloqueó " + candIp + " (IP protegida)"),
+                                ok ? Color.FromArgb(248, 113, 113) : Color.FromArgb(250, 204, 21));
+                            hudConnectomeDirty = true;
+                        } else {
+                            ShowSiemCommandCenterWindow();
+                        }
+                        return;
+                    } else if (!connectomeCollapsed && relY >= bh - 54 && relY <= bh - 32 && relX >= bw - 72 && relX <= bw - 6) {
+                        string candFile = PorygonCyberDefenseEngine.LastCandidateQuarantineFile;
+                        if (!string.IsNullOrEmpty(candFile) && File.Exists(candFile)) {
+                            bool ok = PorygonCyberDefenseEngine.QuarantineFile(candFile, "1-Click HUD Quarantine", PorygonCyberDefenseEngine.LastCandidateQuarantineSha, PorygonCyberDefenseEngine.LastCandidateQuarantineScore);
+                            ShowCyberActionToast(
+                                ok ? "[ PORYGON2 AV // ARCHIVO ENVIADO A BÓVEDA DE CUARENTENA ]" : "[ PORYGON2 AV // ARCHIVO PROTEGIDO ]",
+                                ok ? ("Aislado en Quarantine: " + Path.GetFileName(candFile)) : "Abre el Centro SIEM/AV para gestionar la Bóveda de Cuarentena",
+                                ok ? Color.FromArgb(250, 204, 21) : Color.FromArgb(52, 211, 153));
+                            hudConnectomeDirty = true;
+                        } else {
+                            ShowSiemCommandCenterWindow();
+                        }
                         return;
                     }
                     connectomeCollapsed = !connectomeCollapsed;
@@ -9323,66 +10493,103 @@ public class HackerWallpaperForm : Form {
 
             float anomIdx = currentFeed.AnomalyIndex;
             string sumTag = currentFeed.LastAnomalySummary ?? "BASELINE_OK";
-            if (sumTag.Length > 15) sumTag = sumTag.Substring(0, 15);
+            if (sumTag.Length > 13) sumTag = sumTag.Substring(0, 13);
             int evoRate = (porygon != null) ? porygon.CpuTrainingStepsPerSec : 18750;
 
-            g.DrawString(string.Format(">> PORYGON EVO-IDS SWARM // ANOMALY:{0:0}% [{1}]",
+            g.DrawString(string.Format(">> PORYGON CYBER-DEFENSE // ANOM:{0:0}% [{1}]",
                 anomIdx * 100f, sumTag), fontHudSmall, anomIdx > 0.45f ? c2B : c1B, bx + 10, by + 8);
-            using (SolidBrush pBtnBg = new SolidBrush(Color.FromArgb(150, 12, 28, 22)))
-            using (Pen pBtnBor = new Pen(Color.FromArgb(170, c1.R, c1.G, c1.B), 1.0f)) {
-                g.FillRectangle(pBtnBg, bx + bw - 218, by + 5, 64, 18);
-                g.DrawRectangle(pBtnBor, bx + bw - 218, by + 5, 64, 18);
-                g.DrawString("PANEL/G+", fontHudSmall, c1B, bx + bw - 213, by + 7);
-            }
-            g.DrawString(string.Format("CPU_EVO:{0:0.0}k/s [{1}]", evoRate / 1000.0, connectomeCollapsed ? "+" : "-"),
-                fontHudSmall, goldB, bx + bw - 148, by + 8);
+            using (SolidBrush pBtnBg = new SolidBrush(Color.FromArgb(155, 12, 28, 22)))
+            using (SolidBrush warnBtnBg = new SolidBrush(Color.FromArgb(165, 44, 18, 20)))
+            using (Pen pBtnBor = new Pen(Color.FromArgb(170, c1.R, c1.G, c1.B), 1.0f))
+            using (Pen warnBor = new Pen(Color.FromArgb(205, 232, 92, 92), 1.0f)) {
+                // [SIEM/IPS] Button (opens SIEM/AV/IPS Command Center, Ctrl+Alt+S)
+                g.FillRectangle(pBtnBg, bx + bw - 266, by + 5, 62, 18);
+                g.DrawRectangle(pBtnBor, bx + bw - 266, by + 5, 62, 18);
+                g.DrawString("SIEM/IPS", fontHudSmall, goldB, bx + bw - 261, by + 7);
 
-            if (connectomeCollapsed) return;
+                // [SCAN] Button (runs quick AV + Registry + TCP/PID audit)
+                g.FillRectangle(pBtnBg, bx + bw - 200, by + 5, 42, 18);
+                g.DrawRectangle(pBtnBor, bx + bw - 200, by + 5, 42, 18);
+                g.DrawString("SCAN", fontHudSmall, c1B, bx + bw - 193, by + 7);
 
-            for (int i = 0; i < porygon.Agents.Count; i++) {
-                Porygon3DAvatar.PorygonAgent ag = porygon.Agents[i];
-                FlyBrainConnectome br = ag.Brain;
-                int ry = by + 24 + i * 21;
+                // [PANEL] Button (opens Config Window)
+                g.FillRectangle(pBtnBg, bx + bw - 154, by + 5, 46, 18);
+                g.DrawRectangle(pBtnBor, bx + bw - 154, by + 5, 46, 18);
+                g.DrawString("PANEL", fontHudSmall, c1B, bx + bw - 148, by + 7);
 
-                string stShort = br.ActiveStateName ?? "PATROL";
-                if (stShort.Length > 9) stShort = stShort.Substring(0, 9);
+                g.DrawString(string.Format("EVO:{0:0.0}k [{1}]", evoRate / 1000.0, connectomeCollapsed ? "+" : "-"),
+                    fontHudSmall, goldB, bx + bw - 102, by + 8);
 
-                using (SolidBrush agB = new SolidBrush(Color.FromArgb(215, ag.AuraColor.R, ag.AuraColor.G, ag.AuraColor.B))) {
-                    string line = string.Format("[{0,-11}] G{1} {2,-9} AGE:{3,2:0}% | F2:{4,4:0.0}% FN:{5} FIT:{6,4:0.0} {7}",
-                        ag.Name, br.Generation, br.GetLifeStageLabel(), br.LifeAge, br.F2Score, br.FalseNegatives, br.FitnessScore, stShort);
-                    if (line.Length > 64) line = line.Substring(0, 64);
-                    g.DrawString(line, fontHudSmall, agB, bx + 10, ry);
-                }
+                if (connectomeCollapsed) return;
 
-                int stripX = bx + bw - 126;
-                using (SolidBrush dimB = new SolidBrush(Color.FromArgb(48, c1.R, c1.G, c1.B)))
-                using (SolidBrush actB = new SolidBrush(ag.AuraColor)) {
-                    for (int n = 0; n < 15; n++) {
-                        float glow = br.SpikeGlow[n * 4];
-                        if (glow > 0.35f) {
-                            actB.Color = Color.FromArgb((int)(95 + glow * 120), ag.AuraColor.R, ag.AuraColor.G, ag.AuraColor.B);
-                            g.FillEllipse(actB, stripX + n * 8, ry + 3, 6f, 6f);
-                        } else {
-                            g.FillEllipse(dimB, stripX + n * 8, ry + 3, 6f, 6f);
+                for (int i = 0; i < porygon.Agents.Count; i++) {
+                    Porygon3DAvatar.PorygonAgent ag = porygon.Agents[i];
+                    FlyBrainConnectome br = ag.Brain;
+                    int ry = by + 24 + i * 21;
+
+                    string roleTag = (i == 0) ? "NIDS+SIEM" : (i == 1 ? "AV/EDR" : "IPS/FW");
+                    using (SolidBrush agB = new SolidBrush(Color.FromArgb(215, ag.AuraColor.R, ag.AuraColor.G, ag.AuraColor.B))) {
+                        string line = string.Format("[{0,-9}] G{1} {2,-9} AGE:{3,2:0}% | F2:{4,4:0.0}% FN:{5} FIT:{6,4:0.0}",
+                            ag.Name, br.Generation, roleTag, br.LifeAge, br.F2Score, br.FalseNegatives, br.FitnessScore);
+                        if (line.Length > 64) line = line.Substring(0, 64);
+                        g.DrawString(line, fontHudSmall, agB, bx + 10, ry);
+                    }
+
+                    int stripX = bx + bw - 126;
+                    using (SolidBrush dimB = new SolidBrush(Color.FromArgb(48, c1.R, c1.G, c1.B)))
+                    using (SolidBrush actB = new SolidBrush(ag.AuraColor)) {
+                        for (int n = 0; n < 15; n++) {
+                            float glow = br.SpikeGlow[n * 4];
+                            if (glow > 0.35f) {
+                                actB.Color = Color.FromArgb((int)(95 + glow * 120), ag.AuraColor.R, ag.AuraColor.G, ag.AuraColor.B);
+                                g.FillEllipse(actB, stripX + n * 8, ry + 3, 6f, 6f);
+                            } else {
+                                g.FillEllipse(dimB, stripX + n * 8, ry + 3, 6f, 6f);
+                            }
                         }
                     }
                 }
+
+                int pidCnt, avCnt, siemCnt, fwCnt, quarCnt;
+                string bannerSnap, candIpSnap, candFileSnap;
+                lock (PorygonCyberDefenseEngine.SyncLock) {
+                    pidCnt = PorygonCyberDefenseEngine.TotalNidsProcessAudits;
+                    avCnt = PorygonCyberDefenseEngine.TotalAvFilesScanned;
+                    siemCnt = PorygonCyberDefenseEngine.TotalSiemAlerts;
+                    fwCnt = PorygonCyberDefenseEngine.BlockedFirewallIps.Count;
+                    quarCnt = PorygonCyberDefenseEngine.QuarantinedFiles.Count;
+                    bannerSnap = PorygonCyberDefenseEngine.LastActionBanner ?? "HYBRID_DEFENSE_ONLINE";
+                    candIpSnap = PorygonCyberDefenseEngine.LastCandidateBlockIp;
+                    candFileSnap = PorygonCyberDefenseEngine.LastCandidateQuarantineFile;
+                }
+
+                string kpiLine = string.Format("DEFENSE // PID_MAP:{0} | AV_SCAN:{1} | SIEM:{2} | FW_BLK:{3} | QUAR:{4}",
+                    pidCnt, avCnt, siemCnt, fwCnt, quarCnt);
+                if (kpiLine.Length > 63) kpiLine = kpiLine.Substring(0, 63);
+                g.DrawString(kpiLine, fontHudSmall, goldB, bx + 10, by + bh - 49);
+
+                // 1-Click Hybrid IPS & AV Quarantine Action Buttons
+                bool hasIp = !string.IsNullOrEmpty(candIpSnap);
+                bool hasFile = !string.IsNullOrEmpty(candFileSnap);
+                g.FillRectangle(hasIp ? warnBtnBg : pBtnBg, bx + bw - 142, by + bh - 51, 68, 16);
+                g.DrawRectangle(hasIp ? warnBor : pBtnBor, bx + bw - 142, by + bh - 51, 68, 16);
+                g.DrawString("BLOCK IP", fontHudSmall, hasIp ? c2B : c1B, bx + bw - 136, by + bh - 50);
+
+                g.FillRectangle(hasFile ? warnBtnBg : pBtnBg, bx + bw - 70, by + bh - 51, 60, 16);
+                g.DrawRectangle(hasFile ? warnBor : pBtnBor, bx + bw - 70, by + bh - 51, 60, 16);
+                g.DrawString("QUAR", fontHudSmall, hasFile ? goldB : c1B, bx + bw - 56, by + bh - 50);
+
+                string statusLine = bannerSnap;
+                if (hasIp) {
+                    statusLine = string.Format("IPS_READY // Candidato Bloqueo: {0} ({1}) | Click [BLOCK IP]",
+                        candIpSnap, PorygonCyberDefenseEngine.LastCandidateBlockProc ?? "PID");
+                }
+                if (statusLine.Length > 84) statusLine = statusLine.Substring(0, 84);
+                g.DrawString(statusLine, fontHudSmall, c1B, bx + 10, by + bh - 33);
+
+                string footer = "HYBRID_SOC: [NIDS+PID] + [AV_ENTROPY_SHA256] + [SIEM_JSONL] + [FW_IPS] // CTRL+ALT+S";
+                g.DrawString(footer, fontHudSmall, txtB, bx + 10, by + bh - 17);
             }
-
-            string auditLine = (porygon != null && !string.IsNullOrEmpty(porygon.LastLineageAuditSummary))
-                ? ("AUDIT // " + porygon.LastLineageAuditSummary)
-                : "AUDIT // Anti-Negative-Trait Pruner & FN Penalty (3.5x) Active";
-            if (auditLine.Length > 84) auditLine = auditLine.Substring(0, 84);
-            g.DrawString(auditLine, fontHudSmall, goldB, bx + 10, by + bh - 49);
-
-            string vtLine = (porygon != null && !string.IsNullOrEmpty(porygon.LastVtVerdict))
-                ? ("VT_API // " + porygon.LastVtVerdict + " | LOG: porygon_lineage_audit.log")
-                : "VT_API // http://192.168.2.222:5080/ (VirusTotal v3 Linked)";
-            if (vtLine.Length > 84) vtLine = vtLine.Substring(0, 84);
-            g.DrawString(vtLine, fontHudSmall, c1B, bx + 10, by + bh - 33);
-
-            string footer = "NATURAL_SEL: [FN_LOSS 3.5x] + [TRAIT_PRUNING] + [ELITE_CROSSOVER] // CLICK TO FOLD";
-            g.DrawString(footer, fontHudSmall, txtB, bx + 10, by + bh - 17);
         }
     }
 
@@ -9985,10 +11192,21 @@ public class HackerWallpaperForm : Form {
         };
         chkPory.CheckedChanged += (s, ev) => { Config.ShowPorygon = chkPory.Checked; Config.Save(); };
 
-        Button btnClose = new Button {
-            Text = "Guardar y Cerrar Panel",
+        Button btnOpenSiem = new Button {
+            Text = "🛡️ Centro SIEM / IPS / AV (Ctrl+Alt+S)",
             Location = new Point(24, 582),
-            Size = new Size(466, 42),
+            Size = new Size(256, 42),
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(24, 44, 58),
+            ForeColor = Color.FromArgb(250, 204, 21),
+            Font = new Font("Segoe UI", 9.0f, FontStyle.Bold)
+        };
+        btnOpenSiem.Click += (s, ev) => { ShowSiemCommandCenterWindow(); };
+
+        Button btnClose = new Button {
+            Text = "Guardar y Cerrar",
+            Location = new Point(288, 582),
+            Size = new Size(202, 42),
             FlatStyle = FlatStyle.Flat,
             BackColor = Color.FromArgb(52, 168, 138),
             ForeColor = Color.FromArgb(8, 16, 14),
@@ -10003,6 +11221,7 @@ public class HackerWallpaperForm : Form {
         configForm.Controls.Add(chkTel);
         configForm.Controls.Add(chkRad);
         configForm.Controls.Add(chkPory);
+        configForm.Controls.Add(btnOpenSiem);
         configForm.Controls.Add(btnClose);
 
         // =========================================================================
@@ -10308,6 +11527,408 @@ public class HackerWallpaperForm : Form {
         };
 
         configForm.Show();
+    }
+
+    public void ShowSiemCommandCenterWindow() {
+        if (siemForm != null && !siemForm.IsDisposed) {
+            siemForm.Activate();
+            return;
+        }
+
+        siemForm = new Form {
+            Text = "PORYGON CYBER-DEFENSE SOC // SIEM + Antivirus/EDR + Active IPS Firewall + Bóveda de Cuarentena (Modo Híbrido)",
+            ClientSize = new Size(1120, 680),
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox = false,
+            StartPosition = FormStartPosition.CenterScreen,
+            BackColor = Color.FromArgb(10, 15, 22),
+            ForeColor = Color.FromArgb(226, 232, 240),
+            Font = new Font("Segoe UI", 9.0f, FontStyle.Regular),
+            TopMost = true
+        };
+
+        Label lblHeader = new Label {
+            Text = "🛡️ CENTRO DE COMANDO SIEM / EDR / IPS / AV // TRÍADA PORYGON (Modo Híbrido: Auto-Defensa Crítica + 1-Click)",
+            Font = new Font("Consolas", 10.2f, FontStyle.Bold),
+            ForeColor = Color.FromArgb(88, 226, 184),
+            Location = new Point(18, 10),
+            AutoSize = true
+        };
+        siemForm.Controls.Add(lblHeader);
+
+        Label lblKpi = new Label {
+            Location = new Point(18, 34),
+            Size = new Size(1084, 54),
+            Font = new Font("Consolas", 8.2f, FontStyle.Regular),
+            ForeColor = Color.FromArgb(224, 212, 176),
+            BackColor = Color.FromArgb(14, 22, 26),
+            BorderStyle = BorderStyle.FixedSingle
+        };
+        siemForm.Controls.Add(lblKpi);
+
+        // Toolbar Row (Y = 96)
+        Button btnQuickAudit = new Button {
+            Text = "🔍 Auditar Red TCP/PID + Registro + Startup Ahora",
+            Location = new Point(18, 96),
+            Size = new Size(280, 32),
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(20, 42, 34),
+            ForeColor = Color.FromArgb(98, 244, 190),
+            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold)
+        };
+
+        Button btnScanCustom = new Button {
+            Text = "📂 Escanear Archivo (SHA-256 + Entropía)...",
+            Location = new Point(306, 96),
+            Size = new Size(254, 32),
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(22, 36, 48),
+            ForeColor = Color.FromArgb(125, 211, 252),
+            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold)
+        };
+
+        TextBox txtBlockIp = new TextBox {
+            Location = new Point(570, 100),
+            Size = new Size(150, 24),
+            BackColor = Color.FromArgb(12, 20, 28),
+            ForeColor = Color.FromArgb(250, 204, 21),
+            Font = new Font("Consolas", 9.0f, FontStyle.Bold),
+            Text = string.IsNullOrEmpty(PorygonCyberDefenseEngine.LastCandidateBlockIp) ? "185.220.101.4" : PorygonCyberDefenseEngine.LastCandidateBlockIp
+        };
+
+        Button btnBlockIp = new Button {
+            Text = "🔥 Bloquear IP en Firewall",
+            Location = new Point(726, 96),
+            Size = new Size(184, 32),
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(52, 22, 26),
+            ForeColor = Color.FromArgb(252, 165, 165),
+            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold)
+        };
+
+        Button btnOpenJsonl = new Button {
+            Text = "📄 Abrir SIEM JSONL",
+            Location = new Point(918, 96),
+            Size = new Size(184, 32),
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(32, 30, 20),
+            ForeColor = Color.FromArgb(250, 204, 21),
+            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold)
+        };
+
+        siemForm.Controls.Add(btnQuickAudit);
+        siemForm.Controls.Add(btnScanCustom);
+        siemForm.Controls.Add(txtBlockIp);
+        siemForm.Controls.Add(btnBlockIp);
+        siemForm.Controls.Add(btnOpenJsonl);
+
+        // Panel 1: SIEM Events (Left, Y = 136)
+        Label lblSiem = new Label {
+            Text = "📡 EVENTOS SIEM & CORRELACIÓN MITRE ATT&CK (PORYGON // TCP-PID, Registro Run, EventLog 7045, AV, IPS):",
+            Location = new Point(18, 136),
+            AutoSize = true,
+            ForeColor = Color.FromArgb(88, 226, 184),
+            Font = new Font("Segoe UI", 8.8f, FontStyle.Bold)
+        };
+        TextBox txtSiemFeed = new TextBox {
+            Location = new Point(18, 156),
+            Size = new Size(534, 280),
+            Multiline = true,
+            ReadOnly = true,
+            ScrollBars = ScrollBars.Vertical,
+            BackColor = Color.FromArgb(8, 13, 18),
+            ForeColor = Color.FromArgb(196, 228, 216),
+            Font = new Font("Consolas", 7.8f, FontStyle.Regular),
+            BorderStyle = BorderStyle.FixedSingle
+        };
+
+        // Panel 2: Real-Time Antivirus / EDR Scans (Right, Y = 136)
+        Label lblAv = new Label {
+            Text = "🧬 ANTIVIRUS / EDR EN TIEMPO REAL — PORYGON2 (Downloads, Desktop, %TEMP%, Startup):",
+            Location = new Point(566, 136),
+            AutoSize = true,
+            ForeColor = Color.FromArgb(250, 204, 21),
+            Font = new Font("Segoe UI", 8.8f, FontStyle.Bold)
+        };
+        TextBox txtAvFeed = new TextBox {
+            Location = new Point(566, 156),
+            Size = new Size(536, 280),
+            Multiline = true,
+            ReadOnly = true,
+            ScrollBars = ScrollBars.Vertical,
+            BackColor = Color.FromArgb(8, 13, 18),
+            ForeColor = Color.FromArgb(232, 220, 184),
+            Font = new Font("Consolas", 7.8f, FontStyle.Regular),
+            BorderStyle = BorderStyle.FixedSingle
+        };
+
+        siemForm.Controls.Add(lblSiem);
+        siemForm.Controls.Add(txtSiemFeed);
+        siemForm.Controls.Add(lblAv);
+        siemForm.Controls.Add(txtAvFeed);
+
+        // Panel 3: Windows Firewall Blocked IPs (Bottom-Left, Y = 446)
+        Label lblFw = new Label {
+            Text = "🔥 IPS ACTIVO // IPs Bloqueadas en Windows Firewall por Porygon-Z:",
+            Location = new Point(18, 446),
+            AutoSize = true,
+            ForeColor = Color.FromArgb(248, 113, 113),
+            Font = new Font("Segoe UI", 8.8f, FontStyle.Bold)
+        };
+        ListBox lstBlockedIps = new ListBox {
+            Location = new Point(18, 468),
+            Size = new Size(370, 150),
+            BackColor = Color.FromArgb(10, 16, 22),
+            ForeColor = Color.FromArgb(252, 165, 165),
+            Font = new Font("Consolas", 8.5f, FontStyle.Regular),
+            BorderStyle = BorderStyle.FixedSingle
+        };
+        Button btnUnblockIp = new Button {
+            Text = "🔓 Desbloquear IP\nSeleccionada en Firewall",
+            Location = new Point(396, 468),
+            Size = new Size(156, 68),
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(22, 38, 32),
+            ForeColor = Color.FromArgb(110, 231, 183),
+            Font = new Font("Segoe UI", 8.2f, FontStyle.Bold)
+        };
+        Button btnBlockCandNow = new Button {
+            Text = "⚡ Bloquear Última IP\nSospechosa (1-Click)",
+            Location = new Point(396, 548),
+            Size = new Size(156, 70),
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(48, 22, 26),
+            ForeColor = Color.FromArgb(252, 165, 165),
+            Font = new Font("Segoe UI", 8.2f, FontStyle.Bold)
+        };
+
+        // Panel 4: AV Quarantine Vault (Bottom-Right, Y = 446)
+        Label lblQuar = new Label {
+            Text = "☣️ BÓVEDA DE CUARENTENA AV (.qz) — Porygon2 / Porygon-Z:",
+            Location = new Point(566, 446),
+            AutoSize = true,
+            ForeColor = Color.FromArgb(250, 204, 21),
+            Font = new Font("Segoe UI", 8.8f, FontStyle.Bold)
+        };
+        ListBox lstQuarantine = new ListBox {
+            Location = new Point(566, 468),
+            Size = new Size(372, 150),
+            BackColor = Color.FromArgb(10, 16, 22),
+            ForeColor = Color.FromArgb(250, 204, 21),
+            Font = new Font("Consolas", 8.2f, FontStyle.Regular),
+            BorderStyle = BorderStyle.FixedSingle
+        };
+        Button btnRestoreQuar = new Button {
+            Text = "♻️ Restaurar Archivo\nde Cuarentena",
+            Location = new Point(946, 468),
+            Size = new Size(156, 68),
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(22, 38, 32),
+            ForeColor = Color.FromArgb(110, 231, 183),
+            Font = new Font("Segoe UI", 8.2f, FontStyle.Bold)
+        };
+        Button btnQuarCandNow = new Button {
+            Text = "☣️ Aislar Último\nArchivo Sospechoso",
+            Location = new Point(946, 548),
+            Size = new Size(156, 70),
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(48, 34, 16),
+            ForeColor = Color.FromArgb(250, 204, 21),
+            Font = new Font("Segoe UI", 8.2f, FontStyle.Bold)
+        };
+
+        Button btnCloseSiem = new Button {
+            Text = "Cerrar Centro de Comando SOC / SIEM",
+            Location = new Point(18, 630),
+            Size = new Size(1084, 38),
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(52, 168, 138),
+            ForeColor = Color.FromArgb(8, 16, 14),
+            Font = new Font("Segoe UI", 9.5f, FontStyle.Bold)
+        };
+        btnCloseSiem.FlatAppearance.BorderSize = 0;
+        btnCloseSiem.Click += (s, ev) => siemForm.Close();
+
+        siemForm.Controls.Add(lblFw);
+        siemForm.Controls.Add(lstBlockedIps);
+        siemForm.Controls.Add(btnUnblockIp);
+        siemForm.Controls.Add(btnBlockCandNow);
+        siemForm.Controls.Add(lblQuar);
+        siemForm.Controls.Add(lstQuarantine);
+        siemForm.Controls.Add(btnRestoreQuar);
+        siemForm.Controls.Add(btnQuarCandNow);
+        siemForm.Controls.Add(btnCloseSiem);
+
+        int lastSiemCount = -1, lastAvCount = -1, lastFwCount = -1, lastQuarCount = -1;
+
+        Action refreshSiemUi = () => {
+            lock (PorygonCyberDefenseEngine.SyncLock) {
+                string candIp = string.IsNullOrEmpty(PorygonCyberDefenseEngine.LastCandidateBlockIp)
+                    ? "Ninguna"
+                    : (PorygonCyberDefenseEngine.LastCandidateBlockIp + " [" + PorygonCyberDefenseEngine.LastCandidateBlockProc + "]");
+                string candFile = string.IsNullOrEmpty(PorygonCyberDefenseEngine.LastCandidateQuarantineFile)
+                    ? "Ninguno"
+                    : Path.GetFileName(PorygonCyberDefenseEngine.LastCandidateQuarantineFile);
+
+                lblKpi.Text = string.Format(
+                    " [PORYGON NIDS+PID+SIEM] Procesos Auditados: {0} | Alertas SIEM: {1} | Log: {2}\n" +
+                    " [PORYGON2 AV/EDR] Archivos Escaneados: {3} | Candidato Cuarentena: {4}\n" +
+                    " [PORYGON-Z IPS/FW] Acciones IPS: {5} | IPs Bloqueadas: {6} | Candidato Bloqueo IP: {7} | Estado: {8}",
+                    PorygonCyberDefenseEngine.TotalNidsProcessAudits,
+                    PorygonCyberDefenseEngine.TotalSiemAlerts,
+                    PorygonCyberDefenseEngine.ProjectSiemJsonlPath,
+                    PorygonCyberDefenseEngine.TotalAvFilesScanned,
+                    candFile,
+                    PorygonCyberDefenseEngine.TotalIpsActions,
+                    PorygonCyberDefenseEngine.BlockedFirewallIps.Count,
+                    candIp,
+                    PorygonCyberDefenseEngine.LastActionBanner);
+
+                if (PorygonCyberDefenseEngine.RecentSiemEvents.Count != lastSiemCount) {
+                    lastSiemCount = PorygonCyberDefenseEngine.RecentSiemEvents.Count;
+                    StringBuilder sb = new StringBuilder();
+                    for (int i = PorygonCyberDefenseEngine.RecentSiemEvents.Count - 1; i >= 0; i--) {
+                        var e = PorygonCyberDefenseEngine.RecentSiemEvents[i];
+                        sb.AppendFormat("[{0}] [{1}] [{2}/{3}] ({4}) Proc:{5} -> {6} | Risk:{7:0}% | Action:{8}\r\n   ↳ {9}\r\n",
+                            e.Timestamp, e.Severity, e.AgentName, e.Module, e.MitreId, e.ProcessInfo, e.Target, e.RiskScore * 100f, e.ActionTaken, e.Summary);
+                    }
+                    txtSiemFeed.Text = sb.Length > 0 ? sb.ToString() : "[SIEM] Monitoreando conexiones TCP/PID, claves de registro Run y EventLog...";
+                }
+
+                if (PorygonCyberDefenseEngine.RecentAvScans.Count != lastAvCount) {
+                    lastAvCount = PorygonCyberDefenseEngine.RecentAvScans.Count;
+                    StringBuilder sbAv = new StringBuilder();
+                    for (int i = PorygonCyberDefenseEngine.RecentAvScans.Count - 1; i >= 0; i--) {
+                        var r = PorygonCyberDefenseEngine.RecentAvScans[i];
+                        sbAv.AppendFormat("[{0}] [{1}] {2} ({3:N0} B) | Risk:{4:0}% | MITRE:{5}\r\n   ↳ {6}\r\n   ↳ Ruta: {7}\r\n",
+                            r.Timestamp, r.Verdict, r.FileName, r.FileSizeBytes, r.RiskScore * 100f, r.MitreTactic, r.Detail, r.FullPath);
+                    }
+                    txtAvFeed.Text = sbAv.Length > 0
+                        ? sbAv.ToString()
+                        : "[PORYGON2 AV] FileSystemWatcher activo en Downloads, Desktop, %TEMP% y Startup.\r\nPulsa [🔍 Auditar Red TCP/PID + Registro + Startup Ahora] o [📂 Escanear Archivo...] arriba para analizar archivos existentes.";
+                }
+
+                if (PorygonCyberDefenseEngine.BlockedFirewallIps.Count != lastFwCount) {
+                    lastFwCount = PorygonCyberDefenseEngine.BlockedFirewallIps.Count;
+                    lstBlockedIps.Items.Clear();
+                    for (int i = 0; i < PorygonCyberDefenseEngine.BlockedFirewallIps.Count; i++) {
+                        lstBlockedIps.Items.Add(PorygonCyberDefenseEngine.BlockedFirewallIps[i]);
+                    }
+                }
+
+                if (PorygonCyberDefenseEngine.QuarantinedFiles.Count != lastQuarCount) {
+                    lastQuarCount = PorygonCyberDefenseEngine.QuarantinedFiles.Count;
+                    lstQuarantine.Items.Clear();
+                    for (int i = 0; i < PorygonCyberDefenseEngine.QuarantinedFiles.Count; i++) {
+                        var q = PorygonCyberDefenseEngine.QuarantinedFiles[i];
+                        lstQuarantine.Items.Add(string.Format("{0} | {1} | {2}", q.Id, q.FileName, q.OriginalPath));
+                    }
+                }
+            }
+        };
+
+        refreshSiemUi();
+
+        btnQuickAudit.Click += (s, ev) => {
+            PorygonCyberDefenseEngine.RunQuickDirectoryAudit(true);
+            lastSiemCount = -1;
+            lastAvCount = -1;
+            refreshSiemUi();
+            hudConnectomeDirty = true;
+        };
+
+        btnScanCustom.Click += (s, ev) => {
+            using (OpenFileDialog ofd = new OpenFileDialog()) {
+                ofd.Title = "Seleccionar archivo para análisis Antivirus / EDR (SHA-256 + Entropía + Authenticode)";
+                ofd.InitialDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+                if (ofd.ShowDialog(siemForm) == DialogResult.OK) {
+                    PorygonCyberDefenseEngine.InspectFileArtifact(ofd.FileName, true);
+                    lastSiemCount = -1;
+                    lastAvCount = -1;
+                    refreshSiemUi();
+                    hudConnectomeDirty = true;
+                }
+            }
+        };
+
+        btnBlockIp.Click += (s, ev) => {
+            string ip = (txtBlockIp.Text ?? "").Trim();
+            if (!string.IsNullOrEmpty(ip)) {
+                PorygonCyberDefenseEngine.BlockRemoteIpInFirewall(ip, "Bloqueo manual desde Centro de Comando SOC", false);
+                lastSiemCount = -1;
+                lastFwCount = -1;
+                refreshSiemUi();
+                hudConnectomeDirty = true;
+            }
+        };
+
+        btnBlockCandNow.Click += (s, ev) => {
+            string cand = PorygonCyberDefenseEngine.LastCandidateBlockIp;
+            if (!string.IsNullOrEmpty(cand)) {
+                PorygonCyberDefenseEngine.BlockRemoteIpInFirewall(cand, "1-Click IPS Block (" + PorygonCyberDefenseEngine.LastCandidateBlockReason + ")", false);
+                lastSiemCount = -1;
+                lastFwCount = -1;
+                refreshSiemUi();
+                hudConnectomeDirty = true;
+            }
+        };
+
+        btnUnblockIp.Click += (s, ev) => {
+            if (lstBlockedIps.SelectedItem != null) {
+                string ip = lstBlockedIps.SelectedItem.ToString();
+                PorygonCyberDefenseEngine.UnblockRemoteIpInFirewall(ip);
+                lastSiemCount = -1;
+                lastFwCount = -1;
+                refreshSiemUi();
+                hudConnectomeDirty = true;
+            }
+        };
+
+        btnQuarCandNow.Click += (s, ev) => {
+            string candF = PorygonCyberDefenseEngine.LastCandidateQuarantineFile;
+            if (!string.IsNullOrEmpty(candF) && File.Exists(candF)) {
+                PorygonCyberDefenseEngine.QuarantineFile(candF, "1-Click SOC Quarantine", PorygonCyberDefenseEngine.LastCandidateQuarantineSha, PorygonCyberDefenseEngine.LastCandidateQuarantineScore);
+                lastSiemCount = -1;
+                lastQuarCount = -1;
+                refreshSiemUi();
+                hudConnectomeDirty = true;
+            }
+        };
+
+        btnRestoreQuar.Click += (s, ev) => {
+            if (lstQuarantine.SelectedItem != null) {
+                string item = lstQuarantine.SelectedItem.ToString();
+                string qId = item.Split('|')[0].Trim();
+                PorygonCyberDefenseEngine.RestoreQuarantinedFile(qId);
+                lastSiemCount = -1;
+                lastQuarCount = -1;
+                refreshSiemUi();
+                hudConnectomeDirty = true;
+            }
+        };
+
+        btnOpenJsonl.Click += (s, ev) => {
+            try {
+                string p = File.Exists(PorygonCyberDefenseEngine.ProjectSiemJsonlPath)
+                    ? PorygonCyberDefenseEngine.ProjectSiemJsonlPath
+                    : PorygonCyberDefenseEngine.SiemJsonlPath;
+                if (File.Exists(p)) {
+                    Process.Start("notepad.exe", "\"" + p + "\"");
+                }
+            } catch { }
+        };
+
+        System.Windows.Forms.Timer siemTimer = new System.Windows.Forms.Timer { Interval = 1000 };
+        siemTimer.Tick += (s, ev) => {
+            if (siemForm == null || siemForm.IsDisposed || !siemForm.Visible) return;
+            refreshSiemUi();
+        };
+        siemTimer.Start();
+        siemForm.FormClosed += (s, ev) => {
+            try { siemTimer.Stop(); siemTimer.Dispose(); } catch { }
+        };
+
+        siemForm.Show();
     }
 
     public static void RenderModelsContactSheet(string outPath) {

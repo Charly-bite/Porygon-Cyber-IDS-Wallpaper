@@ -46,19 +46,31 @@ Construidos 100% en OpenGL por hardware con geometría poligonal por lotes (`GL_
   * **Ventana Maximizada / Modo Eco (`~25 FPS [eco]`):** Ahorra GPU automáticamente cuando una aplicación maximizada cubre la pantalla.
 * **Batching OpenGL Unificado y Zero-GC:** Toda la vegetación 3D, rocas, río, luciérnagas y terreno se emiten en lotes unificados (`GL_TRIANGLES`, `GL_LINES`, `GL_QUADS`) con buffers preasignados (cero asignaciones por cuadro en el Garbage Collector) y actualización escalonada *Round-Robin* de texturas HUD en VRAM.
 
-### 5. 🛡️ Detección Real de Anomalías de Tráfico (Network IDS) + VirusTotal v3
-Los 3 modelos se alimentan cada ciclo con telemetría real del stack de red de Windows (`IPGlobalProperties.GetActiveTcpConnections()`, estadísticas IPv4 de tu interfaz activa y latencia ICMP), además de auditoría automática de IPs públicas en **VirusTotal API v3**.
+### 5. 🛡️ Suite Real de Ciberseguridad v2.5: NIDS+PID, Antivirus/EDR, SIEM y Active IPS (Modo Híbrido)
+Cada evolución de la tríada **Porygon** ejecuta un módulo real de defensa sobre Windows 11 a través del motor [`PorygonCyberDefenseEngine`](src/HackerWallpaper.cs):
+1. **`PORYGON` — NIDS + Mapeador Real Socket $\leftrightarrow$ Proceso/PID (`iphlpapi.dll` `GetExtendedTcpTable`) + SIEM:**
+   * Cruza cada socket TCP activo con la tabla extendida del kernel para identificar el **`PID` exacto**, el **nombre y ruta del `.exe`**, y verifica su **firma digital `Authenticode` (`X509Certificate`)**.
+   * Detecta **LOLBins** (`powershell`, `pwsh`, `cmd`, `mshta`, `wscript`, `rundll32`, `regsvr32`, `certutil`) realizando conexiones externas y binarios sin firma ejecutándose desde `%TEMP%` o `Downloads`.
+   * **Motor SIEM Local (`MITRE ATT&CK`):** Audita persistencia en el Registro (`HKCU\...\Run` y `HKLM\...\Run` — `T1547.001`), correlaciona el `EventLog` de Windows (instalación de servicios `Event ID 7045` — `T1543.003`) y exporta eventos estructurados en `logs/siem_security_events.jsonl`.
+2. **`PORYGON2` — Antivirus / EDR en Tiempo Real (`FileSystemWatcher` + `SHA-256` + Entropía de Shannon):**
+   * Vigila en segundo plano `Downloads`, `Desktop`, `%TEMP%` y `Startup` al crearse o modificarse ejecutables y scripts (`.exe`, `.dll`, `.ps1`, `.vbs`, `.bat`, `.cmd`, `.hta`, `.scr`, `.msi`).
+   * Calcula el hash **`SHA-256` real**, mide la **Entropía de Shannon ($0\text{–}8\text{ bits/byte}$)** para detectar binarios empaquetados/cifrados (`H >= 7.30b`, `MITRE T1027`), verifica la firma `Authenticode` e inspecciona indicadores estáticos de evasión (`FromBase64String`, `-enc`, `AmsiUtils`, `DownloadString`, `VirtualAlloc`).
+3. **`PORYGON-Z` — IPS Activo en Windows Firewall + Bóveda de Cuarentena AV (Modo Híbrido):**
+   * **Política Híbrida Inteligente:** Bloquea automáticamente en Windows Firewall (`netsh advfirewall firewall add rule name="PorygonIPS_Block_<IP>"`) o aísla en la Bóveda de Cuarentena (`.qz`) únicamente amenazas críticas confirmadas (`Score >= 0.92` / `0.94`), protegiendo siempre IPs LAN/DNS (`RFC1918`, `127.0.0.1`, `1.1.1.1`, `8.8.8.8`) y binarios del sistema.
+   * **Botones 1-Click en el HUD y Centro de Comando SOC (`Ctrl + Alt + S`):** Incluye botones interactivos **`[SIEM/IPS]`**, **`[SCAN]`**, **`[BLOCK IP]`** y **`[QUAR]`** directamente en la tarjeta HUD del escritorio, además de la ventana dedicada **`ShowSiemCommandCenterWindow`** para auditar eventos SIEM, escanear archivos bajo demanda, desbloquear IPs del Firewall o restaurar archivos en cuarentena con un clic.
 
 ---
 
 ## ⌨️ Atajos de Teclado Globales
 | Atajo | Acción |
 | :--- | :--- |
-| **`Ctrl + Alt + W`** | Abre el **Panel de Configuración en Vivo** (Tema de color, Entorno 3D de fondo, velocidad de lluvia, tamaño 3D, etc.). |
+| **`Ctrl + Alt + S`** | Abre el **Centro de Comando SOC / SIEM / IPS / Antivirus / Bóveda de Cuarentena**. |
+| **`Ctrl + Alt + W`** | Abre el **Panel de Configuración y Evolución Genómica en Vivo**. |
+| **`Ctrl + Alt + G`** | Activa / desactiva el **Modo Gamer (0.0% GPU // Hibernación Total)**. |
 | **`Ctrl + Alt + M`** | Alterna en vivo entre los **3 Entornos 3D Procedurales de Fondo** (`SELVA+OSC` $\rightarrow$ `TOPO+MESH` $\rightarrow$ `MYCELIUM`). |
 | **`Ctrl + Alt + B`** | Abre / cierra el **Inspector del Conectoma 3D FlyWire en Pantalla Completa**. |
 | **`Ctrl + Alt + P`** | Lanza una **Simulación / Oleada de Anomalías IDS** para entrenar a los 3 Porygon en vivo. |
-| **`Ctrl + Alt + Up / Down`** | Aumenta o disminuye globalmente la **opacidad de Windows Terminal** (±10%, también disponible con `Ctrl + Shift + Up/Down` dentro de la terminal o botones `[OP-]`/`[OP+]` en el HUD). |
+| **`Ctrl + Alt + Up / Down`** | Aumenta o disminuye globalmente la **opacidad de Windows Terminal** (±10%, también disponible con botones `[OP-]`/`[OP+]` en el HUD). |
 
 ---
 
