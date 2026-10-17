@@ -341,38 +341,79 @@ public static class GpuGl {
         glEnd();
     }
 
+    public static uint FontAtlasTexId = 0;
+
+    public static void InitFontAtlas() {
+        if (FontAtlasTexId != 0) return;
+        using (Bitmap bmp = new Bitmap(256, 128, PixelFormat.Format32bppArgb))
+        using (Graphics g = Graphics.FromImage(bmp))
+        using (Font f = new Font("Consolas", 10.5f, FontStyle.Bold))
+        using (SolidBrush br = new SolidBrush(Color.White)) {
+            g.Clear(Color.FromArgb(0, 255, 255, 255));
+            g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+            for (int ch = 32; ch <= 126; ch++) {
+                int idx = ch - 32;
+                int col = idx & 15;
+                int row = idx >> 4;
+                g.DrawString(((char)ch).ToString(), f, br, col * 16f + 1f, row * 16f);
+            }
+            int tw = 0, th = 0;
+            UploadBitmapToTexture(bmp, ref FontAtlasTexId, ref tw, ref th);
+        }
+    }
+
+    public static void BeginFontAtlasBatch() {
+        if (FontAtlasTexId == 0) InitFontAtlas();
+        glEnable(GL_TEXTURE_2D);
+        glBindTexture(GL_TEXTURE_2D, FontAtlasTexId);
+        glBegin(GL_QUADS);
+    }
+
+    public static void EndFontAtlasBatch() {
+        glEnd();
+        glDisable(GL_TEXTURE_2D);
+    }
+
+    public static void EmitAtlasChar(char ch, float x, float y, float w, float h, byte r, byte g, byte b, byte a) {
+        int idx = (ch >= 32 && ch <= 126) ? (ch - 32) : ('*' - 32);
+        float u0 = (idx & 15) * 0.0625f;
+        float v0 = (idx >> 4) * 0.125f;
+        float u1 = u0 + 0.0625f;
+        float v1 = v0 + 0.125f;
+        glColor4ub(r, g, b, a);
+        glTexCoord2f(u0, v0); glVertex2f(x, y);
+        glTexCoord2f(u1, v0); glVertex2f(x + w, y);
+        glTexCoord2f(u1, v1); glVertex2f(x + w, y + h);
+        glTexCoord2f(u0, v1); glVertex2f(x, y + h);
+    }
+
     public static void DrawChar(char ch, float x, float y, Color c, uint fontListBase) {
-        float ry = y + 11f;
-        if (x < 2f || x >= CanvasW - 4f || ry < 2f || ry >= CanvasH - 2f) return;
-        SetColor(c);
-        glRasterPos2f(x, ry);
-        glListBase(fontListBase);
-        textBuf[0] = (byte)(ch < 256 ? ch : '?');
-        glCallLists(1, GL_UNSIGNED_BYTE, textBuf);
+        if (x < 2f || x >= CanvasW - 4f || y < -14f || y >= CanvasH - 2f) return;
+        BeginFontAtlasBatch();
+        EmitAtlasChar(ch, x, y - 2f, 13f, 15f, c.R, c.G, c.B, c.A);
+        EndFontAtlasBatch();
     }
 
     public static void DrawCharFast(char ch, float x, float y, byte r, byte g, byte b, byte a) {
-        float ry = y + 11f;
-        if (x < 2f || x >= CanvasW - 4f || ry < 2f || ry >= CanvasH - 2f) return;
-        glColor4ub(r, g, b, a);
-        glRasterPos2f(x, ry);
-        textBuf[0] = (byte)(ch < 256 ? ch : '?');
-        glCallLists(1, GL_UNSIGNED_BYTE, textBuf);
+        if (x < 2f || x >= CanvasW - 4f || y < -14f || y >= CanvasH - 2f) return;
+        EmitAtlasChar(ch, x, y - 2f, 13f, 15f, r, g, b, a);
     }
 
     public static void DrawText(string s, float x, float y, Color c, uint fontListBase) {
         if (string.IsNullOrEmpty(s)) return;
-        float ry = y + 11f;
-        if (x < 2f || x >= CanvasW - 4f || ry < 2f || ry >= CanvasH - 2f) return;
-        SetColor(c);
-        glRasterPos2f(x, ry);
-        glListBase(fontListBase);
-        int len = Math.Min(s.Length, textBuf.Length);
+        if (x < 2f || x >= CanvasW - 4f || y < -14f || y >= CanvasH - 2f) return;
+        float adv = (fontListBase == FONT_LIST_HUD_SMALL) ? 6.6f : 8.0f;
+        float qw  = (fontListBase == FONT_LIST_HUD_SMALL) ? 11.5f : 13.0f;
+        float qh  = (fontListBase == FONT_LIST_HUD_SMALL) ? 13.0f : 15.0f;
+        BeginFontAtlasBatch();
+        int len = s.Length;
         for (int i = 0; i < len; i++) {
             char ch = s[i];
-            textBuf[i] = (byte)(ch < 256 ? ch : '*');
+            if (ch > 32) {
+                EmitAtlasChar(ch, x + i * adv, y - 1f, qw, qh, c.R, c.G, c.B, c.A);
+            }
         }
-        glCallLists(len, GL_UNSIGNED_BYTE, textBuf);
+        EndFontAtlasBatch();
     }
 
     public static void UploadBitmapToTexture(Bitmap bmp, ref uint texId, ref int texW, ref int texH) {
@@ -3750,9 +3791,9 @@ public class Porygon3DAvatar {
             }
         }
 
-        // 2. Render each of the 5 3D Porygon Agents sorted back-to-front by PosZ via Hardware OpenGL Z-Buffer + Triangles!
+        // 2. Render each of the 3D Porygon Agents sorted back-to-front by PosZ via Hardware OpenGL Z-Buffer + Triangles!
+        GpuGl.glClear(GpuGl.GL_DEPTH_BUFFER_BIT);
         for (int aIdx = 0; aIdx < agentsSorted.Count; aIdx++) {
-            GpuGl.glClear(GpuGl.GL_DEPTH_BUFFER_BIT);
             RenderSingleAgentOpenGL(agentsSorted[aIdx], userScale, themeCyan, themeMag);
         }
 
@@ -6376,14 +6417,9 @@ public class HackerWallpaperForm : Form {
     }
 
     private void InstallMouseWheelHook() {
-        if (mouseHookHandle != IntPtr.Zero) return;
-        try {
-            mouseHookProc = new LowLevelMouseProc(MouseWheelHookCallback);
-            using (Process curProcess = Process.GetCurrentProcess())
-            using (ProcessModule curModule = curProcess.MainModule) {
-                mouseHookHandle = SetWindowsHookEx(WH_MOUSE_LL, mouseHookProc, GetModuleHandle(curModule.ModuleName), 0);
-            }
-        } catch { }
+        // NEVER install a global WH_MOUSE_LL hook on the UI thread!
+        // WH_MOUSE_LL synchronously routes every OS mouse movement through the UI thread message pump,
+        // causing cursor stutter/input lag whenever a multi-monitor OpenGL frame is rendering.
     }
 
     private Rectangle GetCurrentBrain3DRect() {
@@ -6414,39 +6450,6 @@ public class HackerWallpaperForm : Form {
     }
 
     private IntPtr MouseWheelHookCallback(int nCode, IntPtr wParam, IntPtr lParam) {
-        try {
-            if (!isGamerSuspended && nCode >= 0 && wParam == (IntPtr)WM_MOUSEWHEEL && Config != null && Config.ShowPorygon && !brain3DCollapsed) {
-                MSLLHOOKSTRUCT hs = (MSLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(MSLLHOOKSTRUCT));
-                Point screenPt = hs.pt;
-                IntPtr hHit = WindowFromPoint(screenPt);
-                if (IsDesktopWindowHandle(hHit)) {
-                    Point clientPt = this.PointToClient(screenPt);
-                    Rectangle bRect = GetCurrentBrain3DRect();
-                    if (bRect.Contains(clientPt)) {
-                        short wheelDelta = (short)((hs.mouseData >> 16) & 0xFFFF);
-                        float notches = wheelDelta / 120.0f;
-                        Keys mods = Control.ModifierKeys;
-                        if ((mods & Keys.Control) != 0) {
-                            brain3DZoom = Math.Max(0.55f, Math.Min(2.50f, brain3DZoom + notches * 0.15f));
-                        } else if ((mods & Keys.Shift) != 0) {
-                            if (brain3DAutoRotate) {
-                                brain3DManualYaw = GetEffectiveBrainYaw();
-                                brain3DAutoRotate = false;
-                            }
-                            brain3DManualPitch = Math.Max(-1.20f, Math.Min(1.20f, brain3DManualPitch + notches * 0.14f));
-                        } else {
-                            // Standard Mouse Wheel over the 3D Brain: smoothly rotate 3D Yaw in 360 degrees!
-                            if (brain3DAutoRotate) {
-                                brain3DManualYaw = GetEffectiveBrainYaw();
-                                brain3DAutoRotate = false;
-                            }
-                            brain3DManualYaw += notches * 0.24f;
-                        }
-                        hudBrain3DDirty = true;
-                    }
-                }
-            }
-        } catch { }
         return CallNextHookEx(mouseHookHandle, nCode, wParam, lParam);
     }
 
@@ -6563,22 +6566,7 @@ public class HackerWallpaperForm : Form {
                 }
             }
 
-            IntPtr hFontFg = fontRainFg.ToHfont();
-            IntPtr oldFont = GpuGl.SelectObject(glHdc, hFontFg);
-            GpuGl.wglUseFontBitmapsA(glHdc, 0, 255, GpuGl.FONT_LIST_RAIN_FG);
-
-            IntPtr hFontBg = fontRainBg.ToHfont();
-            GpuGl.SelectObject(glHdc, hFontBg);
-            GpuGl.wglUseFontBitmapsA(glHdc, 0, 255, GpuGl.FONT_LIST_RAIN_BG);
-
-            IntPtr hFontSm = fontHudSmall.ToHfont();
-            GpuGl.SelectObject(glHdc, hFontSm);
-            GpuGl.wglUseFontBitmapsA(glHdc, 0, 255, GpuGl.FONT_LIST_HUD_SMALL);
-
-            GpuGl.SelectObject(glHdc, oldFont);
-            GpuGl.DeleteObject(hFontFg);
-            GpuGl.DeleteObject(hFontBg);
-            GpuGl.DeleteObject(hFontSm);
+            GpuGl.InitFontAtlas();
 
             GpuGl.CanvasW = screenW;
             GpuGl.CanvasH = screenH;
@@ -6853,7 +6841,19 @@ public class HackerWallpaperForm : Form {
         } catch { }
     }
 
+    private bool isRenderingTick = false;
+
     private void OnRenderTick(object sender, EventArgs e) {
+        if (isRenderingTick) return;
+        isRenderingTick = true;
+        try {
+            OnRenderTickCore();
+        } finally {
+            isRenderingTick = false;
+        }
+    }
+
+    private void OnRenderTickCore() {
         if (showConfigEvent != null && showConfigEvent.WaitOne(0)) {
             ShowConfigWindow();
         }
@@ -6969,16 +6969,16 @@ public class HackerWallpaperForm : Form {
             return;
         }
 
-        // Adaptive GPU Eco-Governor: 24 FPS (42ms) when Desktop is focused or dragging 3D Brain; 14 FPS (70ms) when another app is focused!
+        // Adaptive GPU Eco-Governor: 20 FPS (50ms) when Desktop is focused or dragging 3D Brain; 10 FPS (95ms) when another app is focused!
         if (frameCount % 12 == 0) {
             IntPtr fgWnd = GetForegroundWindow();
             bool deskActive = IsDesktopWindowHandle(fgWnd) || brain3DDragging || hudBrain3DDirty;
             gpuEcoMode = !deskActive;
-            int targetInterval = deskActive ? 42 : 70;
+            int targetInterval = deskActive ? 50 : 95;
             if (renderTimer.Interval != targetInterval) {
                 renderTimer.Interval = targetInterval;
             }
-            currentFps = deskActive ? 24 : 14;
+            currentFps = deskActive ? 20 : 10;
         }
 
         if (frameCount <= 5 || frameCount % 120 == 0) {
@@ -7525,21 +7525,41 @@ public class HackerWallpaperForm : Form {
         int radPanelX = hudX - radPanelW - 14;
         int radPanelY = primaryMonRect.Top + 22;
 
-        // 1. Multi-Plane 3D Parallax Vertical Log Rain across all 5 monitors (Fast Batched Display Lists)
+        // 1. Multi-Plane 3D Parallax Vertical Log Rain across all 5 monitors (Single-Batch VRAM Font Atlas)
         if (Config.RainSpeed > 0) {
-            uint currentFontList = 0;
             int startLayer = gpuEcoMode ? 1 : 0; // In Eco Mode (app focused), skip far-plane layer 0 rain to save GPU fillrate
+
+            // Pass 1A: Batched 3D volumetric light-streaks behind Near Foreground & Priority Alert streams
+            GpuGl.glLineWidth(3.0f);
+            GpuGl.glBegin(GpuGl.GL_LINES);
+            for (int i = 0; i < columns.Count; i++) {
+                RainColumn col = columns[i];
+                bool isPriority = (col.ColorSlot == 0 || col.ColorSlot == 1);
+                if (col.DepthLayer != 2 && !isPriority) continue;
+                if (col.Y <= col.MinY || col.Y >= col.MaxY + 80) continue;
+                int cStep = col.CharStep > 0 ? col.CharStep : 16;
+                float streakTop = Math.Max(col.MinY, col.Y - cStep * 5.0f);
+                float streakBot = Math.Min(col.MaxY, col.Y + 4f);
+                if (streakBot > streakTop) {
+                    Color baseCol, colHead;
+                    GetRainSemanticColors(col.ColorSlot, c1, c2, c3, out baseCol, out colHead);
+                    byte glowAlpha = (byte)(isPriority ? 36 : 20);
+                    GpuGl.glColor4ub(baseCol.R, baseCol.G, baseCol.B, glowAlpha);
+                    GpuGl.glVertex2f(col.X + 4f, streakTop);
+                    GpuGl.glVertex2f(col.X + 4f, streakBot);
+                }
+            }
+            GpuGl.glEnd();
+
+            // Pass 1B: Single-Draw-Call VRAM Font Texture Atlas Batch for all rain characters
+            GpuGl.BeginFontAtlasBatch();
             for (int layer = startLayer; layer <= 2; layer++) {
                 for (int i = 0; i < columns.Count; i++) {
+                    if (gpuEcoMode && (i & 1) == 1) continue;
                     RainColumn col = columns[i];
                     if (col.DepthLayer != layer) continue;
 
-                    bool isPriority = (col.ColorSlot == 0 || col.ColorSlot == 1); // Critical Red or VirusTotal Gold
-                    uint fontList = (layer == 2 || (layer == 1 && isPriority)) ? GpuGl.FONT_LIST_RAIN_FG : GpuGl.FONT_LIST_RAIN_BG;
-                    if (fontList != currentFontList) {
-                        GpuGl.glListBase(fontList);
-                        currentFontList = fontList;
-                    }
+                    bool isPriority = (col.ColorSlot == 0 || col.ColorSlot == 1);
                     int cStep = col.CharStep > 0 ? col.CharStep : 16;
 
                     int maxAlpha;
@@ -7551,17 +7571,6 @@ public class HackerWallpaperForm : Form {
 
                     Color baseCol, colHead;
                     GetRainSemanticColors(col.ColorSlot, c1, c2, c3, out baseCol, out colHead);
-
-                    // Draw subtle 3D volumetric light-streak behind Near Foreground & Priority Alert streams
-                    if ((layer == 2 || isPriority) && col.Y > col.MinY && col.Y < col.MaxY + 80) {
-                        float streakTop = Math.Max(col.MinY, col.Y - cStep * 5.0f);
-                        float streakBot = Math.Min(col.MaxY, col.Y + 4f);
-                        if (streakBot > streakTop) {
-                            int glowAlpha = isPriority ? 38 : 22;
-                            GpuGl.DrawLine(col.X + 4f, streakTop, col.X + 4f, streakBot,
-                                Color.FromArgb(glowAlpha, baseCol.R, baseCol.G, baseCol.B), isPriority ? 4.2f : 3.0f);
-                        }
-                    }
 
                     byte h0A = (byte)(isPriority ? 205 : 178);
                     byte h1A = (byte)Math.Min(210, maxAlpha + 22);
@@ -7580,21 +7589,20 @@ public class HackerWallpaperForm : Form {
                         } else {
                             float ratio = 1.0f - ((float)c / col.Length);
                             int alpha = (int)(ratio * ratio * maxAlpha);
-                            if (alpha <= 8) continue;
+                            if (alpha <= 10) continue;
                             GpuGl.DrawCharFast(col.Chars[c], col.X, cy, baseCol.R, baseCol.G, baseCol.B, (byte)alpha);
                         }
                     }
                 }
             }
+            GpuGl.EndFontAtlasBatch();
         }
 
         int hudUpdateStride = gpuEcoMode ? 14 : 6;
 
         // 2. Render Autonomous 3D Porygons on Hardware GPU + Collapsible Evolutionary Swarm HUD + 3D FlyWire Brain Card
         if (Config.ShowPorygon) {
-            GpuGl.glEnable(GpuGl.GL_LINE_SMOOTH);
             porygon.RenderOpenGL(Config.PorygonScale, c1, c2);
-            GpuGl.glDisable(GpuGl.GL_LINE_SMOOTH);
 
             int bw = 584;
             int fullBh = 78 + porygon.Agents.Count * 21;
@@ -7705,10 +7713,10 @@ public class HackerWallpaperForm : Form {
             GpuGl.DrawTexturedQuad(hudBrain3DFullTexId, fullRect.X - 2, fullRect.Y - 2, fullRect.Width + 4, fullRect.Height + 4);
         }
 
-        GpuGl.SwapBuffers(glHdc);
         frameSw.Stop();
         float elapsedMs = (float)frameSw.Elapsed.TotalMilliseconds;
         gpuFrameMs = gpuFrameMs * 0.82f + elapsedMs * 0.18f;
+        GpuGl.SwapBuffers(glHdc);
     }
 
     protected override void OnPaintBackground(PaintEventArgs e) { }
