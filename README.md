@@ -18,8 +18,11 @@ Un **Wallpaper Animado Cyberpunk / Hacker ultraligero (~39 MB RAM)** para Window
   * **Rotación 3D Interactiva y Pantalla Completa:** Rota la cámara 3D arrastrando con el mouse o con la rueda del ratón (`Yaw` / `Pitch` / `Zoom`), o ábrelo en **Pantalla Completa (`[FULL]` / `Ctrl + Alt + B`)**.
 
 ### 2. 🌲 3 Entornos 3D Procedurales de Fondo (`Vértices + Polígonos + Oscilador`)
-Construidos en OpenGL con geometría poligonal (`GL_TRIANGLES`, `GL_LINE_STRIP`, `GL_LINES`) y paleta **Eye-Care Mate** (reducción del 35%–40% de fatiga visual, sin líneas púrpuras saturadas). Alternables en vivo con **`Ctrl + Alt + M`** o el botón **`[BG:1/3]`**:
-1. **Modo 1/3 (`[BG:1]` — `SELVA+OSC`):** *Híbrido Selva Bio-Digital Low-Poly + Suelo de Oscilador 3D* (7 bandas de oscilador 3D con oclusión poligonal musgo oscuro + árboles facetados *low-poly* + lianas segmentadas con esporas bioluminiscentes).
+Construidos 100% en OpenGL por hardware con geometría poligonal por lotes (`GL_TRIANGLES`, `GL_LINE_STRIP`, `GL_LINES`, `GL_QUADS`) y paleta **Eye-Care Mate** (reducción del 35%–40% de fatiga visual, sin líneas púrpuras saturadas). Alternables en vivo con **`Ctrl + Alt + M`** o el botón **`[BG:1/3]`**:
+1. **Modo 1/3 (`[BG:1]` — `SELVA+OSC`):** *Ecosistema Selva Bio-Digital Low-Poly + Río de Datos 3D + Cordillera y Portal en el Horizonte*:
+   * **Cordillera Low-Poly y Portal de Convergencia:** 14 picos montañosos facetados que enmarcan el cañón central y un portal/halo geodésico concéntrico en el punto de fuga del horizonte.
+   * **Río Cibernético 3D con Flujo de Datos:** Cauce curvado en S que serpentea por el valle y desaparece en el horizonte, con 5 carriles de paquetes de datos luminosos, tokens hexadecimales/binarios arrastrados por la corriente (`VRAM Font Atlas`), **5 rocas semisumergidas con estelas en V** de espuma de datos y **7 velos de neblina translúcida** flotando sobre el agua.
+   * **Bosque Low-Poly Multi-Especie y Flora Bioluminiscente:** 14 árboles *low-poly* de 3 especies cohesivas (*Pino Conífero Clásico*, *Abeto Esbelto de 4 niveles* y *Árbol de Dosel Geodésico Hexagonal*), 12 formaciones rocosas con cristales en las riberas, 14 rosetas de helechos arqueados, 26 **luciérnagas/esporas bio-digitales flotantes** y 8 lianas de dosel.
 2. **Modo 2/3 (`[BG:2]` — `TOPO+MESH`):** *Terreno de Oscilador Vectorial + Bóveda de Triángulos Delaunay* (9 crestas topográficas de oscilador vectorial moduladas por la red + bóveda superior geodésica 3D de triángulos Delaunay).
 3. **Modo 3/3 (`[BG:3]` — `MYCELIUM`):** *Bosque Micelial Poligonal Bioluminiscente* (Troncos poligonales 3D ramificados desde suelo y techo + racimos de cristales octaédricos facetados y pulsos bioluminiscentes).
 
@@ -35,9 +38,13 @@ Construidos en OpenGL con geometría poligonal (`GL_TRIANGLES`, `GL_LINE_STRIP`,
   * 🟢 **Esmeralda Bosque:** Tráfico verificado limpio / Línea base saludable.
   * 💠 **Verde Azulado Bio-Teal:** Neuro-evolución del enjambre Porygon y poda sináptica.
 
-### 4. ⚡ Monitoreo de GPU en Tiempo Real y Gobernador Adaptativo Eco-GPU
-* **Telemetría de Hardware en Vivo (`>> SYS_TELEMETRY`):** Muestra carga de `CPU`, **`GPU: XX.X% (X.Xms | XXfps)`** (muestreando los motores 3D de hardware vía `\GPU Engine(*)\Utilization Percentage`), `RAM` y latencia `PING`.
-* **Gobernador Adaptativo Eco-GPU:** Corre a **24 FPS** cuando interactúas con el escritorio o el cerebro 3D, y reduce automáticamente a **15 FPS (`[15eco]`)** cuando trabajas en cualquier aplicación en primer plano, reduciendo la carga combinada de GPU en más de un **85%** en configuraciones multimonitor.
+### 4. ⚡ Alto Rendimiento OpenGL (~42 FPS), Zero-GC y Gobernador Adaptativo de 3 Niveles
+* **Telemetría de Hardware en Vivo (`>> SYS_TELEMETRY`):** Muestra carga de `CPU`, **`GPU: XX.X% (X.Xms | XXfps)`** (muestreando los motores 3D de hardware vía `\GPU Engine(*)\Utilization Percentage`), `RAM` (~41 MB) y latencia `PING`.
+* **Gobernador Adaptativo Inteligente de 3 Niveles:**
+  * **Escritorio Enfocado (`~42 FPS`):** Máxima fluidez interactiva con paso de tiempo normalizado (`dtScale`).
+  * **Ventana Flotante No Maximizada (`~38 FPS`):** Mantiene el fondo fluido mientras trabajas en ventanas con el escritorio visible.
+  * **Ventana Maximizada / Modo Eco (`~25 FPS [eco]`):** Ahorra GPU automáticamente cuando una aplicación maximizada cubre la pantalla.
+* **Batching OpenGL Unificado y Zero-GC:** Toda la vegetación 3D, rocas, río, luciérnagas y terreno se emiten en lotes unificados (`GL_TRIANGLES`, `GL_LINES`, `GL_QUADS`) con buffers preasignados (cero asignaciones por cuadro en el Garbage Collector) y actualización escalonada *Round-Robin* de texturas HUD en VRAM.
 
 ### 5. 🛡️ Detección Real de Anomalías de Tráfico (Network IDS) + VirusTotal v3
 Los 3 modelos se alimentan cada ciclo con telemetría real del stack de red de Windows (`IPGlobalProperties.GetActiveTcpConnections()`, estadísticas IPv4 de tu interfaz activa y latencia ICMP), además de auditoría automática de IPs públicas en **VirusTotal API v3**.
