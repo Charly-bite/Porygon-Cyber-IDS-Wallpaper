@@ -1333,6 +1333,40 @@ public class Porygon3DAvatar {
         public float KbpsSample = 14.2f;
         public bool IsHovered = false;
         public string AssignedAgentName = "PORYGON";
+
+        // Dynamic Porygon-Packet Interaction State
+        public float PullIntensity = 0.0f;     // 0..1 tractor vortex lock intensity
+        public int TargetedByAgentIdx = -1;
+        public float OrbitPhase = 0.0f;
+        public float EvadeCooldown = 0.0f;
+    }
+
+    public class CaptureVertexShard {
+        public float X, Y, Z;
+        public float PrevX, PrevY;
+        public float VX, VY, VZ;
+        public float RotAngle;
+        public float RotSpeed;
+        public float Size;
+        public float Life;
+        public float MaxLife;
+        public int ShapeKind;      // 0 = 3D Faceted Triangle, 1 = Wireframe Octa-Diamond, 2 = Glowing Vertex Node
+        public int BurstGroupId;   // Links vertices from the same packet capture into a constellation mesh
+        public int OwnerAgentIdx;
+        public bool HomingToAgent;
+        public Color Col;
+        public Color SecondaryCol;
+    }
+
+    public class CaptureShockwave {
+        public float X, Y, Z;
+        public float Life;         // 1.0 down to 0.0
+        public float MaxRadius;
+        public float RotAngle;
+        public int Kind;           // 0 = Flow Decoded, 1 = Host Audited, 2 = Tri-Attack Anomaly Shatter, 3 = Skill Cast Nova
+        public Color Col;
+        public Color SecondaryCol;
+        public string FloatingLabel;
     }
 
     public class PorygonAgent {
@@ -1363,6 +1397,15 @@ public class Porygon3DAvatar {
         public string CurrentTargetEndpoint = "SCANNING...";
         public bool IsHovered = false;
 
+        // Dynamic Pursuit, Tractor Lock & Vertex Absorption State
+        public float DashBoostTimer = 0.0f;
+        public float AbsorbFlashTimer = 0.0f;
+        public float TractorPhase = 0.0f;
+        public PointF ActiveLockTarget = PointF.Empty;
+        public float ActiveLockZ = 0.0f;
+        public float ActiveLockStrength = 0.0f;
+        public int ActiveLockKind = 0;
+
         // Advanced Ability Timers
         public float SpinRollTimer = 0.0f;
         public float BeamTimer = 0.0f;
@@ -1385,6 +1428,9 @@ public class Porygon3DAvatar {
 
     public List<PorygonAgent> Agents = new List<PorygonAgent>();
     public List<DataPacket> Packets = new List<DataPacket>();
+    public List<CaptureVertexShard> VertexShards = new List<CaptureVertexShard>();
+    public List<CaptureShockwave> Shockwaves = new List<CaptureShockwave>();
+    private int burstGroupCounter = 0;
     public List<string> IdsDetectionLog = new List<string>();
     public DataPacket HoveredPacket = null;
     public PorygonAgent HoveredAgent = null;
@@ -2333,15 +2379,21 @@ public class Porygon3DAvatar {
                 HoveredAgent.IsHovered = true;
             }
 
-            // 3. Move non-hovered network nodes in true 3D (X, Y, Z) across the 5-monitor virtual environment
+            // 3. Move non-hovered network nodes in true 3D (X, Y, Z) with dynamic orbital swirl & evasive anomaly jinks
             for (int i = 0; i < Packets.Count; i++) {
                 DataPacket p = Packets[i];
-                p.floatRot += (p.Kind == 2) ? 0.12f : 0.06f;
+                p.floatRot += (p.Kind == 2) ? 0.14f : 0.075f;
+                p.OrbitPhase += (p.Kind == 2) ? 0.16f : 0.09f;
+                p.PullIntensity = Math.Max(0f, p.PullIntensity - 0.08f);
+                if (p.EvadeCooldown > 0f) p.EvadeCooldown -= 0.04f;
                 if (p.IsHovered) continue; // Freeze 3D position while user inspects the node with the mouse!
+
                 Rectangle curMon = GetContainingOrNearestMonitor(p.X, p.Y);
                 float zParallax = GetDepthScale(p.Z);
-                p.X += p.VX * zParallax;
-                p.Y += p.VY * zParallax;
+                float swirlX = (float)Math.Cos(p.OrbitPhase) * (p.Kind == 2 ? 0.65f : 0.25f);
+                float swirlY = (float)Math.Sin(p.OrbitPhase * 1.3f) * (p.Kind == 2 ? 0.65f : 0.25f);
+                p.X += (p.VX + swirlX) * zParallax;
+                p.Y += (p.VY + swirlY) * zParallax;
                 p.Z += p.VZ;
                 if (p.Z < -250f || p.Z > 170f) {
                     p.VZ = -p.VZ;
@@ -2366,6 +2418,10 @@ public class Porygon3DAvatar {
                 PorygonAgent a = Agents[aIdx];
                 FlyBrainConnectome br = a.Brain;
                 a.FloatBob += 0.072f + aIdx * 0.006f;
+                a.TractorPhase += 0.18f;
+                a.ActiveLockStrength = Math.Max(0f, a.ActiveLockStrength - 0.10f);
+                if (a.DashBoostTimer > 0f) a.DashBoostTimer = Math.Max(0f, a.DashBoostTimer - 0.04f);
+                if (a.AbsorbFlashTimer > 0f) a.AbsorbFlashTimer = Math.Max(0f, a.AbsorbFlashTimer - 0.045f);
                 if (a.SyncCooldown > 0) a.SyncCooldown--;
                 if (a.LevelUpBannerTimer > 0f) a.LevelUpBannerTimer -= 0.025f;
 
@@ -2475,11 +2531,11 @@ public class Porygon3DAvatar {
                 float cDist = (float)Math.Sqrt(cdx * cdx + cdy * cdy);
 
                 // Skill LVL 3: Neural Sync P2P Link (shares learned anomaly weights between Porygons across monitors!)
-                if (br.HasSkill(3) && nearestPeer != null && (minPeerDist < 395f || rng.NextDouble() < 0.008) && a.SyncCooldown == 0 && nearestPeer.SyncCooldown == 0) {
+                if (br.HasSkill(3) && nearestPeer != null && (minPeerDist < 420f || rng.NextDouble() < 0.010) && a.SyncCooldown == 0 && nearestPeer.SyncCooldown == 0) {
                     a.SyncTimer = 1.0f;
                     a.SyncPartnerIdx = nearestPeer.AgentIndex;
-                    a.SyncCooldown = 240;
-                    nearestPeer.SyncCooldown = 240;
+                    a.SyncCooldown = 210;
+                    nearestPeer.SyncCooldown = 210;
                     br.NeuralSyncs++;
                     nearestPeer.Brain.NeuralSyncs++;
                     if (br.ReinforceReward(0.85f, 18)) a.LevelUpBannerTimer = 1.0f;
@@ -2488,7 +2544,7 @@ public class Porygon3DAvatar {
                 }
 
                 // Skill LVL 6: Deep Sonar Scan when network anomaly index rises or periodically
-                if (br.HasSkill(6) && a.ScanWaveTimer <= 0f && (feed.AnomalyIndex > 0.55f || rng.NextDouble() < 0.005)) {
+                if (br.HasSkill(6) && a.ScanWaveTimer <= 0f && (feed.AnomalyIndex > 0.50f || rng.NextDouble() < 0.008)) {
                     a.ScanWaveTimer = 1.0f;
                     br.ActiveStateName = "SONAR_DEEP_SCAN // AUDITING_SOCKETS";
                 }
@@ -2512,8 +2568,48 @@ public class Porygon3DAvatar {
                         targetY = bestPkt.Y;
                         targetZ = bestPkt.Z;
 
+                        float reachDist = 148f + Math.Min(52f, br.Level * 3.8f);
+
+                        // Dynamic Tractor Lock & Anomaly Evasion when Porygon closes in (< 360px)!
+                        if (bestDist < 360f) {
+                            float lockPower = Clamp(1.0f - (bestDist - reachDist * 0.65f) / 260f, 0.15f, 1.0f);
+                            bestPkt.PullIntensity = Math.Max(bestPkt.PullIntensity, lockPower);
+                            bestPkt.TargetedByAgentIdx = aIdx;
+                            a.ActiveLockTarget = new PointF(bestPkt.X, bestPkt.Y);
+                            a.ActiveLockZ = bestPkt.Z;
+                            a.ActiveLockStrength = lockPower;
+                            a.ActiveLockKind = bestPkt.Kind;
+
+                            if (bestPkt.Kind == 2 && bestDist > reachDist * 1.05f && bestPkt.EvadeCooldown <= 0f) {
+                                // Threat Anomaly attempts evasive 3D jink perpendicular to Porygon's pursuit vector!
+                                float perpX = -(bestPkt.Y - a.PosY);
+                                float perpY =  (bestPkt.X - a.PosX);
+                                float pLen = (float)Math.Sqrt(perpX * perpX + perpY * perpY);
+                                if (pLen > 1f) {
+                                    float jinkDir = (rng.Next(2) == 0) ? 1f : -1f;
+                                    bestPkt.VX = Clamp(bestPkt.VX + (perpX / pLen) * jinkDir * 2.6f, -4.2f, 4.2f);
+                                    bestPkt.VY = Clamp(bestPkt.VY + (perpY / pLen) * jinkDir * 2.6f, -4.2f, 4.2f);
+                                    bestPkt.EvadeCooldown = 0.55f;
+                                    a.DashBoostTimer = 0.85f; // Porygon fires pursuit thrusters to intercept!
+                                }
+                            } else if (bestDist < 265f) {
+                                // Magnetic Tractor Vortex spirals the packet toward Porygon's beak while peeling off live vertex sparks!
+                                float pullFactor = (bestPkt.Kind == 2) ? 0.055f : 0.085f;
+                                float tangX = -(bestPkt.Y - a.PosY) * 0.032f;
+                                float tangY =  (bestPkt.X - a.PosX) * 0.032f;
+                                bestPkt.X += (a.PosX - bestPkt.X) * pullFactor + tangX;
+                                bestPkt.Y += (a.PosY - bestPkt.Y) * pullFactor + tangY;
+                                bestPkt.Z += (a.PosZ - bestPkt.Z) * pullFactor;
+
+                                // Spawn 1 live vertex spark peeling off the packet toward Porygon during tractor lock!
+                                if (VertexShards.Count < 220 && rng.NextDouble() < 0.45) {
+                                    SpawnTractorStreamVertex(bestPkt, a);
+                                }
+                            }
+                        }
+
                         // Skill LVL 5: Quantum Blink in 3D (X, Y, Z) when chasing distant high-priority anomaly or cross-monitor node
-                        if (br.HasSkill(5) && bestDist > 420f && bestDist < 2800f && a.QuantumBlinkTimer <= 0f && (bestPkt.Kind == 2 || rng.NextDouble() < 0.032)) {
+                        if (br.HasSkill(5) && bestDist > 400f && bestDist < 2800f && a.QuantumBlinkTimer <= 0f && (bestPkt.Kind == 2 || rng.NextDouble() < 0.042)) {
                             a.BlinkStartPt = new PointF(a.PosX, a.PosY);
                             a.BlinkStartZ = a.PosZ;
                             Rectangle dstMon = GetContainingOrNearestMonitor(bestPkt.X, bestPkt.Y);
@@ -2521,6 +2617,7 @@ public class Porygon3DAvatar {
                             a.PosY = Clamp(a.PosY + (bestPkt.Y - a.PosY) * 0.68f, dstMon.Top + 120f, dstMon.Bottom - 110f);
                             a.PosZ = Clamp(a.PosZ + (bestPkt.Z - a.PosZ) * 0.68f, -240f, 165f);
                             a.QuantumBlinkTimer = 1.0f;
+                            a.DashBoostTimer = 0.90f;
                             br.ActiveStateName = "QUANTUM_PORTAL // WARP_" + bestPkt.AnomalyType;
                         } else if (bestPkt.Kind == 2) {
                             br.ActiveStateName = "IDS_INTERCEPT // " + bestPkt.AnomalyType;
@@ -2534,17 +2631,19 @@ public class Porygon3DAvatar {
                             br.ActiveStateName = "FLOW_SAMPLE // " + bestPkt.RemoteEndpoint;
                         }
 
-                        float reachDist = 152f + Math.Min(55f, br.Level * 4f);
                         if (bestDist < reachDist) {
                             if (bestPkt.Kind == 2 && (DateTime.UtcNow - LastManualBrainSelectUtc).TotalSeconds > 8.0) {
                                 SelectedBrainAgentIndex = aIdx;
                                 BrainAutoFocusedOnThreat = true;
                             }
                             string ts = DateTime.Now.ToString("HH:mm:ss");
-                            if (bestPkt.Kind == 2 && br.HasSkill(4)) {
+                            bool useTriAttack = (bestPkt.Kind == 2 && br.HasSkill(4)) || (bestPkt.Kind == 1 && br.HasSkill(4) && rng.NextDouble() < 0.35);
+                            if (useTriAttack) {
                                 // Skill LVL 4: Tri-Attack Elemental Matrix neutralizes real network anomaly!
                                 a.TriAttackTimer = 1.0f;
                                 a.TriAttackTarget = new PointF(bestPkt.X, bestPkt.Y);
+                                a.SpinRollTimer = 0.85f;
+                                a.AbsorbFlashTimer = 1.0f;
                                 if (br.HasSkill(2)) a.ShieldTimer = 1.0f;
                                 br.AnomaliesCleared++;
                                 if (br.ReinforceReward(1.45f, 45)) a.LevelUpBannerTimer = 1.0f;
@@ -2552,10 +2651,12 @@ public class Porygon3DAvatar {
                                 AddIdsLog(string.Format("[{0}] [ALERT_PURGED] {1} neutralized {2} ({3}) Score:{4:0.00}",
                                     ts, a.Name, bestPkt.AnomalyType, bestPkt.RemoteEndpoint, bestPkt.AnomalyScore));
                             } else {
-                                // Skill LVL 1: Conversion Beam samples/audits flow
+                                // Skill LVL 1: Helical Conversion Beam samples/deconstructs flow into 3D vertices!
                                 a.BeamTimer = 1.0f;
                                 a.BeamTarget = new PointF(bestPkt.X, bestPkt.Y);
-                                if (bestPkt.Kind >= 1 && br.HasSkill(2)) a.ShieldTimer = 0.85f;
+                                a.AbsorbFlashTimer = 0.85f;
+                                if (bestPkt.Kind >= 1) a.SpinRollTimer = 0.70f;
+                                if (bestPkt.Kind >= 1 && br.HasSkill(2)) a.ShieldTimer = 0.90f;
                                 br.PacketsCollected++;
                                 int xpGain = (bestPkt.Kind == 2) ? 38 : (bestPkt.Kind == 1 ? 30 : 15);
                                 float rew = (bestPkt.Kind == 2) ? 1.25f : (bestPkt.Kind == 1 ? 1.10f : 0.65f);
@@ -2568,6 +2669,10 @@ public class Porygon3DAvatar {
                                     ? "BASELINE_LEARN // " + bestPkt.RemoteEndpoint
                                     : "PACKET_SAMPLED // " + bestPkt.ProtocolName;
                             }
+
+                            // Spawn showy 3D Polyhedral Vertex Shards & Geometric Shockwave at capture point!
+                            SpawnPacketCaptureBurst(bestPkt, a, useTriAttack);
+
                             br.DriveHunger = Math.Max(0.08f, br.DriveHunger - 0.32f);
                             Packets.Remove(bestPkt);
                         }
@@ -2590,7 +2695,7 @@ public class Porygon3DAvatar {
                     }
                 }
 
-                float speedBonus = 1.0f + Math.Min(0.55f, (br.SynapticGain - 1.0f) * 0.40f);
+                float speedBonus = 1.0f + Math.Min(0.55f, (br.SynapticGain - 1.0f) * 0.40f) + a.DashBoostTimer * 0.48f;
                 float dxT = targetX - a.PosX;
                 float dyT = targetY - a.PosY;
                 float dzT = targetZ - a.PosZ;
@@ -2598,10 +2703,11 @@ public class Porygon3DAvatar {
                 // Boost cross-monitor transit speed when traveling to another screen
                 float crossMonMult = (distToT > 750f) ? 1.85f : 1.0f;
                 float zPerspSpeed = GetDepthScale(a.PosZ);
-                float maxV = 4.2f * speedBonus * crossMonMult;
-                a.VelX = a.VelX * 0.86f + (Clamp(dxT * 0.032f, -maxV, maxV) + sepX) * 0.14f;
-                a.VelY = a.VelY * 0.86f + (Clamp(dyT * 0.032f, -maxV * 0.85f, maxV * 0.85f) + sepY) * 0.14f;
-                a.VelZ = a.VelZ * 0.86f + (Clamp(dzT * 0.036f, -maxV * 0.85f, maxV * 0.85f) + sepZ) * 0.14f;
+                float maxV = 4.6f * speedBonus * crossMonMult;
+                float accel = (a.DashBoostTimer > 0f || a.ActiveLockStrength > 0.2f) ? 0.19f : 0.14f;
+                a.VelX = a.VelX * (1f - accel) + (Clamp(dxT * 0.038f, -maxV, maxV) + sepX) * accel;
+                a.VelY = a.VelY * (1f - accel) + (Clamp(dyT * 0.038f, -maxV * 0.88f, maxV * 0.88f) + sepY) * accel;
+                a.VelZ = a.VelZ * (1f - accel) + (Clamp(dzT * 0.040f, -maxV * 0.88f, maxV * 0.88f) + sepZ) * accel;
 
                 float nextX = a.PosX + a.VelX * (0.72f + 0.28f * zPerspSpeed);
                 float nextY = a.PosY + a.VelY * (0.72f + 0.28f * zPerspSpeed);
@@ -2616,7 +2722,7 @@ public class Porygon3DAvatar {
                         a.BlinkStartZ = a.PosZ;
                         a.PosX = Clamp(nextX, targetMon.Left + 95f, targetMon.Right - 95f);
                         a.PosY = Clamp(nextY, targetMon.Top + 110f, targetMon.Bottom - 95f);
-                        if (a.QuantumBlinkTimer <= 0f) a.QuantumBlinkTimer = 0.65f;
+                        if (a.QuantumBlinkTimer <= 0f) a.QuantumBlinkTimer = 0.85f;
                     } else {
                         a.PosX = Clamp(nextX, curMon.Left + 95f, curMon.Right - 95f);
                         a.PosY = Clamp(nextY, curMon.Top + 110f, curMon.Bottom - 95f);
@@ -2627,33 +2733,199 @@ public class Porygon3DAvatar {
                 }
 
                 float spd = (float)Math.Sqrt(a.VelX * a.VelX + a.VelY * a.VelY + a.VelZ * a.VelZ);
-                a.WalkPhase += 0.12f + spd * 0.06f;
+                a.WalkPhase += 0.12f + spd * 0.065f;
 
-                if (dxT < -65f) a.FacingDir = -1.0f;
-                else if (dxT > 65f) a.FacingDir = 1.0f;
+                if (dxT < -55f) a.FacingDir = -1.0f;
+                else if (dxT > 55f) a.FacingDir = 1.0f;
 
                 float baseYaw = a.FacingDir * 0.58f + Clamp(-a.VelZ * 0.045f * a.FacingDir, -0.22f, 0.22f);
                 if (a.SpinRollTimer > 0f) {
-                    a.SpinRollTimer -= 0.045f;
+                    a.SpinRollTimer -= 0.038f;
                     a.Yaw = baseYaw + (1.0f - a.SpinRollTimer) * (float)(Math.PI * 2.0);
                 } else {
-                    a.Yaw = a.Yaw * 0.88f + baseYaw * 0.12f;
+                    a.Yaw = a.Yaw * 0.86f + baseYaw * 0.14f;
                 }
 
-                a.Pitch = 0.16f + (float)Math.Sin(a.FloatBob) * 0.035f + Clamp(-a.VelZ * 0.032f, -0.14f, 0.14f);
-                a.Roll = a.Roll * 0.88f + Clamp(-a.VelX * 0.018f, -0.06f, 0.06f) * 0.12f;
+                // Dynamic aerodynamic pitch & banking roll when pursuing packets
+                float pursuitTilt = Clamp(a.VelY * 0.022f, -0.16f, 0.16f);
+                a.Pitch = 0.16f + (float)Math.Sin(a.FloatBob) * 0.035f + Clamp(-a.VelZ * 0.032f, -0.14f, 0.14f) + pursuitTilt;
+                a.Roll = a.Roll * 0.84f + Clamp(-a.VelX * 0.028f, -0.14f, 0.14f) * 0.16f;
 
-                if (a.BeamTimer > 0f) a.BeamTimer -= 0.08f;
-                if (a.TriAttackTimer > 0f) a.TriAttackTimer -= 0.065f;
-                if (a.ShieldTimer > 0f) a.ShieldTimer -= 0.025f;
-                if (a.SyncTimer > 0f) a.SyncTimer -= 0.03f;
-                if (a.QuantumBlinkTimer > 0f) a.QuantumBlinkTimer -= 0.06f;
-                if (a.ScanWaveTimer > 0f) a.ScanWaveTimer -= 0.03f;
+                // Longer, smoother skill effect durations so every ability looks dramatic and legible!
+                if (a.BeamTimer > 0f) a.BeamTimer -= 0.036f;
+                if (a.TriAttackTimer > 0f) a.TriAttackTimer -= 0.028f;
+                if (a.ShieldTimer > 0f) a.ShieldTimer -= 0.022f;
+                if (a.SyncTimer > 0f) a.SyncTimer -= 0.025f;
+                if (a.QuantumBlinkTimer > 0f) a.QuantumBlinkTimer -= 0.032f;
+                if (a.ScanWaveTimer > 0f) a.ScanWaveTimer -= 0.022f;
 
                 float lookX = (HoveredPacket != null) ? (HoveredPacket.X - a.PosX) : (targetX - a.PosX);
                 float lookY = (HoveredPacket != null) ? (HoveredPacket.Y - a.PosY) : (targetY - a.PosY);
-                a.HeadYaw = a.HeadYaw * 0.85f + Clamp(lookX / 850f, -0.14f, 0.14f) * 0.15f;
-                a.HeadPitch = a.HeadPitch * 0.85f + Clamp(lookY / 850f, -0.08f, 0.12f) * 0.15f;
+                a.HeadYaw = a.HeadYaw * 0.82f + Clamp(lookX / 680f, -0.22f, 0.22f) * 0.18f;
+                a.HeadPitch = a.HeadPitch * 0.82f + Clamp(lookY / 680f, -0.14f, 0.18f) * 0.18f;
+            }
+
+            // 5. Update 3D Polyhedral Vertex Shards & Geometric Shockwaves from packet captures!
+            UpdateCaptureEffects();
+        }
+    }
+
+    private void SpawnTractorStreamVertex(DataPacket pkt, PorygonAgent ag) {
+        float ang = (float)(rng.NextDouble() * Math.PI * 2.0);
+        float r = 10f + (float)(rng.NextDouble() * 14.0);
+        float sx = pkt.X + (float)Math.Cos(ang) * r;
+        float sy = pkt.Y + (float)Math.Sin(ang) * r;
+        VertexShards.Add(new CaptureVertexShard {
+            X = sx,
+            Y = sy,
+            Z = pkt.Z,
+            PrevX = sx,
+            PrevY = sy,
+            VX = (ag.PosX - sx) * 0.06f + (float)(rng.NextDouble() - 0.5) * 2.2f,
+            VY = (ag.PosY - sy) * 0.06f + (float)(rng.NextDouble() - 0.5) * 2.2f,
+            VZ = (ag.PosZ - pkt.Z) * 0.06f,
+            RotAngle = (float)(rng.NextDouble() * 6.28),
+            RotSpeed = (float)((rng.NextDouble() - 0.5) * 0.35),
+            Size = 4.5f + (float)(rng.NextDouble() * 3.5),
+            Life = 0.62f,
+            MaxLife = 0.62f,
+            ShapeKind = rng.Next(3),
+            BurstGroupId = -1,
+            OwnerAgentIdx = ag.AgentIndex,
+            HomingToAgent = true,
+            Col = pkt.Col,
+            SecondaryCol = ag.AuraColor
+        });
+    }
+
+    private void SpawnPacketCaptureBurst(DataPacket pkt, PorygonAgent ag, bool isTriAttack) {
+        burstGroupCounter = (burstGroupCounter + 1) & 0x7FFFFFFF;
+        int groupId = burstGroupCounter;
+
+        // Limit active shards to keep 60/24 FPS ultra-fast
+        while (VertexShards.Count > 190) {
+            VertexShards.RemoveAt(0);
+        }
+        while (Shockwaves.Count > 14) {
+            Shockwaves.RemoveAt(0);
+        }
+
+        Color primary = pkt.Col;
+        Color secondary = ag.AuraColor;
+        Color accent = Color.FromArgb(250, 204, 21); // Solar Gold
+        if (isTriAttack || pkt.Kind == 2) {
+            primary = Color.FromArgb(255, 42, 85);   // Crimson Threat
+            secondary = Color.FromArgb(0, 240, 255); // Ice Cyan
+            accent = Color.FromArgb(236, 72, 153);   // Plasma Magenta
+        } else if (pkt.Kind == 1) {
+            primary = Color.FromArgb(250, 204, 21);  // Solar Gold
+            secondary = Color.FromArgb(0, 240, 255); // Cyber Cyan
+            accent = Color.FromArgb(16, 255, 160);   // Bio-Emerald
+        }
+
+        int shardCount = isTriAttack ? 42 : (pkt.Kind == 2 ? 36 : (pkt.Kind == 1 ? 30 : 24));
+        for (int i = 0; i < shardCount; i++) {
+            double theta = (i / (double)shardCount) * Math.PI * 2.0 + (rng.NextDouble() - 0.5) * 0.25;
+            double phi = (rng.NextDouble() - 0.5) * Math.PI * 0.85;
+            float speed = (float)(3.2 + rng.NextDouble() * (isTriAttack ? 9.5 : 6.8));
+            float vx = (float)(Math.Cos(theta) * Math.Cos(phi)) * speed;
+            float vy = (float)(Math.Sin(theta) * Math.Cos(phi)) * speed - 1.1f;
+            float vz = (float)Math.Sin(phi) * speed * 1.4f;
+
+            Color c1 = (i % 3 == 0) ? primary : ((i % 3 == 1) ? secondary : accent);
+            Color c2 = (i % 2 == 0) ? Color.FromArgb(255, 255, 255) : secondary;
+
+            VertexShards.Add(new CaptureVertexShard {
+                X = pkt.X + vx * 1.2f,
+                Y = pkt.Y + vy * 1.2f,
+                Z = pkt.Z + vz * 1.2f,
+                PrevX = pkt.X,
+                PrevY = pkt.Y,
+                VX = vx,
+                VY = vy,
+                VZ = vz,
+                RotAngle = (float)(rng.NextDouble() * Math.PI * 2.0),
+                RotSpeed = (float)((rng.NextDouble() - 0.5) * 0.42),
+                Size = (float)(5.5 + rng.NextDouble() * (isTriAttack ? 7.5 : 5.5)),
+                Life = 1.0f,
+                MaxLife = 1.0f,
+                ShapeKind = i % 3, // 0 = 3D Triangle, 1 = Octa-Diamond, 2 = Vertex Star Node
+                BurstGroupId = groupId,
+                OwnerAgentIdx = ag.AgentIndex,
+                HomingToAgent = (i % 2 == 0), // 50% of vertices curve back and get absorbed into Porygon!
+                Col = c1,
+                SecondaryCol = c2
+            });
+        }
+
+        string label = isTriAttack
+            ? string.Format("★ TRI-ATTACK PURGE // +45 XP [{0}]", pkt.AnomalyType)
+            : (pkt.Kind == 1
+                ? string.Format("◆ HOST AUDITED // +30 XP [{0}]", pkt.RemoteEndpoint)
+                : string.Format("● VERTEX_DECODE // +15 XP [{0}]", pkt.ProtocolName));
+
+        Shockwaves.Add(new CaptureShockwave {
+            X = pkt.X,
+            Y = pkt.Y,
+            Z = pkt.Z,
+            Life = 1.0f,
+            MaxRadius = isTriAttack ? 148f : (pkt.Kind >= 1 ? 116f : 92f),
+            RotAngle = (float)(rng.NextDouble() * Math.PI),
+            Kind = isTriAttack ? 2 : pkt.Kind,
+            Col = primary,
+            SecondaryCol = secondary,
+            FloatingLabel = label
+        });
+    }
+
+    private void UpdateCaptureEffects() {
+        for (int i = VertexShards.Count - 1; i >= 0; i--) {
+            CaptureVertexShard s = VertexShards[i];
+            s.PrevX = s.X;
+            s.PrevY = s.Y;
+            s.Life -= 0.028f;
+            if (s.Life <= 0f) {
+                VertexShards.RemoveAt(i);
+                continue;
+            }
+
+            s.RotAngle += s.RotSpeed;
+
+            if (s.HomingToAgent && s.Life < 0.62f && s.OwnerAgentIdx >= 0 && s.OwnerAgentIdx < Agents.Count) {
+                // Curve vertex shards back into the capturing Porygon's 3D body to feed its neural connectome!
+                PorygonAgent ag = Agents[s.OwnerAgentIdx];
+                float dx = ag.PosX - s.X;
+                float dy = ag.PosY - s.Y;
+                float dz = ag.PosZ - s.Z;
+                float dist = (float)Math.Sqrt(dx * dx + dy * dy + dz * dz);
+                if (dist < 32f) {
+                    ag.AbsorbFlashTimer = Math.Max(ag.AbsorbFlashTimer, 0.45f);
+                    VertexShards.RemoveAt(i);
+                    continue;
+                }
+                float pull = 1.35f / Math.Max(45f, dist);
+                s.VX = s.VX * 0.84f + dx * pull * 6.5f;
+                s.VY = s.VY * 0.84f + dy * pull * 6.5f;
+                s.VZ = s.VZ * 0.84f + dz * pull * 6.5f;
+            } else {
+                // Outward polyhedral decompression with subtle gravity & drag
+                s.VX *= 0.94f;
+                s.VY = s.VY * 0.94f + 0.08f;
+                s.VZ *= 0.94f;
+            }
+
+            float zScale = GetDepthScale(s.Z);
+            s.X += s.VX * zScale;
+            s.Y += s.VY * zScale;
+            s.Z = Clamp(s.Z + s.VZ, -250f, 170f);
+        }
+
+        for (int i = Shockwaves.Count - 1; i >= 0; i--) {
+            CaptureShockwave sw = Shockwaves[i];
+            sw.Life -= 0.032f;
+            sw.RotAngle += (sw.Kind == 2) ? 0.085f : 0.045f;
+            if (sw.Life <= 0f) {
+                Shockwaves.RemoveAt(i);
             }
         }
     }
@@ -2716,10 +2988,14 @@ public class Porygon3DAvatar {
 
     public void Render(Graphics g, float userScale, Color themeCyan, Color themeMag, Font tagFont) {
         List<DataPacket> pktsSnap;
+        List<CaptureVertexShard> shardsSnap;
+        List<CaptureShockwave> wavesSnap;
         DataPacket hovPkt;
         PorygonAgent hovAg;
         lock (packetLock) {
             pktsSnap = new List<DataPacket>(Packets);
+            shardsSnap = new List<CaptureVertexShard>(VertexShards);
+            wavesSnap = new List<CaptureShockwave>(Shockwaves);
             hovPkt = HoveredPacket;
             hovAg = HoveredAgent;
         }
@@ -2747,40 +3023,69 @@ public class Porygon3DAvatar {
             }
         }
 
-        // 1. Draw floating 3D Real Network Nodes (with Z perspective scaling + 3D floor-tether stems)
+        // 1. Draw floating 3D Real Network Nodes (with Z perspective scaling + 3D floor-tether stems + rotating polyhedra + tractor lock rings)
         for (int i = 0; i < pktsSnap.Count; i++) {
             DataPacket p = pktsSnap[i];
             float zScale = GetDepthScale(p.Z);
-            float sz = ((p.Kind == 0 ? 8.5f : 11.5f) + (float)Math.Sin(p.floatRot * 2f) * 2.5f) * zScale;
+            float sz = ((p.Kind == 0 ? 9.0f : 12.2f) + (float)Math.Sin(p.floatRot * 2f) * 2.5f) * zScale;
             if (p.IsHovered) sz *= 1.35f;
             int depthAlpha = (int)Clamp(175f + (p.Z + 250f) * 0.19f, 120f, 255f);
 
             using (Pen stemP = new Pen(Color.FromArgb(depthAlpha / 3, p.Col.R, p.Col.G, p.Col.B), 1.0f))
             using (SolidBrush glowB = new SolidBrush(Color.FromArgb(p.IsHovered ? 120 : (depthAlpha / 3), p.Col.R, p.Col.G, p.Col.B)))
             using (Pen wireP = new Pen(Color.FromArgb(depthAlpha, p.Col.R, p.Col.G, p.Col.B), (p.IsHovered ? 2.6f : 1.9f) * Math.Max(0.8f, zScale * 0.9f)))
+            using (Pen innerP = new Pen(Color.FromArgb(Math.Max(70, depthAlpha - 45), 255, 255, 255), 1.1f))
             using (SolidBrush coreB = new SolidBrush(Color.FromArgb(depthAlpha, 250, 252, 255))) {
                 float stemH = 26f * zScale;
                 g.DrawLine(stemP, p.X, p.Y + sz, p.X, p.Y + sz + stemH);
                 g.DrawEllipse(stemP, p.X - sz * 0.8f, p.Y + sz + stemH - 2.5f, sz * 1.6f, 5f);
 
-                g.FillEllipse(glowB, p.X - sz * 2f, p.Y - sz * 2f, sz * 4f, sz * 4f);
+                g.FillEllipse(glowB, p.X - sz * 2.1f, p.Y - sz * 2.1f, sz * 4.2f, sz * 4.2f);
+
+                // Rotating 3D Octahedron / Crystal Wireframe
+                float rot = p.floatRot * (p.Kind == 2 ? 1.8f : 1.15f);
+                float eqX1 = (float)Math.Cos(rot) * sz;
+                float eqY1 = (float)Math.Sin(rot) * sz * 0.42f;
+                float eqX2 = (float)Math.Cos(rot + Math.PI * 0.5) * sz;
+                float eqY2 = (float)Math.Sin(rot + Math.PI * 0.5) * sz * 0.42f;
+                PointF topPt = new PointF(p.X, p.Y - sz * 1.18f);
+                PointF botPt = new PointF(p.X, p.Y + sz * 1.18f);
+                PointF e1 = new PointF(p.X + eqX1, p.Y + eqY1);
+                PointF e2 = new PointF(p.X + eqX2, p.Y + eqY2);
+                PointF e3 = new PointF(p.X - eqX1, p.Y - eqY1);
+                PointF e4 = new PointF(p.X - eqX2, p.Y - eqY2);
+
+                g.DrawPolygon(wireP, new PointF[] { e1, e2, e3, e4 });
+                g.DrawLine(wireP, topPt, e1); g.DrawLine(wireP, topPt, e2);
+                g.DrawLine(wireP, topPt, e3); g.DrawLine(wireP, topPt, e4);
+                g.DrawLine(wireP, botPt, e1); g.DrawLine(wireP, botPt, e2);
+                g.DrawLine(wireP, botPt, e3); g.DrawLine(wireP, botPt, e4);
+
                 if (p.Kind == 2) {
-                    g.DrawEllipse(wireP, p.X - sz * 1.2f, p.Y - sz * 1.2f, sz * 2.4f, sz * 2.4f);
-                    g.DrawLine(wireP, p.X - sz * 1.6f, p.Y, p.X + sz * 1.6f, p.Y);
-                    g.DrawLine(wireP, p.X, p.Y - sz * 1.6f, p.X, p.Y + sz * 1.6f);
-                } else {
-                    PointF[] diamond = new PointF[] {
-                        new PointF(p.X, p.Y - sz),
-                        new PointF(p.X + sz, p.Y),
-                        new PointF(p.X, p.Y + sz),
-                        new PointF(p.X - sz, p.Y)
-                    };
-                    g.DrawPolygon(wireP, diamond);
-                    if (p.Kind == 1) {
-                        g.DrawEllipse(wireP, p.X - sz * 1.35f, p.Y - sz * 1.35f, sz * 2.7f, sz * 2.7f);
+                    g.DrawEllipse(wireP, p.X - sz * 1.38f, p.Y - sz * 1.38f, sz * 2.76f, sz * 2.76f);
+                    // Orbiting threat satellite vertices
+                    for (int s = 0; s < 3; s++) {
+                        double sAng = p.OrbitPhase + s * (2.0 * Math.PI / 3.0);
+                        float sx = p.X + (float)Math.Cos(sAng) * sz * 1.65f;
+                        float sy = p.Y + (float)Math.Sin(sAng) * sz * 0.95f;
+                        g.FillEllipse(coreB, sx - 2.4f, sy - 2.4f, 4.8f, 4.8f);
+                        g.DrawLine(innerP, p.X, p.Y, sx, sy);
+                    }
+                } else if (p.Kind == 1) {
+                    g.DrawEllipse(wireP, p.X - sz * 1.35f, p.Y - sz * 1.35f, sz * 2.7f, sz * 2.7f);
+                }
+
+                // Dynamic Tractor Lock Rings when a Porygon is pulling this packet
+                if (p.PullIntensity > 0.08f) {
+                    float lockR = sz * (1.85f + (float)Math.Sin(p.OrbitPhase * 3f) * 0.25f);
+                    int lockAlpha = (int)Clamp(p.PullIntensity * 235f, 60f, 245f);
+                    using (Pen lockP = new Pen(Color.FromArgb(lockAlpha, 255, 255, 255), 1.6f)) {
+                        lockP.DashStyle = DashStyle.Dash;
+                        g.DrawEllipse(lockP, p.X - lockR, p.Y - lockR, lockR * 2f, lockR * 2f);
                     }
                 }
-                float cr = 3f * zScale;
+
+                float cr = 3.2f * zScale;
                 g.FillEllipse(coreB, p.X - cr, p.Y - cr, cr * 2f, cr * 2f);
             }
         }
@@ -2790,12 +3095,93 @@ public class Porygon3DAvatar {
             RenderSingleAgent(g, agentsSorted[aIdx], userScale, themeCyan, themeMag, tagFont);
         }
 
+        // 2.5 Render 3D Packet Capture Shockwaves, Polyhedral Vertex Shards & Homing Absorption Streams
+        RenderCaptureEffectsGdi(g, shardsSnap, wavesSnap, tagFont);
+
         // 3. Render Interactive Mouse-Hover Node Inspection Card (or AI Agent Inspection Card)!
         if (tagFont != null) {
             if (hovPkt != null) {
                 DrawHoveredPacketCard(g, hovPkt, tagFont);
             } else if (hovAg != null) {
                 DrawHoveredAgentCard(g, hovAg, tagFont);
+            }
+        }
+    }
+
+    private void RenderCaptureEffectsGdi(Graphics g, List<CaptureVertexShard> shardsSnap, List<CaptureShockwave> wavesSnap, Font tagFont) {
+        // 1. Expanding Geometric Capture Shockwaves
+        for (int i = 0; i < wavesSnap.Count; i++) {
+            CaptureShockwave w = wavesSnap[i];
+            float lifeRatio = Clamp(w.Life, 0f, 1f);
+            float prog = 1.0f - lifeRatio;
+            float zScale = GetDepthScale(w.Z);
+            float r = w.MaxRadius * prog * zScale;
+            int alpha = (int)Clamp(lifeRatio * 235f, 0f, 245f);
+            if (alpha <= 5) continue;
+
+            int sides = (w.Kind == 2) ? 8 : 6;
+            PointF[] poly = new PointF[sides];
+            PointF[] innerPoly = new PointF[sides];
+            for (int k = 0; k < sides; k++) {
+                double ang = w.RotAngle + prog * 1.6f + k * (2.0 * Math.PI / sides);
+                poly[k] = new PointF(w.X + (float)Math.Cos(ang) * r, w.Y + (float)Math.Sin(ang) * r * 0.68f);
+                innerPoly[k] = new PointF(w.X + (float)Math.Cos(-ang) * r * 0.68f, w.Y + (float)Math.Sin(-ang) * r * 0.46f);
+            }
+            using (Pen wavePen = new Pen(Color.FromArgb(alpha, w.Col.R, w.Col.G, w.Col.B), (w.Kind == 2 ? 2.8f : 2.1f) * zScale))
+            using (Pen corePen = new Pen(Color.FromArgb(alpha * 3 / 4, 255, 255, 255), 1.2f)) {
+                g.DrawPolygon(wavePen, poly);
+                g.DrawPolygon(corePen, innerPoly);
+            }
+            if (tagFont != null && !string.IsNullOrEmpty(w.FloatingLabel) && prog < 0.78f) {
+                using (SolidBrush lblB = new SolidBrush(Color.FromArgb(alpha, 255, 250, 220))) {
+                    g.DrawString(w.FloatingLabel, tagFont, lblB, w.X - 42f, w.Y - 18f - prog * 34f);
+                }
+            }
+        }
+
+        // 2. 3D Polyhedral Vertex Shards & Constellation Filaments
+        for (int i = 0; i < shardsSnap.Count; i++) {
+            CaptureVertexShard s = shardsSnap[i];
+            float lifeRatio = Clamp(s.Life / Math.Max(0.01f, s.MaxLife), 0f, 1f);
+            int alpha = (int)(lifeRatio * 245f);
+            if (alpha <= 8) continue;
+
+            float zScale = GetDepthScale(s.Z);
+            float sz = s.Size * zScale * (0.55f + 0.45f * lifeRatio);
+
+            using (Pen trailP = new Pen(Color.FromArgb(alpha / 2, s.Col.R, s.Col.G, s.Col.B), 1.6f * zScale))
+            using (Pen edgeP = new Pen(Color.FromArgb(alpha, 255, 255, 255), 1.35f * zScale))
+            using (SolidBrush fillB = new SolidBrush(Color.FromArgb(alpha * 3 / 4, s.Col.R, s.Col.G, s.Col.B))) {
+                g.DrawLine(trailP, s.PrevX, s.PrevY, s.X, s.Y);
+
+                // Connect nearby shards from same capture burst into a 3D wireframe vertex web
+                if (s.BurstGroupId > 0) {
+                    for (int j = i + 1; j < shardsSnap.Count; j++) {
+                        CaptureVertexShard s2 = shardsSnap[j];
+                        if (s2.BurstGroupId != s.BurstGroupId) continue;
+                        float dx = s2.X - s.X, dy = s2.Y - s.Y;
+                        float d2 = dx * dx + dy * dy;
+                        if (d2 < 3600f) {
+                            int linkA = (int)((1.0f - d2 / 3600f) * alpha * 0.55f);
+                            if (linkA > 10) {
+                                using (Pen webP = new Pen(Color.FromArgb(linkA, s.SecondaryCol.R, s.SecondaryCol.G, s.SecondaryCol.B), 1.0f)) {
+                                    g.DrawLine(webP, s.X, s.Y, s2.X, s2.Y);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                int vCount = (s.ShapeKind == 0) ? 3 : 4;
+                PointF[] pts = new PointF[vCount];
+                for (int k = 0; k < vCount; k++) {
+                    double ang = s.RotAngle + k * (2.0 * Math.PI / vCount);
+                    float rx = (float)Math.Cos(ang) * sz;
+                    float ry = (float)Math.Sin(ang) * sz * (0.55f + 0.45f * (float)Math.Cos(s.RotAngle * 1.3f));
+                    pts[k] = new PointF(s.X + rx, s.Y + ry);
+                }
+                g.FillPolygon(fillB, pts);
+                g.DrawPolygon(edgeP, pts);
             }
         }
     }
@@ -2905,10 +3291,14 @@ public class Porygon3DAvatar {
 
     public void RenderOpenGL(float userScale, Color themeCyan, Color themeMag) {
         List<DataPacket> pktsSnap;
+        List<CaptureVertexShard> shardsSnap;
+        List<CaptureShockwave> wavesSnap;
         DataPacket hovPkt;
         PorygonAgent hovAg;
         lock (packetLock) {
             pktsSnap = new List<DataPacket>(Packets);
+            shardsSnap = new List<CaptureVertexShard>(VertexShards);
+            wavesSnap = new List<CaptureShockwave>(Shockwaves);
             hovPkt = HoveredPacket;
             hovAg = HoveredAgent;
         }
@@ -2937,19 +3327,20 @@ public class Porygon3DAvatar {
             }
         }
 
-        // 1. Draw floating 3D Real Network Nodes on GPU (with Z perspective scaling + 3D Floor Shadow Tethers)
+        // 1. Draw floating 3D Real Network Nodes on GPU (with 3D Rotating Octahedra, Satellite Vertices & Tractor Lock Rings)
         for (int i = 0; i < pktsSnap.Count; i++) {
             DataPacket p = pktsSnap[i];
             float zScale = GetDepthScale(p.Z);
-            float sz = ((p.Kind == 0 ? 8.5f : 11.5f) + (float)Math.Sin(p.floatRot * 2f) * 2.5f) * zScale;
+            float sz = ((p.Kind == 0 ? 9.2f : 12.6f) + (float)Math.Sin(p.floatRot * 2.2f) * 2.6f) * zScale;
             if (p.IsHovered) sz *= 1.35f;
 
-            int depthAlpha = (int)Clamp(170f + (p.Z + 250f) * 0.20f, 115f, 255f);
-            Color glowCol = Color.FromArgb(p.IsHovered ? 120 : (depthAlpha / 3), p.Col.R, p.Col.G, p.Col.B);
+            int depthAlpha = (int)Clamp(175f + (p.Z + 250f) * 0.20f, 115f, 255f);
+            Color glowCol = Color.FromArgb(p.IsHovered ? 125 : (depthAlpha / 3), p.Col.R, p.Col.G, p.Col.B);
             Color wireCol = Color.FromArgb(depthAlpha, p.Col.R, p.Col.G, p.Col.B);
+            Color innerWireCol = Color.FromArgb(Math.Max(80, depthAlpha - 35), 255, 255, 255);
             Color stemCol = Color.FromArgb(depthAlpha / 3, p.Col.R, p.Col.G, p.Col.B);
             Color coreCol = Color.FromArgb(depthAlpha, 250, 252, 255);
-            float lw = (p.IsHovered ? 2.5f : 1.8f) * Clamp(zScale, 0.75f, 1.35f);
+            float lw = (p.IsHovered ? 2.6f : 1.85f) * Clamp(zScale, 0.75f, 1.35f);
 
             // 3D Vertical Altitude Tether & Floor Shadow Ellipse beneath each floating node
             float stemH = 26f * zScale;
@@ -2957,25 +3348,83 @@ public class Porygon3DAvatar {
             GpuGl.DrawLine(p.X, p.Y + sz, p.X, baseY, stemCol, 1.1f);
             GpuGl.DrawEllipse(p.X, baseY, sz * 0.85f, 2.8f * zScale, stemCol, 1.0f, 12);
 
-            GpuGl.FillEllipse(p.X, p.Y, sz * 2f, sz * 2f, glowCol, 14);
+            // Outer energy aura
+            GpuGl.FillEllipse(p.X, p.Y, sz * 2.15f, sz * 2.15f, glowCol, 16);
+
+            // 3D Rotating Polyhedral Crystal / Octahedron
+            float rot = p.floatRot * (p.Kind == 2 ? 2.1f : 1.25f);
+            float eqX1 = (float)Math.Cos(rot) * sz;
+            float eqY1 = (float)Math.Sin(rot) * sz * 0.44f;
+            float eqX2 = (float)Math.Cos(rot + Math.PI * 0.5) * sz;
+            float eqY2 = (float)Math.Sin(rot + Math.PI * 0.5) * sz * 0.44f;
+            float topY = p.Y - sz * 1.22f;
+            float botY = p.Y + sz * 1.22f;
+
+            // Translucent faceted core fill
+            GpuGl.SetColor(p.Col, depthAlpha / 4);
+            GpuGl.glBegin(GpuGl.GL_TRIANGLE_FAN);
+            GpuGl.glVertex2f(p.X, p.Y);
+            GpuGl.glVertex2f(p.X, topY);
+            GpuGl.glVertex2f(p.X + eqX1, p.Y + eqY1);
+            GpuGl.glVertex2f(p.X, botY);
+            GpuGl.glVertex2f(p.X - eqX1, p.Y - eqY1);
+            GpuGl.glVertex2f(p.X, topY);
+            GpuGl.glEnd();
+
+            // Equatorial ring + 8 octahedral edges
+            GpuGl.glLineWidth(lw);
+            GpuGl.SetColor(wireCol);
+            GpuGl.glBegin(GpuGl.GL_LINE_LOOP);
+            GpuGl.glVertex2f(p.X + eqX1, p.Y + eqY1);
+            GpuGl.glVertex2f(p.X + eqX2, p.Y + eqY2);
+            GpuGl.glVertex2f(p.X - eqX1, p.Y - eqY1);
+            GpuGl.glVertex2f(p.X - eqX2, p.Y - eqY2);
+            GpuGl.glEnd();
+
+            GpuGl.glBegin(GpuGl.GL_LINES);
+            GpuGl.glVertex2f(p.X, topY); GpuGl.glVertex2f(p.X + eqX1, p.Y + eqY1);
+            GpuGl.glVertex2f(p.X, topY); GpuGl.glVertex2f(p.X + eqX2, p.Y + eqY2);
+            GpuGl.glVertex2f(p.X, topY); GpuGl.glVertex2f(p.X - eqX1, p.Y - eqY1);
+            GpuGl.glVertex2f(p.X, topY); GpuGl.glVertex2f(p.X - eqX2, p.Y - eqY2);
+            GpuGl.glVertex2f(p.X, botY); GpuGl.glVertex2f(p.X + eqX1, p.Y + eqY1);
+            GpuGl.glVertex2f(p.X, botY); GpuGl.glVertex2f(p.X + eqX2, p.Y + eqY2);
+            GpuGl.glVertex2f(p.X, botY); GpuGl.glVertex2f(p.X - eqX1, p.Y - eqY1);
+            GpuGl.glVertex2f(p.X, botY); GpuGl.glVertex2f(p.X - eqX2, p.Y - eqY2);
+            GpuGl.glEnd();
+
             if (p.Kind == 2) {
-                GpuGl.DrawEllipse(p.X, p.Y, sz * 1.2f, sz * 1.2f, wireCol, lw, 16);
-                GpuGl.DrawLine(p.X - sz * 1.6f, p.Y, p.X + sz * 1.6f, p.Y, wireCol, lw);
-                GpuGl.DrawLine(p.X, p.Y - sz * 1.6f, p.X, p.Y + sz * 1.6f, wireCol, lw);
-            } else {
-                GpuGl.glLineWidth(lw);
-                GpuGl.SetColor(wireCol);
-                GpuGl.glBegin(GpuGl.GL_LINE_LOOP);
-                GpuGl.glVertex2f(p.X, p.Y - sz);
-                GpuGl.glVertex2f(p.X + sz, p.Y);
-                GpuGl.glVertex2f(p.X, p.Y + sz);
-                GpuGl.glVertex2f(p.X - sz, p.Y);
-                GpuGl.glEnd();
-                if (p.Kind == 1) {
-                    GpuGl.DrawEllipse(p.X, p.Y, sz * 1.35f, sz * 1.35f, wireCol, lw, 16);
+                // Threat anomaly: counter-rotating hazard ring + 3 orbiting vertex satellites
+                GpuGl.DrawEllipse(p.X, p.Y, sz * 1.42f, sz * 1.42f, wireCol, lw * 0.95f, 18);
+                for (int s = 0; s < 3; s++) {
+                    double sAng = p.OrbitPhase + s * (2.0 * Math.PI / 3.0);
+                    float sx = p.X + (float)Math.Cos(sAng) * sz * 1.72f;
+                    float sy = p.Y + (float)Math.Sin(sAng) * sz * 0.98f;
+                    GpuGl.DrawLine(p.X, p.Y, sx, sy, Color.FromArgb(depthAlpha / 2, 255, 180, 210), 1.1f);
+                    GpuGl.FillEllipse(sx, sy, 2.7f * zScale, 2.7f * zScale, coreCol, 8);
+                }
+            } else if (p.Kind == 1) {
+                // Golden Discovery orb: dual gyroscopic rings
+                GpuGl.DrawEllipse(p.X, p.Y, sz * 1.45f, sz * 0.72f, wireCol, lw * 0.9f, 18);
+                GpuGl.DrawEllipse(p.X, p.Y, sz * 0.72f, sz * 1.45f, innerWireCol, 1.2f, 18);
+            }
+
+            // Dynamic Tractor Vortex Lock Ring when a Porygon has locked onto this packet!
+            if (p.PullIntensity > 0.06f) {
+                float lockR = sz * (1.95f + (float)Math.Sin(p.OrbitPhase * 3.2f) * 0.28f);
+                int lockAlpha = (int)Clamp(p.PullIntensity * 240f, 65f, 250f);
+                Color lockC = Color.FromArgb(lockAlpha, 255, 255, 255);
+                GpuGl.DrawEllipse(p.X, p.Y, lockR, lockR, lockC, 1.6f, 20);
+                for (int c = 0; c < 4; c++) {
+                    double cAng = -p.OrbitPhase * 1.8f + c * (Math.PI * 0.5);
+                    float cx1 = p.X + (float)Math.Cos(cAng) * (lockR * 0.78f);
+                    float cy1 = p.Y + (float)Math.Sin(cAng) * (lockR * 0.78f);
+                    float cx2 = p.X + (float)Math.Cos(cAng) * (lockR * 1.18f);
+                    float cy2 = p.Y + (float)Math.Sin(cAng) * (lockR * 1.18f);
+                    GpuGl.DrawLine(cx1, cy1, cx2, cy2, wireCol, 2.0f);
                 }
             }
-            GpuGl.FillEllipse(p.X, p.Y, 3.0f * zScale, 3.0f * zScale, coreCol, 8);
+
+            GpuGl.FillEllipse(p.X, p.Y, 3.2f * zScale, 3.2f * zScale, coreCol, 8);
 
             // Show compact 3D Z-depth readout on priority/anomaly or foreground nodes
             if (p.Kind == 2 || p.IsHovered || p.Z > 85f) {
@@ -2989,11 +3438,131 @@ public class Porygon3DAvatar {
             RenderSingleAgentOpenGL(agentsSorted[aIdx], userScale, themeCyan, themeMag);
         }
 
+        // 2.5 Render 3D Packet Capture Shockwaves, Polyhedral Vertex Shards, Constellation Webs & Homing Absorption Streams on GPU!
+        RenderCaptureEffectsOpenGL(shardsSnap, wavesSnap);
+
         // 3. Render Interactive Mouse-Hover Node or Agent Inspection Card on GPU
         if (hovPkt != null) {
             DrawHoveredPacketCardOpenGL(hovPkt);
         } else if (hovAg != null) {
             DrawHoveredAgentCardOpenGL(hovAg);
+        }
+    }
+
+    private void RenderCaptureEffectsOpenGL(List<CaptureVertexShard> shardsSnap, List<CaptureShockwave> wavesSnap) {
+        // 1. Expanding Geometric 3D Capture Shockwaves & Floating Purge/XP Readouts
+        for (int i = 0; i < wavesSnap.Count; i++) {
+            CaptureShockwave w = wavesSnap[i];
+            float lifeRatio = Clamp(w.Life, 0f, 1f);
+            float prog = 1.0f - lifeRatio;
+            int alpha = (int)(lifeRatio * 245f);
+            if (alpha <= 6) continue;
+
+            float zScale = GetDepthScale(w.Z);
+            float r = w.MaxRadius * prog * zScale;
+            int sides = (w.Kind == 2) ? 8 : 6;
+
+            // Outer glowing polygon shockwave
+            GpuGl.glLineWidth((w.Kind == 2 ? 3.0f : 2.3f) * zScale);
+            GpuGl.SetColor(w.Col, alpha);
+            GpuGl.glBegin(GpuGl.GL_LINE_LOOP);
+            for (int k = 0; k < sides; k++) {
+                double ang = w.RotAngle + prog * 1.8f + k * (2.0 * Math.PI / sides);
+                float px = w.X + (float)Math.Cos(ang) * r;
+                float py = w.Y + (float)Math.Sin(ang) * r * 0.70f;
+                GpuGl.glVertex2f(px, py);
+            }
+            GpuGl.glEnd();
+
+            // Counter-rotating inner geometric ring + radial vertex spokes
+            float rInner = r * 0.66f;
+            GpuGl.glLineWidth(1.35f * zScale);
+            GpuGl.SetColor(Color.FromArgb(alpha * 4 / 5, 255, 255, 255));
+            GpuGl.glBegin(GpuGl.GL_LINE_LOOP);
+            for (int k = 0; k < sides; k++) {
+                double ang = -w.RotAngle - prog * 2.2f + k * (2.0 * Math.PI / sides);
+                float px = w.X + (float)Math.Cos(ang) * rInner;
+                float py = w.Y + (float)Math.Sin(ang) * rInner * 0.70f;
+                GpuGl.glVertex2f(px, py);
+            }
+            GpuGl.glEnd();
+
+            // Glowing vertex nodes at the corners of the shockwave polygon
+            for (int k = 0; k < sides; k++) {
+                double ang = w.RotAngle + prog * 1.8f + k * (2.0 * Math.PI / sides);
+                float px = w.X + (float)Math.Cos(ang) * r;
+                float py = w.Y + (float)Math.Sin(ang) * r * 0.70f;
+                GpuGl.FillEllipse(px, py, 2.8f * zScale, 2.8f * zScale, Color.FromArgb(alpha, 255, 255, 255), 6);
+            }
+
+            if (!string.IsNullOrEmpty(w.FloatingLabel) && prog < 0.85f) {
+                Color lblCol = (w.Kind == 2)
+                    ? Color.FromArgb(alpha, 255, 195, 225)
+                    : (w.Kind == 1 ? Color.FromArgb(alpha, 255, 235, 120) : Color.FromArgb(alpha, 185, 250, 255));
+                GpuGl.DrawText(w.FloatingLabel, w.X - 44f, w.Y - 16f - prog * 36f, lblCol, GpuGl.FONT_LIST_HUD_SMALL);
+            }
+        }
+
+        // 2. 3D Polyhedral Vertex Shards, Motion Trails & Constellation Filaments
+        for (int i = 0; i < shardsSnap.Count; i++) {
+            CaptureVertexShard s = shardsSnap[i];
+            float lifeRatio = Clamp(s.Life / Math.Max(0.01f, s.MaxLife), 0f, 1f);
+            int alpha = (int)(lifeRatio * 250f);
+            if (alpha <= 6) continue;
+
+            float zScale = GetDepthScale(s.Z);
+            float sz = s.Size * zScale * (0.52f + 0.48f * lifeRatio);
+
+            // Luminous velocity trail behind each flying vertex shard
+            GpuGl.DrawLine(s.PrevX, s.PrevY, s.X, s.Y, Color.FromArgb(alpha * 2 / 3, s.Col.R, s.Col.G, s.Col.B), 2.1f * zScale);
+            GpuGl.DrawLine(s.PrevX, s.PrevY, s.X, s.Y, Color.FromArgb(alpha / 2, 255, 255, 255), 1.0f * zScale);
+
+            // Constellation filaments linking shards from the same burst group
+            if (s.BurstGroupId > 0) {
+                for (int j = i + 1; j < shardsSnap.Count; j++) {
+                    CaptureVertexShard s2 = shardsSnap[j];
+                    if (s2.BurstGroupId != s.BurstGroupId) continue;
+                    float dx = s2.X - s.X, dy = s2.Y - s.Y;
+                    float d2 = dx * dx + dy * dy;
+                    if (d2 < 4200f) {
+                        int linkA = (int)((1.0f - d2 / 4200f) * alpha * 0.62f);
+                        if (linkA > 12) {
+                            GpuGl.DrawLine(s.X, s.Y, s2.X, s2.Y, Color.FromArgb(linkA, s.SecondaryCol.R, s.SecondaryCol.G, s.SecondaryCol.B), 1.15f);
+                        }
+                    }
+                }
+            }
+
+            // 3D tumbling polygon shard (Triangle, Diamond, or Mini-Prism)
+            int vCount = (s.ShapeKind == 0) ? 3 : 4;
+            float tiltX = 0.45f + 0.55f * (float)Math.Cos(s.RotAngle * 1.3f);
+            float tiltY = 0.45f + 0.55f * (float)Math.Sin(s.RotAngle * 0.9f);
+
+            GpuGl.SetColor(s.Col, alpha * 3 / 4);
+            GpuGl.glBegin(GpuGl.GL_TRIANGLE_FAN);
+            GpuGl.glVertex2f(s.X, s.Y);
+            for (int k = 0; k <= vCount; k++) {
+                double ang = s.RotAngle + (k % vCount) * (2.0 * Math.PI / vCount);
+                float vx = s.X + (float)Math.Cos(ang) * sz * tiltY;
+                float vy = s.Y + (float)Math.Sin(ang) * sz * tiltX;
+                GpuGl.glVertex2f(vx, vy);
+            }
+            GpuGl.glEnd();
+
+            // Crisp glowing wireframe edges + internal spoke lines
+            GpuGl.glLineWidth(1.45f * zScale);
+            GpuGl.SetColor(s.SecondaryCol, alpha);
+            GpuGl.glBegin(GpuGl.GL_LINE_LOOP);
+            for (int k = 0; k < vCount; k++) {
+                double ang = s.RotAngle + k * (2.0 * Math.PI / vCount);
+                float vx = s.X + (float)Math.Cos(ang) * sz * tiltY;
+                float vy = s.Y + (float)Math.Sin(ang) * sz * tiltX;
+                GpuGl.glVertex2f(vx, vy);
+            }
+            GpuGl.glEnd();
+
+            // Bright vertex spark at shard center
+            GpuGl.FillEllipse(s.X, s.Y, 2.0f * zScale, 2.0f * zScale, Color.FromArgb(alpha, 255, 255, 255), 6);
         }
     }
 
@@ -3102,32 +3671,161 @@ public class Porygon3DAvatar {
         float hopOffset = (a.SpinRollTimer > 0f) ? (float)Math.Sin(a.SpinRollTimer * Math.PI) * 32f * zDepthScale : 0f;
         float bobY = a.PosY + (float)Math.Sin(a.FloatBob) * 9f * zDepthScale - hopOffset;
 
-        // Skill LVL 6: Deep Sonar Scan Expanding Ring
+        // Skill LVL 6: Deep Sonar Scan — 3 Concentric 3D Tilted Sonar Rings + Radar Sweep Beam + Holographic Grid Pillars
         if (a.ScanWaveTimer > 0f) {
             float prog = 1.0f - a.ScanWaveTimer;
-            float scanR = (40f + prog * 260f) * zDepthScale;
-            int alpha = (int)(a.ScanWaveTimer * 160f);
-            GpuGl.DrawEllipse(a.PosX, bobY, scanR, scanR * 0.45f, Color.FromArgb(alpha, a.AuraColor.R, a.AuraColor.G, a.AuraColor.B), 2.2f, 32);
+            int baseAlpha = (int)Clamp(a.ScanWaveTimer * 215f, 0f, 240f);
+            for (int w = 0; w < 3; w++) {
+                float wProg = Clamp(prog - w * 0.14f, 0f, 1f);
+                if (wProg <= 0f) continue;
+                float scanR = (36f + wProg * 295f) * zDepthScale;
+                int wAlpha = Math.Max(10, baseAlpha - w * 45);
+                Color ringCol = (w == 0) ? Color.FromArgb(wAlpha, 255, 255, 255) : Color.FromArgb(wAlpha, a.AuraColor.R, a.AuraColor.G, a.AuraColor.B);
+                GpuGl.DrawEllipse(a.PosX, bobY, scanR, scanR * 0.46f, ringCol, (w == 0 ? 2.6f : 1.7f) * zDepthScale, 36);
+
+                // Vertical holographic sonar pillars around outer wave
+                if (w == 0) {
+                    for (int pIdx = 0; pIdx < 8; pIdx++) {
+                        double pAng = a.FloatBob * 1.8f + pIdx * (Math.PI * 0.25);
+                        float px = a.PosX + (float)Math.Cos(pAng) * scanR;
+                        float py = bobY + (float)Math.Sin(pAng) * scanR * 0.46f;
+                        float pillarH = (18f + (float)Math.Sin(a.FloatBob * 4f + pIdx) * 8f) * zDepthScale * a.ScanWaveTimer;
+                        GpuGl.DrawLine(px, py, px, py - pillarH, Color.FromArgb(wAlpha * 3 / 4, 0, 240, 255), 1.6f);
+                        GpuGl.FillEllipse(px, py - pillarH, 2.4f * zDepthScale, 2.4f * zDepthScale, Color.FromArgb(wAlpha, 255, 255, 255), 6);
+                    }
+                }
+            }
+            // Rotating radar sweep line inside sonar field
+            float sweepR = (40f + prog * 280f) * zDepthScale;
+            double sweepAng = prog * Math.PI * 4.0 + a.FloatBob;
+            float sx = a.PosX + (float)Math.Cos(sweepAng) * sweepR;
+            float sy = bobY + (float)Math.Sin(sweepAng) * sweepR * 0.46f;
+            GpuGl.DrawLine(a.PosX, bobY, sx, sy, Color.FromArgb(baseAlpha, 0, 240, 255), 2.2f);
         }
 
-        // Skill LVL 5: Quantum Blink Warp Trail
+        // Skill LVL 5: Quantum Blink Warp — Entry/Exit 8-Point Dimensional Portals + Wireframe Afterimage + Lightning Warp Corridor
         if (a.QuantumBlinkTimer > 0f) {
-            int alpha = (int)(a.QuantumBlinkTimer * 190f);
+            int alpha = (int)Clamp(a.QuantumBlinkTimer * 235f, 0f, 250f);
             Color warpCol = Color.FromArgb(alpha, 0, 240, 255);
-            GpuGl.DrawLine(a.BlinkStartPt.X, a.BlinkStartPt.Y, a.PosX, bobY, warpCol, 3.5f);
-            GpuGl.DrawLine(a.BlinkStartPt.X, a.BlinkStartPt.Y, a.PosX, bobY, Color.FromArgb(alpha, 255, 255, 255), 1.5f);
-            GpuGl.DrawEllipse(a.BlinkStartPt.X, a.BlinkStartPt.Y, 24f * zDepthScale, 24f * zDepthScale, warpCol, 2.2f, 20);
+            Color magCol  = Color.FromArgb(alpha * 4 / 5, 236, 72, 153);
+            Color coreCol = Color.FromArgb(alpha, 255, 255, 255);
+
+            // Entry & Exit 8-point spinning dimensional star portals
+            PointF[] portals = new PointF[] { a.BlinkStartPt, new PointF(a.PosX, bobY) };
+            for (int pIdx = 0; pIdx < 2; pIdx++) {
+                PointF pt = portals[pIdx];
+                float pr = (pIdx == 0 ? 32f : 38f) * zDepthScale * (0.6f + 0.4f * a.QuantumBlinkTimer);
+                GpuGl.DrawEllipse(pt.X, pt.Y, pr, pr * 0.65f, warpCol, 2.2f, 24);
+                GpuGl.DrawEllipse(pt.X, pt.Y, pr * 0.65f, pr, magCol, 1.6f, 24);
+                for (int k = 0; k < 8; k++) {
+                    double ang = a.FloatBob * 3.5f * (pIdx == 0 ? 1f : -1f) + k * (Math.PI * 0.25);
+                    float x1 = pt.X + (float)Math.Cos(ang) * (pr * 0.45f);
+                    float y1 = pt.Y + (float)Math.Sin(ang) * (pr * 0.45f);
+                    float x2 = pt.X + (float)Math.Cos(ang) * (pr * 1.25f);
+                    float y2 = pt.Y + (float)Math.Sin(ang) * (pr * 1.25f);
+                    GpuGl.DrawLine(x1, y1, x2, y2, (k % 2 == 0) ? coreCol : warpCol, 1.6f);
+                }
+            }
+
+            // Jagged multi-strand quantum lightning corridor between BlinkStartPt and current position
+            float dx = a.PosX - a.BlinkStartPt.X;
+            float dy = bobY - a.BlinkStartPt.Y;
+            float len = (float)Math.Sqrt(dx * dx + dy * dy);
+            float nx = (len > 1f) ? -dy / len : 0f;
+            float ny = (len > 1f) ?  dx / len : 1f;
+            int segs = 10;
+            for (int strand = 0; strand < 2; strand++) {
+                float prevX = a.BlinkStartPt.X, prevY = a.BlinkStartPt.Y;
+                Color sCol = (strand == 0) ? warpCol : magCol;
+                for (int s = 1; s <= segs; s++) {
+                    float t = (float)s / segs;
+                    float jag = (s == segs) ? 0f : (float)Math.Sin(t * Math.PI * 5.0 + a.FloatBob * 12f + strand * 2.4f) * (12f - strand * 4f) * zDepthScale;
+                    float curX = a.BlinkStartPt.X + dx * t + nx * jag;
+                    float curY = a.BlinkStartPt.Y + dy * t + ny * jag;
+                    GpuGl.DrawLine(prevX, prevY, curX, curY, sCol, 3.2f - strand * 0.8f);
+                    GpuGl.DrawLine(prevX, prevY, curX, curY, coreCol, 1.3f);
+                    prevX = curX; prevY = curY;
+                }
+            }
         }
 
-        // Skill LVL 3: P2P Neural Sync Link Beam between Porygon Agents
+        // Skill LVL 3: P2P Neural Sync — Multi-Strand Synaptic Lightning Arc + Bidirectional Data Cubes + Resonance Halos
         if (a.SyncTimer > 0f && a.SyncPartnerIdx >= 0 && a.SyncPartnerIdx < Agents.Count) {
             PorygonAgent partner = Agents[a.SyncPartnerIdx];
-            int alpha = (int)(a.SyncTimer * 210f);
-            GpuGl.DrawLine(a.PosX, bobY, partner.PosX, partner.PosY, Color.FromArgb(alpha / 2, a.AuraColor.R, a.AuraColor.G, a.AuraColor.B), 5.0f);
-            GpuGl.DrawLine(a.PosX, bobY, partner.PosX, partner.PosY, Color.FromArgb(alpha, 250, 204, 21), 2.0f);
+            int alpha = (int)Clamp(a.SyncTimer * 230f, 0f, 250f);
+            Color auraC = Color.FromArgb(alpha * 2 / 3, a.AuraColor.R, a.AuraColor.G, a.AuraColor.B);
+            Color goldC = Color.FromArgb(alpha, 250, 204, 21);
+            Color whiteC = Color.FromArgb(alpha, 255, 255, 255);
+
+            float dx = partner.PosX - a.PosX;
+            float dy = partner.PosY - bobY;
+            float len = (float)Math.Sqrt(dx * dx + dy * dy);
+            float nx = (len > 1f) ? -dy / len : 0f;
+            float ny = (len > 1f) ?  dx / len : 1f;
+
+            // Core conduit + dual helical synaptic strands
+            GpuGl.DrawLine(a.PosX, bobY, partner.PosX, partner.PosY, auraC, 5.5f);
+            int segs = 14;
+            for (int strand = -1; strand <= 1; strand += 2) {
+                float pX = a.PosX, pY = bobY;
+                for (int s = 1; s <= segs; s++) {
+                    float t = (float)s / segs;
+                    float wave = (float)Math.Sin(t * Math.PI * 4.0 - a.FloatBob * 8f) * 14f * strand * (float)Math.Sin(t * Math.PI);
+                    float cX = a.PosX + dx * t + nx * wave;
+                    float cY = bobY + dy * t + ny * wave;
+                    GpuGl.DrawLine(pX, pY, cX, cY, (strand < 0) ? goldC : whiteC, 2.1f);
+                    pX = cX; pY = cY;
+                }
+            }
+
+            // Bidirectional glowing synaptic weight packets traveling between the two Porygons
+            for (int pIdx = 0; pIdx < 3; pIdx++) {
+                float tFwd = (float)((a.FloatBob * 0.9f + pIdx * 0.33f) % 1.0f);
+                if (tFwd < 0f) tFwd += 1f;
+                float fx = a.PosX + dx * tFwd;
+                float fy = bobY + dy * tFwd;
+                GpuGl.FillEllipse(fx, fy, 4.5f * zDepthScale, 4.5f * zDepthScale, goldC, 8);
+                GpuGl.DrawEllipse(fx, fy, 7.5f * zDepthScale, 7.5f * zDepthScale, whiteC, 1.3f, 8);
+            }
+            GpuGl.DrawEllipse(a.PosX, bobY, 34f * zDepthScale, 34f * zDepthScale, goldC, 1.8f, 20);
         }
 
-        // Cyber Holographic Platform beneath each Porygon (scaled by 3D Z depth)
+        // Dynamic Tractor-Beam Conduit when Porygon has locked onto a network packet in pursuit!
+        if (a.ActiveLockStrength > 0.06f) {
+            int lockA = (int)Clamp(a.ActiveLockStrength * 195f, 35f, 215f);
+            Color tCol = (a.ActiveLockKind == 2)
+                ? Color.FromArgb(lockA, 236, 72, 153)
+                : (a.ActiveLockKind == 1 ? Color.FromArgb(lockA, 250, 204, 21) : Color.FromArgb(lockA, a.AuraColor.R, a.AuraColor.G, a.AuraColor.B));
+            Color tCore = Color.FromArgb(lockA, 255, 255, 255);
+
+            float dx = a.ActiveLockTarget.X - a.PosX;
+            float dy = a.ActiveLockTarget.Y - bobY;
+            float len = (float)Math.Sqrt(dx * dx + dy * dy);
+            float nx = (len > 1f) ? -dy / len : 0f;
+            float ny = (len > 1f) ?  dx / len : 1f;
+
+            // Helical tractor spiral pulling the packet toward Porygon
+            int segs = 10;
+            float prevX = a.PosX, prevY = bobY;
+            for (int s = 1; s <= segs; s++) {
+                float t = (float)s / segs;
+                float spiral = (float)Math.Sin(t * Math.PI * 3.0 + a.TractorPhase) * 9f * (1f - t * 0.5f) * zDepthScale;
+                float curX = a.PosX + dx * t + nx * spiral;
+                float curY = bobY + dy * t + ny * spiral;
+                GpuGl.DrawLine(prevX, prevY, curX, curY, tCol, 2.0f * zDepthScale);
+                prevX = curX; prevY = curY;
+            }
+            // Concentric tractor rings converging from packet to Porygon
+            for (int rIdx = 0; rIdx < 3; rIdx++) {
+                float rt = 1.0f - (float)(((a.TractorPhase * 0.22f) + rIdx * 0.33f) % 1.0f);
+                float rx = a.PosX + dx * rt;
+                float ry = bobY + dy * rt;
+                float rr = (5f + rt * 11f) * zDepthScale;
+                GpuGl.DrawEllipse(rx, ry, rr, rr * 0.65f, tCore, 1.3f, 12);
+            }
+        }
+
+        // Cyber Holographic Platform beneath each Porygon (scaled by 3D Z depth + boosted during Dash/Absorption)
         float ringW = 126f * (effUserScale / 100f);
         float ringH = 30f * (effUserScale / 100f);
         float ringY = a.PosY + 74f * (effUserScale / 100f);
@@ -3203,6 +3901,7 @@ public class Porygon3DAvatar {
         GpuGl.glDisable(GpuGl.GL_TEXTURE_2D);
 
         float depthAtmos = Clamp(0.84f + (a.PosZ + 250f) * 0.00045f, 0.78f, 1.05f);
+        float absorbBoost = (a.AbsorbFlashTimer > 0f) ? a.AbsorbFlashTimer * 0.22f : 0f;
 
         GpuGl.glBegin(GpuGl.GL_TRIANGLES);
         for (int i = 0; i < bFaces.Count; i++) {
@@ -3223,7 +3922,7 @@ public class Porygon3DAvatar {
 
             float ndotl = nx * -0.32f + ny * 0.72f + nz * 0.62f;
             if (ndotl < 0f) ndotl = 0f;
-            float shade = (0.80f + ndotl * 0.26f) * depthAtmos;
+            float shade = (0.80f + ndotl * 0.26f + absorbBoost) * depthAtmos;
             byte r = (byte)Math.Min(255, (int)(f.BaseColor.R * shade));
             byte gr = (byte)Math.Min(255, (int)(f.BaseColor.G * shade));
             byte b = (byte)Math.Min(255, (int)(f.BaseColor.B * shade));
@@ -3240,58 +3939,172 @@ public class Porygon3DAvatar {
         GpuGl.glEnd();
         GpuGl.glDisable(GpuGl.GL_DEPTH_TEST);
 
-        // Skill LVL 2: Hexagonal Conversion2 Energy Shield
+        // 3D Mesh Vertex Absorption Glow — Sparkling wireframe vertices on Porygon's body when absorbing captured packet shards!
+        if (a.AbsorbFlashTimer > 0.02f || a.DashBoostTimer > 0.1f) {
+            float flashInt = Math.Max(a.AbsorbFlashTimer, a.DashBoostTimer * 0.55f);
+            int vAlpha = (int)Clamp(flashInt * 230f, 30f, 245f);
+            Color vCol = Color.FromArgb(vAlpha, a.AuraColor.R, a.AuraColor.G, a.AuraColor.B);
+            Color vCore = Color.FromArgb(vAlpha, 255, 255, 255);
+            int step = Math.Max(1, bVerts.Count / 28);
+            for (int vIdx = 0; vIdx < bVerts.Count; vIdx += step) {
+                if (tv[vIdx].Z < -5f) continue; // Only front-facing mesh vertices
+                PointF vp = pv[vIdx];
+                GpuGl.FillEllipse(vp.X, vp.Y, 2.6f * zDepthScale, 2.6f * zDepthScale, vCore, 6);
+                int nextIdx = (vIdx + step) % bVerts.Count;
+                if (tv[nextIdx].Z >= -5f) {
+                    float dx = pv[nextIdx].X - vp.X, dy = pv[nextIdx].Y - vp.Y;
+                    if (dx * dx + dy * dy < 2200f * zDepthScale * zDepthScale) {
+                        GpuGl.DrawLine(vp.X, vp.Y, pv[nextIdx].X, pv[nextIdx].Y, vCol, 1.2f * zDepthScale);
+                    }
+                }
+            }
+        }
+
+        // Skill LVL 2: Conversion-2 Geodesic Dual Forcefield Dome (Counter-Rotating Hexagons + Triangulated Spokes + Corner Nodes)
         if (a.ShieldTimer > 0f) {
-            int sAlpha = (int)(Math.Min(1.0f, a.ShieldTimer) * 165f);
-            float shR = 72f * (effUserScale / 100f);
-            GpuGl.SetColor(a.AuraColor, sAlpha / 6);
+            int sAlpha = (int)(Math.Min(1.0f, a.ShieldTimer) * 195f);
+            float shR = 76f * (effUserScale / 100f);
+            float shR2 = shR * 0.62f;
+
+            // Translucent energy dome fill
+            GpuGl.SetColor(a.AuraColor, sAlpha / 5);
             GpuGl.glBegin(GpuGl.GL_TRIANGLE_FAN);
             GpuGl.glVertex2f(a.PosX, bobY);
             for (int k = 0; k <= 6; k++) {
-                double ang = a.FloatBob * 1.4f + (k % 6) * (Math.PI / 3.0);
-                GpuGl.glVertex2f(a.PosX + (float)Math.Cos(ang) * shR, bobY + (float)Math.Sin(ang) * shR * 0.85f);
+                double ang = a.FloatBob * 1.6f + (k % 6) * (Math.PI / 3.0);
+                GpuGl.glVertex2f(a.PosX + (float)Math.Cos(ang) * shR, bobY + (float)Math.Sin(ang) * shR * 0.86f);
             }
             GpuGl.glEnd();
 
-            GpuGl.glLineWidth(2.2f);
+            PointF[] outerHex = new PointF[6];
+            PointF[] innerHex = new PointF[6];
+            for (int k = 0; k < 6; k++) {
+                double ang1 = a.FloatBob * 1.6f + k * (Math.PI / 3.0);
+                double ang2 = -a.FloatBob * 2.1f + k * (Math.PI / 3.0);
+                outerHex[k] = new PointF(a.PosX + (float)Math.Cos(ang1) * shR, bobY + (float)Math.Sin(ang1) * shR * 0.86f);
+                innerHex[k] = new PointF(a.PosX + (float)Math.Cos(ang2) * shR2, bobY + (float)Math.Sin(ang2) * shR2 * 0.86f);
+            }
+
+            // Outer hexagon
+            GpuGl.glLineWidth(2.4f * zDepthScale);
             GpuGl.SetColor(a.AuraColor, sAlpha);
             GpuGl.glBegin(GpuGl.GL_LINE_LOOP);
-            for (int k = 0; k < 6; k++) {
-                double ang = a.FloatBob * 1.4f + k * (Math.PI / 3.0);
-                GpuGl.glVertex2f(a.PosX + (float)Math.Cos(ang) * shR, bobY + (float)Math.Sin(ang) * shR * 0.85f);
-            }
+            for (int k = 0; k < 6; k++) GpuGl.glVertex2f(outerHex[k].X, outerHex[k].Y);
             GpuGl.glEnd();
+
+            // Counter-rotating inner cyan/white hexagon + geodesic struts
+            Color innerCol = Color.FromArgb(sAlpha * 4 / 5, 255, 255, 255);
+            GpuGl.glLineWidth(1.5f * zDepthScale);
+            GpuGl.SetColor(innerCol);
+            GpuGl.glBegin(GpuGl.GL_LINE_LOOP);
+            for (int k = 0; k < 6; k++) GpuGl.glVertex2f(innerHex[k].X, innerHex[k].Y);
+            GpuGl.glEnd();
+
+            for (int k = 0; k < 6; k++) {
+                GpuGl.DrawLine(outerHex[k].X, outerHex[k].Y, innerHex[k].X, innerHex[k].Y, Color.FromArgb(sAlpha * 2 / 3, a.AuraColor.R, a.AuraColor.G, a.AuraColor.B), 1.3f);
+                GpuGl.DrawLine(outerHex[k].X, outerHex[k].Y, innerHex[(k + 1) % 6].X, innerHex[(k + 1) % 6].Y, Color.FromArgb(sAlpha / 2, 0, 240, 255), 1.1f);
+                GpuGl.FillEllipse(outerHex[k].X, outerHex[k].Y, 3.4f * zDepthScale, 3.4f * zDepthScale, innerCol, 8);
+            }
         }
 
-        // Skill LVL 1: Conversion Beam
+        // Skill LVL 1: Spiral Conversion Beam + Orbiting Hexagonal Conduit Rings + Target Deconstruction Matrix
         if (a.BeamTimer > 0f) {
             Vec3 beakTip = TransformAgentVertex(a, new Vec3(0, 18, 56), scale);
             float zProj = Math.Max(80f, camDist - beakTip.Z);
             PointF beakPt = new PointF(a.PosX + beakTip.X * (fov / zProj), bobY - beakTip.Y * (fov / zProj));
-            GpuGl.DrawLine(beakPt.X, beakPt.Y, a.BeamTarget.X, a.BeamTarget.Y, Color.FromArgb(150, a.AuraColor.R, a.AuraColor.G, a.AuraColor.B), 6.0f);
-            GpuGl.DrawLine(beakPt.X, beakPt.Y, a.BeamTarget.X, a.BeamTarget.Y, Color.FromArgb(245, 255, 255, 255), 2.5f);
+
+            int bAlpha = (int)Clamp(a.BeamTimer * 320f, 90f, 255f);
+            Color bOuter = Color.FromArgb(bAlpha * 2 / 3, a.AuraColor.R, a.AuraColor.G, a.AuraColor.B);
+            Color bCore  = Color.FromArgb(bAlpha, 255, 255, 255);
+            Color bMag   = Color.FromArgb(bAlpha * 4 / 5, 236, 72, 153);
+
+            // Central high-energy plasma core
+            GpuGl.DrawLine(beakPt.X, beakPt.Y, a.BeamTarget.X, a.BeamTarget.Y, bOuter, 7.5f * zDepthScale);
+            GpuGl.DrawLine(beakPt.X, beakPt.Y, a.BeamTarget.X, a.BeamTarget.Y, bCore, 2.8f * zDepthScale);
+
+            // Double-helix spiral strands wrapping around the Conversion Beam
+            float dx = a.BeamTarget.X - beakPt.X;
+            float dy = a.BeamTarget.Y - beakPt.Y;
+            float len = (float)Math.Sqrt(dx * dx + dy * dy);
+            float nx = (len > 1f) ? -dy / len : 0f;
+            float ny = (len > 1f) ?  dx / len : 1f;
+            int segs = 14;
+            for (int strand = 0; strand < 2; strand++) {
+                float pX = beakPt.X, pY = beakPt.Y;
+                Color sCol = (strand == 0) ? Color.FromArgb(bAlpha, 0, 240, 255) : bMag;
+                for (int s = 1; s <= segs; s++) {
+                    float t = (float)s / segs;
+                    float amp = (float)Math.Sin(t * Math.PI) * 11f * zDepthScale;
+                    float wave = (float)Math.Sin(t * Math.PI * 5.0 - a.FloatBob * 14f + strand * Math.PI) * amp;
+                    float cX = beakPt.X + dx * t + nx * wave;
+                    float cY = beakPt.Y + dy * t + ny * wave;
+                    GpuGl.DrawLine(pX, pY, cX, cY, sCol, 2.0f * zDepthScale);
+                    pX = cX; pY = cY;
+                }
+            }
+
+            // Rotating target deconstruction reticle at BeamTarget
+            float retR = (16f + (float)Math.Sin(a.FloatBob * 8f) * 4f) * zDepthScale;
+            GpuGl.DrawEllipse(a.BeamTarget.X, a.BeamTarget.Y, retR, retR, bCore, 2.0f, 16);
+            GpuGl.DrawEllipse(a.BeamTarget.X, a.BeamTarget.Y, retR * 1.45f, retR * 1.45f, bOuter, 1.5f, 6);
         }
 
-        // Skill LVL 4: Tri-Attack Elemental Matrix Beam
+        // Skill LVL 4: Tri-Attack Elemental Matrix — 3D Rotating Prism + 3 Elemental Orbs + Helical Tri-Beams + Target Supernova Seal
         if (a.TriAttackTimer > 0f) {
             Vec3 beakTip = TransformAgentVertex(a, new Vec3(0, 18, 56), scale);
             float zProj = Math.Max(80f, camDist - beakTip.Z);
             PointF beakPt = new PointF(a.PosX + beakTip.X * (fov / zProj), bobY - beakTip.Y * (fov / zProj));
+
+            int tAlpha = (int)Clamp(a.TriAttackTimer * 260f, 110f, 255f);
+            Color cIce  = Color.FromArgb(tAlpha, 0, 240, 255);     // Cyan Ice
+            Color cPlas = Color.FromArgb(tAlpha, 236, 72, 153);   // Magenta Plasma
+            Color cElec = Color.FromArgb(tAlpha, 250, 204, 21);   // Gold Electric
+            Color cCore = Color.FromArgb(tAlpha, 255, 255, 255);
+            Color[] elemCols = new Color[] { cIce, cPlas, cElec };
+
             PointF[] tri = new PointF[3];
+            float triR = 24f * zDepthScale;
             for (int k = 0; k < 3; k++) {
-                double ang = a.FloatBob * 3.0f + k * (2.0 * Math.PI / 3.0);
-                tri[k] = new PointF(beakPt.X + (float)Math.Cos(ang) * 18f * zDepthScale, beakPt.Y + (float)Math.Sin(ang) * 18f * zDepthScale);
+                double ang = a.FloatBob * 3.8f + k * (2.0 * Math.PI / 3.0);
+                tri[k] = new PointF(beakPt.X + (float)Math.Cos(ang) * triR, beakPt.Y + (float)Math.Sin(ang) * triR);
             }
-            Color cIce  = Color.FromArgb(220, 0, 240, 255);
-            Color cPlas = Color.FromArgb(220, 236, 72, 153);
-            Color cElec = Color.FromArgb(230, 250, 204, 21);
-            GpuGl.DrawLine(tri[0].X, tri[0].Y, tri[1].X, tri[1].Y, cElec, 3.0f);
-            GpuGl.DrawLine(tri[1].X, tri[1].Y, tri[2].X, tri[2].Y, cElec, 3.0f);
-            GpuGl.DrawLine(tri[2].X, tri[2].Y, tri[0].X, tri[0].Y, cElec, 3.0f);
-            GpuGl.DrawLine(tri[0].X, tri[0].Y, a.TriAttackTarget.X, a.TriAttackTarget.Y, cIce, 3.2f);
-            GpuGl.DrawLine(tri[1].X, tri[1].Y, a.TriAttackTarget.X, a.TriAttackTarget.Y, cPlas, 3.2f);
-            GpuGl.DrawLine(tri[2].X, tri[2].Y, a.TriAttackTarget.X, a.TriAttackTarget.Y, cElec, 3.2f);
-            GpuGl.DrawEllipse(a.TriAttackTarget.X, a.TriAttackTarget.Y, 18f, 18f, cPlas, 3.0f, 20);
+
+            // Rotating 3D elemental triangleemitter in front of Porygon
+            GpuGl.DrawLine(tri[0].X, tri[0].Y, tri[1].X, tri[1].Y, cElec, 3.0f * zDepthScale);
+            GpuGl.DrawLine(tri[1].X, tri[1].Y, tri[2].X, tri[2].Y, cIce,  3.0f * zDepthScale);
+            GpuGl.DrawLine(tri[2].X, tri[2].Y, tri[0].X, tri[0].Y, cPlas, 3.0f * zDepthScale);
+
+            for (int k = 0; k < 3; k++) {
+                // Elemental emitter sphere at each triangle vertex
+                GpuGl.FillEllipse(tri[k].X, tri[k].Y, 6.2f * zDepthScale, 6.2f * zDepthScale, elemCols[k], 12);
+                GpuGl.FillEllipse(tri[k].X, tri[k].Y, 3.0f * zDepthScale, 3.0f * zDepthScale, cCore, 8);
+
+                // Primary elemental beam + helical spiral wave to TriAttackTarget
+                GpuGl.DrawLine(tri[k].X, tri[k].Y, a.TriAttackTarget.X, a.TriAttackTarget.Y, elemCols[k], 3.4f * zDepthScale);
+                GpuGl.DrawLine(tri[k].X, tri[k].Y, a.TriAttackTarget.X, a.TriAttackTarget.Y, cCore, 1.2f * zDepthScale);
+
+                float dx = a.TriAttackTarget.X - tri[k].X;
+                float dy = a.TriAttackTarget.Y - tri[k].Y;
+                float len = (float)Math.Sqrt(dx * dx + dy * dy);
+                float nx = (len > 1f) ? -dy / len : 0f;
+                float ny = (len > 1f) ?  dx / len : 1f;
+                float pX = tri[k].X, pY = tri[k].Y;
+                for (int s = 1; s <= 10; s++) {
+                    float t = s / 10f;
+                    float wv = (float)Math.Sin(t * Math.PI * 4.0 - a.FloatBob * 12f + k * 2.09f) * 9f * (float)Math.Sin(t * Math.PI) * zDepthScale;
+                    float cX = tri[k].X + dx * t + nx * wv;
+                    float cY = tri[k].Y + dy * t + ny * wv;
+                    GpuGl.DrawLine(pX, pY, cX, cY, elemCols[k], 1.8f * zDepthScale);
+                    pX = cX; pY = cY;
+                }
+            }
+
+            // Target Tri-Elemental Supernova & Sacred Geometry Triangle Seal at impact point
+            float impR = (24f + (float)Math.Sin(a.FloatBob * 10f) * 5f) * zDepthScale;
+            GpuGl.FillEllipse(a.TriAttackTarget.X, a.TriAttackTarget.Y, impR * 1.2f, impR * 1.2f, Color.FromArgb(tAlpha / 3, 236, 72, 153), 18);
+            GpuGl.DrawEllipse(a.TriAttackTarget.X, a.TriAttackTarget.Y, impR, impR, cIce, 2.6f, 20);
+            GpuGl.DrawEllipse(a.TriAttackTarget.X, a.TriAttackTarget.Y, impR * 0.68f, impR * 0.68f, cElec, 2.2f, 3);
+            GpuGl.DrawEllipse(a.TriAttackTarget.X, a.TriAttackTarget.Y, impR * 0.68f, impR * 0.68f, cPlas, 2.2f, 6);
         }
 
         // Floating Mini-HUD Tag under each Porygon showing Evolutionary Generation, Life Stage & Live 3D [X,Y,Z] Coordinates!
@@ -3324,35 +4137,49 @@ public class Porygon3DAvatar {
         float hopOffset = (a.SpinRollTimer > 0f) ? (float)Math.Sin(a.SpinRollTimer * Math.PI) * 32f * zDepthScale : 0f;
         float bobY = a.PosY + (float)Math.Sin(a.FloatBob) * 9f * zDepthScale - hopOffset;
 
-        // Skill LVL 6: Deep Sonar Scan Expanding Ring
+        // Skill LVL 6: Deep Sonar Scan — Concentric 3D Tilted Sonar Rings + Radar Sweep
         if (a.ScanWaveTimer > 0f) {
             float prog = 1.0f - a.ScanWaveTimer;
-            float scanR = 40f + prog * 260f;
-            int alpha = (int)(a.ScanWaveTimer * 160f);
-            using (Pen scanPen = new Pen(Color.FromArgb(alpha, a.AuraColor.R, a.AuraColor.G, a.AuraColor.B), 2.2f)) {
-                g.DrawEllipse(scanPen, a.PosX - scanR, bobY - scanR * 0.45f, scanR * 2f, scanR * 0.9f);
+            int alpha = (int)Clamp(a.ScanWaveTimer * 200f, 10f, 240f);
+            for (int w = 0; w < 2; w++) {
+                float wProg = Clamp(prog - w * 0.16f, 0f, 1f);
+                if (wProg <= 0f) continue;
+                float scanR = (40f + wProg * 270f) * zDepthScale;
+                using (Pen scanPen = new Pen(Color.FromArgb(Math.Max(15, alpha - w * 60), a.AuraColor.R, a.AuraColor.G, a.AuraColor.B), 2.2f - w * 0.6f)) {
+                    g.DrawEllipse(scanPen, a.PosX - scanR, bobY - scanR * 0.45f, scanR * 2f, scanR * 0.9f);
+                }
             }
         }
 
-        // Skill LVL 5: Quantum Blink Warp Trail
+        // Skill LVL 5: Quantum Blink Warp Trail + Dimensional Portals
         if (a.QuantumBlinkTimer > 0f) {
-            int alpha = (int)(a.QuantumBlinkTimer * 190f);
+            int alpha = (int)Clamp(a.QuantumBlinkTimer * 220f, 10f, 245f);
             using (Pen warpPen = new Pen(Color.FromArgb(alpha, 0, 240, 255), 3.5f))
             using (Pen warpCore = new Pen(Color.FromArgb(alpha, 255, 255, 255), 1.5f)) {
                 g.DrawLine(warpPen, a.BlinkStartPt.X, a.BlinkStartPt.Y, a.PosX, bobY);
                 g.DrawLine(warpCore, a.BlinkStartPt.X, a.BlinkStartPt.Y, a.PosX, bobY);
-                g.DrawEllipse(warpPen, a.BlinkStartPt.X - 24f, a.BlinkStartPt.Y - 24f, 48f, 48f);
+                g.DrawEllipse(warpPen, a.BlinkStartPt.X - 26f, a.BlinkStartPt.Y - 26f, 52f, 52f);
+                g.DrawEllipse(warpPen, a.PosX - 28f, bobY - 28f, 56f, 56f);
             }
         }
 
         // Skill LVL 3: P2P Neural Sync Link Beam between Porygon Agents
         if (a.SyncTimer > 0f && a.SyncPartnerIdx >= 0 && a.SyncPartnerIdx < Agents.Count) {
             PorygonAgent partner = Agents[a.SyncPartnerIdx];
-            int alpha = (int)(a.SyncTimer * 210f);
+            int alpha = (int)Clamp(a.SyncTimer * 220f, 10f, 245f);
             using (Pen syncOuter = new Pen(Color.FromArgb(alpha / 2, a.AuraColor.R, a.AuraColor.G, a.AuraColor.B), 6f))
-            using (Pen syncCore = new Pen(Color.FromArgb(alpha, 250, 204, 21), 2.0f)) {
+            using (Pen syncCore = new Pen(Color.FromArgb(alpha, 250, 204, 21), 2.2f)) {
                 g.DrawLine(syncOuter, a.PosX, bobY, partner.PosX, partner.PosY);
                 g.DrawLine(syncCore, a.PosX, bobY, partner.PosX, partner.PosY);
+            }
+        }
+
+        // Active Tractor Lock Conduit in GDI+
+        if (a.ActiveLockStrength > 0.06f) {
+            int lockA = (int)Clamp(a.ActiveLockStrength * 185f, 30f, 210f);
+            using (Pen tPen = new Pen(Color.FromArgb(lockA, a.AuraColor.R, a.AuraColor.G, a.AuraColor.B), 1.8f)) {
+                tPen.DashStyle = DashStyle.Dash;
+                g.DrawLine(tPen, a.PosX, bobY, a.ActiveLockTarget.X, a.ActiveLockTarget.Y);
             }
         }
 
@@ -3387,6 +4214,7 @@ public class Porygon3DAvatar {
 
         Vec3 lightDir = new Vec3(-0.32f, 0.72f, 0.62f).Normalized();
         List<ProjectedFace> renderList = new List<ProjectedFace>(bFaces.Count);
+        float absorbBoost = (a.AbsorbFlashTimer > 0f) ? a.AbsorbFlashTimer * 0.22f : 0f;
 
         for (int i = 0; i < bFaces.Count; i++) {
             Face3D f = bFaces[i];
@@ -3404,7 +4232,7 @@ public class Porygon3DAvatar {
             if (norm.Z < 0) norm = norm * -1f;
 
             float ndotl = Math.Max(0f, Vec3.Dot(norm, lightDir));
-            float shade = 0.80f + ndotl * 0.26f;
+            float shade = 0.80f + ndotl * 0.26f + absorbBoost;
             int r = (int)Math.Min(255, f.BaseColor.R * shade);
             int gr = (int)Math.Min(255, f.BaseColor.G * shade);
             int b = (int)Math.Min(255, f.BaseColor.B * shade);
@@ -3440,31 +4268,37 @@ public class Porygon3DAvatar {
             }
         }
 
-        // Skill LVL 2: Hexagonal Conversion2 Energy Shield
+        // Skill LVL 2: Dual Geodesic Hexagonal Conversion2 Energy Shield
         if (a.ShieldTimer > 0f) {
-            int sAlpha = (int)(Math.Min(1.0f, a.ShieldTimer) * 165f);
-            float shR = 72f * (userScale / 100f);
+            int sAlpha = (int)(Math.Min(1.0f, a.ShieldTimer) * 185f);
+            float shR = 76f * (userScale / 100f) * zDepthScale;
             PointF[] hex = new PointF[6];
+            PointF[] innerHex = new PointF[6];
             for (int k = 0; k < 6; k++) {
-                double ang = a.FloatBob * 1.4f + k * (Math.PI / 3.0);
+                double ang = a.FloatBob * 1.6f + k * (Math.PI / 3.0);
+                double ang2 = -a.FloatBob * 2.1f + k * (Math.PI / 3.0);
                 hex[k] = new PointF(a.PosX + (float)Math.Cos(ang) * shR, bobY + (float)Math.Sin(ang) * shR * 0.85f);
+                innerHex[k] = new PointF(a.PosX + (float)Math.Cos(ang2) * shR * 0.62f, bobY + (float)Math.Sin(ang2) * shR * 0.53f);
             }
-            using (Pen shPen = new Pen(Color.FromArgb(sAlpha, a.AuraColor.R, a.AuraColor.G, a.AuraColor.B), 2.2f))
+            using (Pen shPen = new Pen(Color.FromArgb(sAlpha, a.AuraColor.R, a.AuraColor.G, a.AuraColor.B), 2.4f))
+            using (Pen inPen = new Pen(Color.FromArgb(sAlpha * 3 / 4, 255, 255, 255), 1.4f))
             using (SolidBrush shFill = new SolidBrush(Color.FromArgb(sAlpha / 6, a.AuraColor.R, a.AuraColor.G, a.AuraColor.B))) {
                 g.FillPolygon(shFill, hex);
                 g.DrawPolygon(shPen, hex);
+                g.DrawPolygon(inPen, innerHex);
             }
         }
 
-        // Skill LVL 1: Conversion Beam
+        // Skill LVL 1: Spiral Conversion Beam
         if (a.BeamTimer > 0f) {
             Vec3 beakTip = TransformAgentVertex(a, new Vec3(0, 18, 56), scale);
             float zProj = Math.Max(80f, camDist - beakTip.Z);
             PointF beakPt = new PointF(a.PosX + beakTip.X * (fov / zProj), bobY - beakTip.Y * (fov / zProj));
-            using (Pen beamOuter = new Pen(Color.FromArgb(150, a.AuraColor.R, a.AuraColor.G, a.AuraColor.B), 7f))
-            using (Pen beamCore = new Pen(Color.FromArgb(245, 255, 255, 255), 2.5f)) {
+            using (Pen beamOuter = new Pen(Color.FromArgb(165, a.AuraColor.R, a.AuraColor.G, a.AuraColor.B), 7.5f))
+            using (Pen beamCore = new Pen(Color.FromArgb(245, 255, 255, 255), 2.6f)) {
                 g.DrawLine(beamOuter, beakPt, a.BeamTarget);
                 g.DrawLine(beamCore, beakPt, a.BeamTarget);
+                g.DrawEllipse(beamCore, a.BeamTarget.X - 14f, a.BeamTarget.Y - 14f, 28f, 28f);
             }
         }
 
@@ -3475,17 +4309,18 @@ public class Porygon3DAvatar {
             PointF beakPt = new PointF(a.PosX + beakTip.X * (fov / zProj), bobY - beakTip.Y * (fov / zProj));
             PointF[] tri = new PointF[3];
             for (int k = 0; k < 3; k++) {
-                double ang = a.FloatBob * 3.0f + k * (2.0 * Math.PI / 3.0);
-                tri[k] = new PointF(beakPt.X + (float)Math.Cos(ang) * 18f, beakPt.Y + (float)Math.Sin(ang) * 18f);
+                double ang = a.FloatBob * 3.6f + k * (2.0 * Math.PI / 3.0);
+                tri[k] = new PointF(beakPt.X + (float)Math.Cos(ang) * 22f * zDepthScale, beakPt.Y + (float)Math.Sin(ang) * 22f * zDepthScale);
             }
-            using (Pen pIce  = new Pen(Color.FromArgb(220, 0, 240, 255), 3.2f))
-            using (Pen pPlas = new Pen(Color.FromArgb(220, 236, 72, 153), 3.2f))
-            using (Pen pElec = new Pen(Color.FromArgb(230, 250, 204, 21), 3.2f)) {
+            using (Pen pIce  = new Pen(Color.FromArgb(230, 0, 240, 255), 3.4f))
+            using (Pen pPlas = new Pen(Color.FromArgb(230, 236, 72, 153), 3.4f))
+            using (Pen pElec = new Pen(Color.FromArgb(240, 250, 204, 21), 3.4f)) {
                 g.DrawPolygon(pElec, tri);
                 g.DrawLine(pIce,  tri[0], a.TriAttackTarget);
                 g.DrawLine(pPlas, tri[1], a.TriAttackTarget);
                 g.DrawLine(pElec, tri[2], a.TriAttackTarget);
-                g.DrawEllipse(pPlas, a.TriAttackTarget.X - 18f, a.TriAttackTarget.Y - 18f, 36f, 36f);
+                g.DrawEllipse(pPlas, a.TriAttackTarget.X - 22f, a.TriAttackTarget.Y - 22f, 44f, 44f);
+                g.DrawEllipse(pIce,  a.TriAttackTarget.X - 14f, a.TriAttackTarget.Y - 14f, 28f, 28f);
             }
         }
 
