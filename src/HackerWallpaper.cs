@@ -7016,6 +7016,264 @@ public class HackerWallpaperForm : Form {
         }
     }
 
+    private static readonly string[] RIVER_DATA_TOKENS = new string[] {
+        "01", "FF", "A7", "10", "7E", "C4", "00", "9B", "3F", "E2", "11", "8A", "5D", "F0", "0A", "6C"
+    };
+
+    private void GetRiverGeometryAt(float t, Rectangle m, float horizonY, float vanishX, float floorSpan, float phase, int mIdx,
+        out float cx, out float cy, out float halfW, out float persp) {
+        if (t < 0f) t = 0f;
+        if (t > 1f) t = 1f;
+        persp = (float)Math.Pow(t, 1.45);
+        cy = horizonY + persp * floorSpan;
+
+        // Graceful S-curve meander that converges to vanishX (0 offset) at the horizon (t = 0)
+        float swaySlow = (float)Math.Sin(phase * 0.22f + mIdx * 0.7f) * 0.24f;
+        float sCurve = (float)Math.Sin(t * 4.85f - 0.60f + swaySlow) + 0.30f * (float)Math.Cos(t * 2.35f + 0.35f);
+        float curveAmp = (m.Width * 0.096f) * (float)Math.Pow(t, 0.82);
+        cx = vanishX + sCurve * curveAmp;
+
+        // River width narrows to a vanishing point (2.2px) at horizon and widens in foreground
+        halfW = 2.2f + (m.Width * 0.116f) * (float)Math.Pow(t, 1.32);
+    }
+
+    private void RenderCyberDataRiverOpenGL(int mIdx, Rectangle m, float horizonY, float vanishX, float floorSpan, float phase, float netMod, Color c1, Color c2, Color c3) {
+        int rSteps = 24;
+        float[] rCx = new float[rSteps + 1];
+        float[] rCy = new float[rSteps + 1];
+        float[] rHw = new float[rSteps + 1];
+        float[] rPr = new float[rSteps + 1];
+
+        for (int i = 0; i <= rSteps; i++) {
+            float t = i / (float)rSteps;
+            GetRiverGeometryAt(t, m, horizonY, vanishX, floorSpan, phase, mIdx, out rCx[i], out rCy[i], out rHw[i], out rPr[i]);
+        }
+
+        // 1. Batched Low-Poly Riverbed Channel, Sloped Canyon Banks & Inner Core Current (1 GL_TRIANGLES batch)
+        GpuGl.glBegin(GpuGl.GL_TRIANGLES);
+        for (int i = 0; i < rSteps; i++) {
+            float p0 = rPr[i];
+            float p1 = rPr[i + 1];
+            float pm = 0.5f * (p0 + p1);
+
+            float lx0 = rCx[i] - rHw[i], rx0 = rCx[i] + rHw[i];
+            float lx1 = rCx[i + 1] - rHw[i + 1], rx1 = rCx[i + 1] + rHw[i + 1];
+
+            float blx0 = rCx[i] - rHw[i] * 1.28f, brx0 = rCx[i] + rHw[i] * 1.28f;
+            float blx1 = rCx[i + 1] - rHw[i + 1] * 1.28f, brx1 = rCx[i + 1] + rHw[i + 1] * 1.28f;
+
+            // Left & Right Low-Poly Sloped Canyon Banks
+            byte bankAlpha = (byte)(28 + (int)(pm * 52f));
+            GpuGl.glColor4ub((byte)(c3.R / 3), (byte)(c3.G / 2), (byte)(c3.B / 2), bankAlpha);
+            GpuGl.glVertex2f(blx0, rCy[i] - 2f * p0);
+            GpuGl.glVertex2f(lx0, rCy[i]);
+            GpuGl.glVertex2f(lx1, rCy[i + 1]);
+            GpuGl.glVertex2f(blx0, rCy[i] - 2f * p0);
+            GpuGl.glVertex2f(lx1, rCy[i + 1]);
+            GpuGl.glVertex2f(blx1, rCy[i + 1] - 2f * p1);
+
+            GpuGl.glVertex2f(rx0, rCy[i]);
+            GpuGl.glVertex2f(brx0, rCy[i] - 2f * p0);
+            GpuGl.glVertex2f(brx1, rCy[i + 1] - 2f * p1);
+            GpuGl.glVertex2f(rx0, rCy[i]);
+            GpuGl.glVertex2f(brx1, rCy[i + 1] - 2f * p1);
+            GpuGl.glVertex2f(rx1, rCy[i + 1]);
+
+            // Deep Obsidian-Teal Riverbed Water Base
+            byte bedAlpha = (byte)(120 + (int)(pm * 95f));
+            GpuGl.glColor4ub(3, 15, 16, bedAlpha);
+            GpuGl.glVertex2f(lx0, rCy[i]);
+            GpuGl.glVertex2f(rx0, rCy[i]);
+            GpuGl.glVertex2f(rx1, rCy[i + 1]);
+            GpuGl.glVertex2f(lx0, rCy[i]);
+            GpuGl.glVertex2f(rx1, rCy[i + 1]);
+            GpuGl.glVertex2f(lx1, rCy[i + 1]);
+
+            // Bioluminescent Inner Core Data Channel (±0.52 width)
+            float ilx0 = rCx[i] - rHw[i] * 0.52f, irx0 = rCx[i] + rHw[i] * 0.52f;
+            float ilx1 = rCx[i + 1] - rHw[i + 1] * 0.52f, irx1 = rCx[i + 1] + rHw[i + 1] * 0.52f;
+            byte coreAlpha = (byte)(22 + (int)(pm * 46f));
+            byte cr = (byte)((c1.R + c3.R) / 3);
+            byte cg = (byte)((c1.G + c3.G) / 2);
+            byte cb = (byte)((c1.B + c3.B) / 2);
+            GpuGl.glColor4ub(cr, cg, cb, coreAlpha);
+            GpuGl.glVertex2f(ilx0, rCy[i]);
+            GpuGl.glVertex2f(irx0, rCy[i]);
+            GpuGl.glVertex2f(irx1, rCy[i + 1]);
+            GpuGl.glVertex2f(ilx0, rCy[i]);
+            GpuGl.glVertex2f(irx1, rCy[i + 1]);
+            GpuGl.glVertex2f(ilx1, rCy[i + 1]);
+        }
+        GpuGl.glEnd();
+
+        // 2. Faceted Low-Poly Water Mesh & Transverse Current Ripples (1 GL_LINES batch)
+        GpuGl.glLineWidth(1.0f);
+        GpuGl.glBegin(GpuGl.GL_LINES);
+        for (int i = 1; i < rSteps; i++) {
+            float pm = rPr[i];
+            byte wAlpha = (byte)(18 + (int)(pm * 42f));
+            GpuGl.glColor4ub(c1.R, c1.G, c1.B, wAlpha);
+            // Low-poly water triangulation diagonals
+            GpuGl.glVertex2f(rCx[i] - rHw[i], rCy[i]);
+            GpuGl.glVertex2f(rCx[i], rCy[i + 1]);
+            GpuGl.glVertex2f(rCx[i] + rHw[i], rCy[i]);
+            GpuGl.glVertex2f(rCx[i], rCy[i + 1]);
+        }
+
+        // Scrolling V-Ripples & Wave Crests travelling along the curved channel into the horizon
+        int rippleCount = 16;
+        float flowPhase = phase * (0.38f + Math.Min(0.45f, netMod * 0.18f));
+        for (int rp = 0; rp < rippleCount; rp++) {
+            // Scroll t from 1.0 -> 0.0 so the caudal visually flows and disappears into the horizon!
+            float rawT = 1.0f - ((rp / (float)rippleCount + flowPhase * 0.25f) % 1.0f);
+            if (rawT < 0.04f || rawT > 0.98f) continue;
+            float rcx, rcy, rhw, rpersp;
+            GetRiverGeometryAt(rawT, m, horizonY, vanishX, floorSpan, phase, mIdx, out rcx, out rcy, out rhw, out rpersp);
+            float bowY = rcy - (2.5f + 7.5f * rpersp); // Chevron apex pointing toward the horizon
+            byte rpAlpha = (byte)(24 + (int)(rpersp * 74f));
+            GpuGl.glColor4ub(c1.R, c1.G, c1.B, rpAlpha);
+            GpuGl.glVertex2f(rcx - rhw * 0.86f, rcy);
+            GpuGl.glVertex2f(rcx, bowY);
+            GpuGl.glVertex2f(rcx, bowY);
+            GpuGl.glVertex2f(rcx + rhw * 0.86f, rcy);
+        }
+        GpuGl.glEnd();
+
+        // 3. Glowing Curved Riverbanks & Shoreline Rims (Left & Right Banks + Outer Canyon Rim)
+        for (int side = -1; side <= 1; side += 2) {
+            GpuGl.glLineWidth(1.5f);
+            GpuGl.glBegin(GpuGl.GL_LINE_STRIP);
+            for (int i = 0; i <= rSteps; i++) {
+                byte sAlpha = (byte)(35 + (int)(rPr[i] * 115f));
+                GpuGl.glColor4ub(c1.R, c1.G, c1.B, sAlpha);
+                GpuGl.glVertex2f(rCx[i] + side * rHw[i], rCy[i]);
+            }
+            GpuGl.glEnd();
+
+            GpuGl.glLineWidth(0.9f);
+            GpuGl.glBegin(GpuGl.GL_LINE_STRIP);
+            for (int i = 0; i <= rSteps; i++) {
+                byte bAlpha = (byte)(20 + (int)(rPr[i] * 68f));
+                GpuGl.glColor4ub(c2.R, c2.G, c2.B, bAlpha);
+                GpuGl.glVertex2f(rCx[i] + side * rHw[i] * 1.28f, rCy[i] - 2f * rPr[i]);
+            }
+            GpuGl.glEnd();
+        }
+
+        // 4. 5 Continuous Curved Data-Stream Filaments Inside the Riverbed
+        float[] laneOffsets = new float[] { -0.72f, -0.36f, 0.0f, 0.36f, 0.72f };
+        for (int ln = 0; ln < laneOffsets.Length; ln++) {
+            float lu = laneOffsets[ln];
+            bool isCenterLane = (ln == 2);
+            GpuGl.glLineWidth(isCenterLane ? 1.4f : 1.0f);
+            GpuGl.glBegin(GpuGl.GL_LINE_STRIP);
+            for (int i = 0; i <= rSteps; i++) {
+                float t = i / (float)rSteps;
+                float waveShift = (float)Math.Sin(t * 14.0f + phase * 2.4f + ln * 1.3f) * (rHw[i] * 0.045f);
+                float lx = rCx[i] + lu * rHw[i] + waveShift;
+                byte fAlpha = (byte)((isCenterLane ? 42 : 26) + (int)(rPr[i] * (isCenterLane ? 92f : 64f)));
+                if (isCenterLane) {
+                    GpuGl.glColor4ub(c2.R, c2.G, c2.B, fAlpha);
+                } else {
+                    GpuGl.glColor4ub(c1.R, c1.G, c1.B, fAlpha);
+                }
+                GpuGl.glVertex2f(lx, rCy[i]);
+            }
+            GpuGl.glEnd();
+        }
+
+        // 5. High-Speed Cyber Data Packets & Light-Streaks Flowing Along the Curved Riverbed into the Horizon!
+        int packetCount = 40;
+        GpuGl.glLineWidth(2.2f);
+        GpuGl.glBegin(GpuGl.GL_LINES);
+        for (int p = 0; p < packetCount; p++) {
+            float seedFrac = (p * 0.6180339f) % 1.0f;
+            float laneU = ((p % 7) - 3) * 0.24f; // -0.72 .. +0.72 across the riverbed
+            float speed = 0.14f + (p % 5) * 0.035f;
+            // Flow from foreground (1.0) -> horizon (0.0) so data streams vanish into the horizon!
+            float tHead = 1.0f - ((seedFrac + flowPhase * speed) % 1.0f);
+            if (tHead < 0.03f || tHead > 0.98f) continue;
+            float tTail = Math.Min(1.0f, tHead + 0.045f + 0.025f * tHead);
+
+            float hx, hy, hhw, hpr;
+            float tx, ty, thw, tpr;
+            GetRiverGeometryAt(tHead, m, horizonY, vanishX, floorSpan, phase, mIdx, out hx, out hy, out hhw, out hpr);
+            GetRiverGeometryAt(tTail, m, horizonY, vanishX, floorSpan, phase, mIdx, out tx, out ty, out thw, out tpr);
+
+            float px0 = hx + laneU * hhw;
+            float py0 = hy;
+            float px1 = tx + laneU * thw;
+            float py1 = ty;
+
+            bool isGoldPacket = (p % 4 == 0);
+            Color pCol = isGoldPacket ? c2 : c1;
+            byte headAlpha = (byte)(65 + (int)(hpr * 165f));
+            GpuGl.glColor4ub(pCol.R, pCol.G, pCol.B, headAlpha);
+            GpuGl.glVertex2f(px0, py0);
+            GpuGl.glColor4ub(pCol.R, pCol.G, pCol.B, 8);
+            GpuGl.glVertex2f(px1, py1);
+        }
+        GpuGl.glEnd();
+
+        // Packet Node Cores (1 GL_QUADS batch)
+        GpuGl.glBegin(GpuGl.GL_QUADS);
+        for (int p = 0; p < packetCount; p++) {
+            float seedFrac = (p * 0.6180339f) % 1.0f;
+            float laneU = ((p % 7) - 3) * 0.24f;
+            float speed = 0.14f + (p % 5) * 0.035f;
+            float tHead = 1.0f - ((seedFrac + flowPhase * speed) % 1.0f);
+            if (tHead < 0.04f || tHead > 0.98f) continue;
+
+            float hx, hy, hhw, hpr;
+            GetRiverGeometryAt(tHead, m, horizonY, vanishX, floorSpan, phase, mIdx, out hx, out hy, out hhw, out hpr);
+            float px = hx + laneU * hhw;
+            float py = hy;
+            float sz = 1.2f + 2.6f * hpr;
+
+            bool isGoldPacket = (p % 4 == 0);
+            byte nAlpha = (byte)(85 + (int)(hpr * 160f));
+            if (isGoldPacket) {
+                GpuGl.glColor4ub(245, 220, 145, nAlpha);
+            } else {
+                GpuGl.glColor4ub(190, 248, 238, nAlpha);
+            }
+            GpuGl.glVertex2f(px - sz, py - sz * 0.7f);
+            GpuGl.glVertex2f(px + sz, py - sz * 0.7f);
+            GpuGl.glVertex2f(px + sz, py + sz * 0.7f);
+            GpuGl.glVertex2f(px - sz, py + sz * 0.7f);
+        }
+        GpuGl.glEnd();
+
+        // 6. Floating Hex/Binary Telemetry Tokens Drifting in the River Current (1 VRAM Font Atlas Batch)
+        if (!gpuEcoMode) {
+            GpuGl.BeginFontAtlasBatch();
+            int glyphStreams = 16;
+            for (int gs = 0; gs < glyphStreams; gs++) {
+                float seedFrac = (gs * 0.381966f + 0.11f) % 1.0f;
+                float laneU = ((gs % 5) - 2) * 0.30f;
+                float speed = 0.11f + (gs % 3) * 0.025f;
+                float tPos = 1.0f - ((seedFrac + flowPhase * speed) % 1.0f);
+                if (tPos < 0.18f || tPos > 0.95f) continue;
+
+                float gx, gy, ghw, gpr;
+                GetRiverGeometryAt(tPos, m, horizonY, vanishX, floorSpan, phase, mIdx, out gx, out gy, out ghw, out gpr);
+                float drawX = gx + laneU * ghw - 6f * gpr;
+                float drawY = gy - 5f * gpr;
+                float cw = 6.5f + 6.5f * gpr;
+                float ch = 7.5f + 7.5f * gpr;
+                byte gAlpha = (byte)(35 + (int)(gpr * 145f));
+
+                string tok = RIVER_DATA_TOKENS[(gs + (frameCount / 18)) % RIVER_DATA_TOKENS.Length];
+                Color gCol = (gs % 3 == 0) ? c2 : c1;
+                GpuGl.EmitAtlasChar(tok[0], drawX, drawY, cw, ch, gCol.R, gCol.G, gCol.B, gAlpha);
+                if (tok.Length > 1) {
+                    GpuGl.EmitAtlasChar(tok[1], drawX + cw * 0.62f, drawY, cw, ch, gCol.R, gCol.G, gCol.B, gAlpha);
+                }
+            }
+            GpuGl.EndFontAtlasBatch();
+        }
+    }
+
     private void Render3DProceduralEnvironmentOpenGL(int mIdx, Rectangle m, Color c1, Color c2, Color c3) {
         int mode = Math.Max(0, Math.Min(2, Config.BgSceneMode));
         float horizonY = m.Top + m.Height * 0.64f;
@@ -7027,10 +7285,10 @@ public class HackerWallpaperForm : Form {
 
         if (mode == 0) {
             // =========================================================================
-            // MODE 0 (SELVA+OSC): HÍBRIDO SELVA BIO-DIGITAL LOW-POLY + SUELO DE OSCILADOR 3D
+            // MODE 0 (SELVA+OSC): HÍBRIDO SELVA BIO-DIGITAL LOW-POLY + RÍO DE DATOS + OSCILADOR 3D
             // =========================================================================
             int rows = 7;
-            int cols = 16;
+            int cols = 18;
             float[,] vx = new float[rows, cols + 1];
             float[,] vy = new float[rows, cols + 1];
 
@@ -7041,13 +7299,22 @@ public class HackerWallpaperForm : Form {
                 float spread = 0.28f + 0.72f * persp;
                 float amp = (6.0f + persp * 26.0f) * netMod;
 
+                float rivCx, rivCy, rivHw, rivPr;
+                GetRiverGeometryAt(t, m, horizonY, vanishX, floorSpan, phase, mIdx, out rivCx, out rivCy, out rivHw, out rivPr);
+
                 for (int j = 0; j <= cols; j++) {
                     float u = (j / (float)cols) * 2.0f - 1.0f; // -1..+1
                     float x = vanishX + u * (m.Width * 0.54f) * spread;
                     x = Math.Max(m.Left, Math.Min(m.Right, x));
                     float w1 = (float)Math.Sin(j * 0.75f + phase * 1.15f + r * 0.65f);
                     float w2 = (float)Math.Cos(j * 1.35f - phase * 0.85f + r * 0.90f);
-                    float y = baseY - (w1 * 0.65f + w2 * 0.35f) * amp;
+
+                    // Carve a natural valley around the meandering river centerline!
+                    float distFromRiver = Math.Abs(x - rivCx) / Math.Max(8f, rivHw * 1.45f);
+                    float valleyMask = (distFromRiver < 1.2f) ? (distFromRiver * distFromRiver * 0.65f) : 1.0f;
+                    float riverCarve = (distFromRiver < 1.35f) ? ((1.35f - distFromRiver) * (8.0f + 18.0f * persp)) : 0f;
+
+                    float y = baseY - (w1 * 0.65f + w2 * 0.35f) * amp * valleyMask + riverCarve;
                     vx[r, j] = x;
                     vy[r, j] = Math.Max(horizonY - 18f, Math.Min(m.Bottom - 2f, y));
                 }
@@ -7104,15 +7371,18 @@ public class HackerWallpaperForm : Form {
                 }
             }
 
-            // 1D. 3D Faceted Low-Poly Bio-Trees along Flanks & Horizon (Constructed from Vertices & Shaded Triangles)
-            float[] treePosNorm = new float[] { 0.06f, 0.14f, 0.23f, 0.77f, 0.86f, 0.94f };
-            float[] treeDepth   = new float[] { 0.88f, 0.62f, 0.42f, 0.42f, 0.62f, 0.88f };
+            // 1C-RIVER: Render the Curved 3D Cyber-Data River right through the middle of the forest!
+            RenderCyberDataRiverOpenGL(mIdx, m, horizonY, vanishX, floorSpan, phase, netMod, c1, c2, c3);
+
+            // 1D. 3D Faceted Low-Poly Bio-Trees flanking both sides of the curved river from horizon to foreground
+            float[] treePosNorm = new float[] { 0.05f, 0.13f, 0.21f, 0.29f, 0.35f, 0.65f, 0.71f, 0.79f, 0.87f, 0.95f };
+            float[] treeDepth   = new float[] { 0.90f, 0.70f, 0.54f, 0.38f, 0.26f, 0.26f, 0.38f, 0.54f, 0.70f, 0.90f };
             for (int tIdx = 0; tIdx < treePosNorm.Length; tIdx++) {
                 float dScale = treeDepth[tIdx];
                 float baseX = m.Left + m.Width * treePosNorm[tIdx];
-                float baseY = horizonY + (dScale - 0.35f) * floorSpan * 0.55f;
-                float treeH = m.Height * (0.18f + dScale * 0.20f);
-                float treeW = m.Width * (0.028f + dScale * 0.026f);
+                float baseY = horizonY + (dScale - 0.24f) * floorSpan * 0.52f;
+                float treeH = m.Height * (0.16f + dScale * 0.21f);
+                float treeW = m.Width * (0.024f + dScale * 0.026f);
                 float sway = (float)Math.Sin(phase * 0.65f + tIdx * 1.4f) * (4.5f * dScale);
 
                 // Faceted Low-Poly Trunk (2 Triangles)
@@ -7355,12 +7625,18 @@ public class HackerWallpaperForm : Form {
                 float baseY = horizonY + persp * floorSpan;
                 float spread = 0.28f + 0.72f * persp;
                 float amp = (6.0f + persp * 26.0f) * netMod;
+                float rivCxRow, rivCyRow, rivHalfWRow, rivPerspRow;
+                GetRiverGeometryAt(t, m, horizonY, vanishX, floorSpan, phase, mIdx, out rivCxRow, out rivCyRow, out rivHalfWRow, out rivPerspRow);
                 for (int j = 0; j <= cols; j++) {
                     float u = (j / (float)cols) * 2.0f - 1.0f;
                     float x = Math.Max(m.Left, Math.Min(m.Right, vanishX + u * (m.Width * 0.54f) * spread));
+                    float distFromRiv = Math.Abs(x - rivCxRow);
+                    float valleySpan = Math.Max(24.0f, rivHalfWRow * 1.85f);
+                    float valleyMask = Math.Min(1.0f, distFromRiv / valleySpan);
+                    float riverDepress = (1.0f - valleyMask) * (8.0f + 16.0f * persp);
                     float w1 = (float)Math.Sin(j * 0.75f + phase * 1.15f + r * 0.65f);
                     float w2 = (float)Math.Cos(j * 1.35f - phase * 0.85f + r * 0.90f);
-                    float y = Math.Max(horizonY - 18f, Math.Min(m.Bottom - 2f, baseY - (w1 * 0.65f + w2 * 0.35f) * amp));
+                    float y = Math.Max(horizonY - 18f, Math.Min(m.Bottom - 2f, baseY - (w1 * 0.65f + w2 * 0.35f) * amp * (0.18f + 0.82f * valleyMask) + riverDepress));
                     pts[r, j] = new PointF(x, y);
                 }
                 if (r > 0) {
@@ -7379,14 +7655,43 @@ public class HackerWallpaperForm : Form {
                     g.DrawLines(wPen, rowArr);
                 }
             }
-            float[] treePosNorm = new float[] { 0.08f, 0.17f, 0.26f, 0.74f, 0.83f, 0.92f };
-            float[] treeDepth   = new float[] { 0.90f, 0.65f, 0.45f, 0.45f, 0.65f, 0.90f };
+
+            // Curved Cyber-River & Data Flow in GDI preview
+            int rivSegs = 24;
+            PointF[] leftShore = new PointF[rivSegs + 1];
+            PointF[] rightShore = new PointF[rivSegs + 1];
+            PointF[] centerLine = new PointF[rivSegs + 1];
+            for (int i = 0; i <= rivSegs; i++) {
+                float t = i / (float)rivSegs;
+                float rcx, rcy, rhw, rp;
+                GetRiverGeometryAt(t, m, horizonY, vanishX, floorSpan, phase, mIdx, out rcx, out rcy, out rhw, out rp);
+                float ry = rcy + (2.0f + rp * 7.5f);
+                leftShore[i] = new PointF(rcx - rhw, ry);
+                rightShore[i] = new PointF(rcx + rhw, ry);
+                centerLine[i] = new PointF(rcx, ry + 1.5f);
+            }
+            PointF[] riverPoly = new PointF[(rivSegs + 1) * 2];
+            for (int i = 0; i <= rivSegs; i++) {
+                riverPoly[i] = leftShore[i];
+                riverPoly[(rivSegs * 2 + 1) - i] = rightShore[i];
+            }
+            using (SolidBrush rivFill = new SolidBrush(Color.FromArgb(185, 6, 26, 40)))
+            using (Pen shorePen = new Pen(Color.FromArgb(190, c1.R, c1.G, c1.B), 1.6f))
+            using (Pen streamPen = new Pen(Color.FromArgb(165, c2.R, c2.G, c2.B), 1.2f)) {
+                g.FillPolygon(rivFill, riverPoly);
+                g.DrawLines(shorePen, leftShore);
+                g.DrawLines(shorePen, rightShore);
+                g.DrawLines(streamPen, centerLine);
+            }
+
+            float[] treePosNorm = new float[] { 0.06f, 0.14f, 0.22f, 0.30f, 0.37f, 0.63f, 0.70f, 0.78f, 0.86f, 0.94f };
+            float[] treeDepth   = new float[] { 0.92f, 0.74f, 0.56f, 0.40f, 0.26f, 0.26f, 0.40f, 0.56f, 0.74f, 0.92f };
             for (int tIdx = 0; tIdx < treePosNorm.Length; tIdx++) {
                 float dScale = treeDepth[tIdx];
                 float baseX = m.Left + m.Width * treePosNorm[tIdx];
-                float baseY = horizonY + (dScale - 0.35f) * floorSpan * 0.55f;
-                float treeH = m.Height * (0.20f + dScale * 0.22f);
-                float treeW = m.Width * (0.032f + dScale * 0.028f);
+                float baseY = horizonY + (dScale - 0.18f) * floorSpan * 0.62f;
+                float treeH = m.Height * (0.16f + dScale * 0.23f);
+                float treeW = m.Width * (0.026f + dScale * 0.028f);
                 for (int tier = 0; tier < 3; tier++) {
                     float tierFrac = tier / 3.0f;
                     float tyBot = baseY - treeH * (0.24f + tierFrac * 0.24f);
