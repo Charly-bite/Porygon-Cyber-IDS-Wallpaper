@@ -4562,6 +4562,12 @@ public class HackerWallpaperForm : Form {
     private System.Threading.Timer telemetryTimer;
     private System.Threading.Timer cpuEvoTimer;
     private EventWaitHandle showConfigEvent;
+    private EventWaitHandle toggleGamerEvent;
+    private HotkeyMessageWindow hotkeySink;
+    private int prevHotkeyMask = 0;
+    private DateTime lastHotkeyUtc = DateTime.MinValue;
+    private Form toastForm;
+    private System.Windows.Forms.Timer toastTimer;
     private Form configForm;
     private Random rng = new Random();
 
@@ -4856,9 +4862,16 @@ public class HackerWallpaperForm : Form {
     private Font fontHudBold;
     private Font fontHudTitle;
 
-    public HackerWallpaperForm(EventWaitHandle configEvt, bool openConfigOnStart) {
+    public HackerWallpaperForm(EventWaitHandle configEvt, bool openConfigOnStart, EventWaitHandle gamerEvt = null, bool startGamerOnBoot = false) {
         this.showConfigEvent = configEvt;
+        this.toggleGamerEvent = gamerEvt;
         Config = WallpaperConfig.Load();
+        if (configEvt != null) {
+            // Ensure cold startup always begins with live 3D rendering unless --gamer was explicitly passed,
+            // while preserving AutoGamerOnFullscreenGame = true for automatic 0.0% GPU hibernation on games.
+            Config.GamerMode = startGamerOnBoot;
+            Config.Save();
+        }
         radarCollapsed = Config.RadarCollapsed;
         telemetryCollapsed = Config.TelemetryCollapsed;
         connectomeCollapsed = Config.ConnectomeCollapsed;
@@ -4916,6 +4929,11 @@ public class HackerWallpaperForm : Form {
             System.Windows.Forms.Timer t = new System.Windows.Forms.Timer();
             t.Interval = 400;
             t.Tick += (s, ev) => { t.Stop(); ShowConfigWindow(); };
+            t.Start();
+        } else if (startGamerOnBoot) {
+            System.Windows.Forms.Timer t = new System.Windows.Forms.Timer();
+            t.Interval = 350;
+            t.Tick += (s, ev) => { t.Stop(); ShowGamerToastNotification(true, "ACCESO DIRECTO"); };
             t.Start();
         }
     }
@@ -5576,16 +5594,96 @@ public class HackerWallpaperForm : Form {
         } catch { }
     }
 
+    private class HotkeyMessageWindow : NativeWindow {
+        private HackerWallpaperForm owner;
+        public HotkeyMessageWindow(HackerWallpaperForm ownerForm) {
+            this.owner = ownerForm;
+            CreateParams cp = new CreateParams();
+            cp.Caption = "AntigravityWallpaperHotkeySink";
+            cp.X = -32000;
+            cp.Y = -32000;
+            cp.Width = 1;
+            cp.Height = 1;
+            cp.ExStyle = WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
+            this.CreateHandle(cp);
+        }
+        protected override void WndProc(ref Message m) {
+            if (m.Msg == WM_HOTKEY && owner != null) {
+                owner.HandleHotkeyCommand(m.WParam.ToInt32());
+                return;
+            }
+            base.WndProc(ref m);
+        }
+    }
+
+    public void HandleHotkeyCommand(int hk) {
+        DateTime now = DateTime.UtcNow;
+        if ((now - lastHotkeyUtc).TotalMilliseconds < 280) return;
+        lastHotkeyUtc = now;
+
+        if (hk == HOTKEY_ID) {
+            ShowConfigWindow();
+        } else if (hk == HOTKEY_MODEL_ID) {
+            TriggerPorygonTrainingWave();
+        } else if (hk == HOTKEY_BRAIN_FULL_ID) {
+            brain3DCollapsed = false;
+            brain3DFullscreen = !brain3DFullscreen;
+            hudBrain3DDirty = true;
+        } else if (hk == HOTKEY_OPACITY_UP_ID) {
+            AdjustTerminalOpacity(10);
+        } else if (hk == HOTKEY_OPACITY_DOWN_ID) {
+            AdjustTerminalOpacity(-10);
+        } else if (hk == HOTKEY_BG_MODE_ID) {
+            CycleBgSceneMode();
+        } else if (hk == HOTKEY_GAMER_ID) {
+            ToggleGamerMode();
+        }
+    }
+
+    private void PollGlobalHotkeysFallback() {
+        try {
+            bool ctrl = (GetAsyncKeyState(0x11) & 0x8000) != 0; // VK_CONTROL
+            bool alt  = (GetAsyncKeyState(0x12) & 0x8000) != 0; // VK_MENU (Alt)
+            if (!ctrl || !alt) {
+                prevHotkeyMask = 0;
+                return;
+            }
+            int mask = 0;
+            if ((GetAsyncKeyState((int)Keys.W) & 0x8000) != 0) mask |= 1;
+            if ((GetAsyncKeyState((int)Keys.G) & 0x8000) != 0) mask |= 2;
+            if ((GetAsyncKeyState((int)Keys.P) & 0x8000) != 0) mask |= 4;
+            if ((GetAsyncKeyState((int)Keys.B) & 0x8000) != 0) mask |= 8;
+            if ((GetAsyncKeyState((int)Keys.M) & 0x8000) != 0) mask |= 16;
+            if ((GetAsyncKeyState((int)Keys.Up) & 0x8000) != 0) mask |= 32;
+            if ((GetAsyncKeyState((int)Keys.Down) & 0x8000) != 0) mask |= 64;
+
+            int newlyPressed = mask & ~prevHotkeyMask;
+            prevHotkeyMask = mask;
+
+            if ((newlyPressed & 1) != 0) HandleHotkeyCommand(HOTKEY_ID);
+            else if ((newlyPressed & 2) != 0) HandleHotkeyCommand(HOTKEY_GAMER_ID);
+            else if ((newlyPressed & 4) != 0) HandleHotkeyCommand(HOTKEY_MODEL_ID);
+            else if ((newlyPressed & 8) != 0) HandleHotkeyCommand(HOTKEY_BRAIN_FULL_ID);
+            else if ((newlyPressed & 16) != 0) HandleHotkeyCommand(HOTKEY_BG_MODE_ID);
+            else if ((newlyPressed & 32) != 0) HandleHotkeyCommand(HOTKEY_OPACITY_UP_ID);
+            else if ((newlyPressed & 64) != 0) HandleHotkeyCommand(HOTKEY_OPACITY_DOWN_ID);
+        } catch { }
+    }
+
     protected override void OnShown(EventArgs e) {
         base.OnShown(e);
         AttachToDesktopWorkerW();
-        RegisterHotKey(this.Handle, HOTKEY_ID, MOD_CONTROL | MOD_ALT, (uint)Keys.W);
-        RegisterHotKey(this.Handle, HOTKEY_MODEL_ID, MOD_CONTROL | MOD_ALT, (uint)Keys.P);
-        RegisterHotKey(this.Handle, HOTKEY_BRAIN_FULL_ID, MOD_CONTROL | MOD_ALT, (uint)Keys.B);
-        RegisterHotKey(this.Handle, HOTKEY_OPACITY_UP_ID, MOD_CONTROL | MOD_ALT, (uint)Keys.Up);
-        RegisterHotKey(this.Handle, HOTKEY_OPACITY_DOWN_ID, MOD_CONTROL | MOD_ALT, (uint)Keys.Down);
-        RegisterHotKey(this.Handle, HOTKEY_BG_MODE_ID, MOD_CONTROL | MOD_ALT, (uint)Keys.M);
-        RegisterHotKey(this.Handle, HOTKEY_GAMER_ID, MOD_CONTROL | MOD_ALT, (uint)Keys.G);
+        try {
+            if (hotkeySink == null) hotkeySink = new HotkeyMessageWindow(this);
+            IntPtr hkHwnd = hotkeySink.Handle;
+            RegisterHotKey(hkHwnd, HOTKEY_ID, MOD_CONTROL | MOD_ALT, (uint)Keys.W);
+            RegisterHotKey(hkHwnd, HOTKEY_MODEL_ID, MOD_CONTROL | MOD_ALT, (uint)Keys.P);
+            RegisterHotKey(hkHwnd, HOTKEY_BRAIN_FULL_ID, MOD_CONTROL | MOD_ALT, (uint)Keys.B);
+            RegisterHotKey(hkHwnd, HOTKEY_OPACITY_UP_ID, MOD_CONTROL | MOD_ALT, (uint)Keys.Up);
+            RegisterHotKey(hkHwnd, HOTKEY_OPACITY_DOWN_ID, MOD_CONTROL | MOD_ALT, (uint)Keys.Down);
+            RegisterHotKey(hkHwnd, HOTKEY_BG_MODE_ID, MOD_CONTROL | MOD_ALT, (uint)Keys.M);
+            RegisterHotKey(hkHwnd, HOTKEY_GAMER_ID, MOD_CONTROL | MOD_ALT, (uint)Keys.G);
+        } catch { }
         InstallMouseWheelHook();
         renderTimer.Start();
         if (Config.GamerMode) {
@@ -5599,25 +5697,101 @@ public class HackerWallpaperForm : Form {
             try { UnhookWindowsHookEx(mouseHookHandle); } catch { }
             mouseHookHandle = IntPtr.Zero;
         }
-        UnregisterHotKey(this.Handle, HOTKEY_ID);
-        UnregisterHotKey(this.Handle, HOTKEY_MODEL_ID);
-        UnregisterHotKey(this.Handle, HOTKEY_BRAIN_FULL_ID);
-        UnregisterHotKey(this.Handle, HOTKEY_OPACITY_UP_ID);
-        UnregisterHotKey(this.Handle, HOTKEY_OPACITY_DOWN_ID);
-        UnregisterHotKey(this.Handle, HOTKEY_BG_MODE_ID);
-        UnregisterHotKey(this.Handle, HOTKEY_GAMER_ID);
+        if (hotkeySink != null && hotkeySink.Handle != IntPtr.Zero) {
+            IntPtr hkHwnd = hotkeySink.Handle;
+            UnregisterHotKey(hkHwnd, HOTKEY_ID);
+            UnregisterHotKey(hkHwnd, HOTKEY_MODEL_ID);
+            UnregisterHotKey(hkHwnd, HOTKEY_BRAIN_FULL_ID);
+            UnregisterHotKey(hkHwnd, HOTKEY_OPACITY_UP_ID);
+            UnregisterHotKey(hkHwnd, HOTKEY_OPACITY_DOWN_ID);
+            UnregisterHotKey(hkHwnd, HOTKEY_BG_MODE_ID);
+            UnregisterHotKey(hkHwnd, HOTKEY_GAMER_ID);
+            try { hotkeySink.DestroyHandle(); } catch { }
+            hotkeySink = null;
+        }
         if (porygon != null) porygon.SaveBrainStates();
         base.OnFormClosing(e);
     }
 
     public void ToggleGamerMode() {
-        SetGamerMode(!Config.GamerMode, "MANUAL_TOGGLE");
+        SetGamerMode(!Config.GamerMode, "ATAJO Ctrl+Alt+G");
     }
 
     public void SetGamerMode(bool enable, string reasonTag) {
         Config.GamerMode = enable;
         Config.Save();
         UpdateGamerSuspensionState(true);
+        ShowGamerToastNotification(enable, reasonTag);
+    }
+
+    private void ShowGamerToastNotification(bool enabled, string reasonTag) {
+        try {
+            if (toastTimer != null) {
+                toastTimer.Stop();
+                toastTimer.Dispose();
+                toastTimer = null;
+            }
+            if (toastForm != null && !toastForm.IsDisposed) {
+                toastForm.Close();
+                toastForm.Dispose();
+                toastForm = null;
+            }
+
+            Screen primaryScr = Screen.PrimaryScreen;
+            Rectangle pb = (primaryScr != null) ? primaryScr.Bounds : new Rectangle(0, 0, 1920, 1080);
+            int tw = 560;
+            int th = 66;
+            int tx = pb.Left + (pb.Width - tw) / 2;
+            int ty = pb.Top + 32;
+
+            toastForm = new Form {
+                FormBorderStyle = FormBorderStyle.None,
+                StartPosition = FormStartPosition.Manual,
+                Bounds = new Rectangle(tx, ty, tw, th),
+                TopMost = true,
+                ShowInTaskbar = false,
+                BackColor = Color.FromArgb(8, 16, 15),
+                Opacity = 0.94
+            };
+
+            string titleTxt = enabled
+                ? "[ MODO GAMER ACTIVADO // 0.0% GPU - 0.0% CPU ]"
+                : "[ MODO GAMER DESACTIVADO // MOTOR 3D OPENGL ACTIVO ]";
+            string subTxt = enabled
+                ? string.Format("Hibernación Total de GPU activa ({0}) — Presiona Ctrl+Alt+G para reanudar", reasonTag ?? "MANUAL")
+                : "Enjambre Porygon 3D + Telemetría NIDS + OpenGL 24 FPS reanudados";
+            Color accent = enabled ? Color.FromArgb(250, 204, 21) : Color.FromArgb(52, 211, 153);
+
+            toastForm.Paint += (s, pe) => {
+                Graphics g = pe.Graphics;
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
+                using (Pen borderPen = new Pen(accent, 2.0f))
+                using (SolidBrush titleBr = new SolidBrush(accent))
+                using (SolidBrush subBr = new SolidBrush(Color.FromArgb(215, 232, 228)))
+                using (Font fTitle = new Font("Consolas", 11f, FontStyle.Bold))
+                using (Font fSub = new Font("Segoe UI", 9.0f, FontStyle.Regular)) {
+                    g.DrawRectangle(borderPen, 1, 1, tw - 3, th - 3);
+                    g.FillRectangle(titleBr, 0, 0, 8, th);
+                    g.DrawString(titleTxt, fTitle, titleBr, 20, 11);
+                    g.DrawString(subTxt, fSub, subBr, 20, 36);
+                }
+            };
+
+            toastForm.Show();
+            int ex = GetWindowLong(toastForm.Handle, GWL_EXSTYLE);
+            SetWindowLong(toastForm.Handle, GWL_EXSTYLE, ex | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT);
+
+            toastTimer = new System.Windows.Forms.Timer();
+            toastTimer.Interval = 2400;
+            toastTimer.Tick += (s, ev) => {
+                try {
+                    if (toastTimer != null) { toastTimer.Stop(); toastTimer.Dispose(); toastTimer = null; }
+                    if (toastForm != null && !toastForm.IsDisposed) { toastForm.Close(); toastForm.Dispose(); toastForm = null; }
+                } catch { }
+            };
+            toastTimer.Start();
+        } catch { }
     }
 
     private bool IsFullscreenGameActive(out string detectedName) {
@@ -5682,10 +5856,11 @@ public class HackerWallpaperForm : Form {
                 return true;
             }
 
-            // Check if process belongs to a known game library path or game executable
+            // Check if process belongs to a known game library path (including Desktop\Juegos) or game executable
             if (procPath.Contains("steamapps") || procPath.Contains("epic games") || procPath.Contains("riot games") ||
                 procPath.Contains("xboxgames") || procPath.Contains("battle.net") || procPath.Contains("ea games") ||
                 procPath.Contains("ubisoft") || procPath.Contains("gog galaxy") || procPath.Contains("games\\") ||
+                procPath.Contains("\\juegos\\") || procName.Contains("rimworld") || procName.Contains("moonlight") ||
                 procName.Contains("valorant") || procName.Contains("cs2") || procName.Contains("dota2") ||
                 procName.Contains("fortnite") || procName.Contains("overwatch") || procName.Contains("r5apex") ||
                 procName.Contains("eldenring") || procName.Contains("cyberpunk") || procName.Contains("helldivers") ||
@@ -6339,6 +6514,10 @@ public class HackerWallpaperForm : Form {
         if (showConfigEvent != null && showConfigEvent.WaitOne(0)) {
             ShowConfigWindow();
         }
+        if (toggleGamerEvent != null && toggleGamerEvent.WaitOne(0)) {
+            SetGamerMode(!Config.GamerMode, "ACCESO DIRECTO");
+        }
+        PollGlobalHotkeysFallback();
 
         frameCount++;
 
@@ -8451,19 +8630,26 @@ public class HackerWallpaperForm : Form {
             Environment.Exit(0);
             return;
         }
-        bool wantConfig = (args != null && args.Length > 0 && args[0].Contains("config"));
+        bool wantConfig = (args != null && args.Length > 0 && args[0].ToLowerInvariant().Contains("config"));
+        bool wantGamer  = (args != null && args.Length > 0 && args[0].ToLowerInvariant().Contains("gamer"));
         bool createdNew;
         EventWaitHandle evt = new EventWaitHandle(false, EventResetMode.AutoReset, "Global\\AntigravityHackerWallpaperConfigEvent", out createdNew);
+        bool createdGamerNew;
+        EventWaitHandle gamerEvt = new EventWaitHandle(false, EventResetMode.AutoReset, "Global\\AntigravityHackerWallpaperGamerEvent", out createdGamerNew);
 
         bool mutexNew;
         using (Mutex mutex = new Mutex(true, "Global\\AntigravityHackerWallpaperMutex", out mutexNew)) {
             if (!mutexNew) {
-                evt.Set();
+                if (wantGamer) {
+                    gamerEvt.Set();
+                } else {
+                    evt.Set();
+                }
                 return;
             }
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new HackerWallpaperForm(evt, wantConfig));
+            Application.Run(new HackerWallpaperForm(evt, wantConfig, gamerEvt, wantGamer));
         }
     }
 }
