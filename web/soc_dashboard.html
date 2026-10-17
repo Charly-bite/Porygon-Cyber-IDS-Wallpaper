@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PORYGON CYBER-DEFENSE SOC // SIEM · Antivirus/EDR · Active IPS · Live TCP/PID</title>
+<title>PORYGON ENTERPRISE XDR / IDS / IPS SOC v3.0 // SIEM · EDR · CTI · YARA/Sigma · Fleet · SOAR</title>
 <style>
   :root {
     --bg-deep: #060b0e;
@@ -30,11 +30,11 @@
     color: var(--txt-main);
     font-family: var(--font-sans);
     min-height: 100vh;
-    padding-bottom: 40px;
+    padding-bottom: 45px;
   }
   /* TOP NAVBAR */
   .topbar {
-    background: rgba(9, 16, 22, 0.94);
+    background: rgba(9, 16, 22, 0.95);
     border-bottom: 1px solid var(--border-teal);
     padding: 12px 24px;
     display: flex;
@@ -66,73 +66,74 @@
   }
   .brand-title {
     font-family: var(--font-mono);
-    font-size: 16px;
+    font-size: 15.5px;
     font-weight: 700;
     color: var(--teal);
-    letter-spacing: 0.5px;
+    letter-spacing: 0.4px;
   }
   .brand-sub {
     font-family: var(--font-mono);
-    font-size: 11.5px;
+    font-size: 11px;
     color: var(--txt-sub);
   }
   .sys-pills {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 7px;
     align-items: center;
   }
   .pill {
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: 11.5px;
     background: var(--bg-card);
     border: 1px solid rgba(52, 168, 138, 0.3);
-    padding: 5px 10px;
+    padding: 4px 9px;
     border-radius: 4px;
     color: var(--txt-main);
   }
   .pill strong { color: var(--teal); }
   .pill.gold strong { color: var(--gold); }
   .pill.cyan strong { color: var(--cyan); }
+  .pill.red strong { color: var(--red); }
 
   .container {
-    max-width: 1560px;
+    max-width: 1600px;
     margin: 0 auto;
-    padding: 18px 22px;
+    padding: 16px 22px;
   }
 
   /* LIVE BANNER */
   .action-banner {
-    background: linear-gradient(90deg, rgba(16, 36, 32, 0.9), rgba(14, 24, 34, 0.9));
+    background: linear-gradient(90deg, rgba(16, 36, 32, 0.92), rgba(14, 24, 34, 0.92));
     border: 1px solid var(--border-teal);
     border-left: 4px solid var(--gold);
     border-radius: 6px;
-    padding: 10px 16px;
-    margin-bottom: 16px;
+    padding: 9px 15px;
+    margin-bottom: 14px;
     display: flex;
     flex-wrap: wrap;
     justify-content: space-between;
     align-items: center;
     gap: 10px;
     font-family: var(--font-mono);
-    font-size: 12.5px;
+    font-size: 12px;
   }
   .action-banner .status-text { color: var(--gold); font-weight: 600; }
-  .action-banner .log-path { color: var(--txt-sub); font-size: 11.5px; }
+  .action-banner .log-path { color: var(--txt-sub); font-size: 11px; }
 
   /* ACTION TOOLBAR */
   .toolbar {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
-    margin-bottom: 18px;
+    gap: 8px;
+    margin-bottom: 16px;
     align-items: center;
   }
   .btn {
     font-family: var(--font-sans);
-    font-size: 12.5px;
+    font-size: 12px;
     font-weight: 600;
-    padding: 8px 14px;
+    padding: 7px 12px;
     border-radius: 5px;
     cursor: pointer;
     border: 1px solid var(--border-teal);
@@ -141,7 +142,7 @@
     transition: all 0.15s ease;
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
     text-decoration: none;
   }
   .btn:hover { background: #193830; transform: translateY(-1px); }
@@ -152,21 +153,21 @@
   .btn-gold:hover { background: #383016; }
   .btn-red { background: #32161b; border-color: var(--border-red); color: #fca5a5; }
   .btn-red:hover { background: #451d24; }
-  .btn-sm { padding: 4px 9px; font-size: 11.5px; font-family: var(--font-mono); }
+  .btn-sm { padding: 4px 8px; font-size: 11px; font-family: var(--font-mono); }
 
   /* TRIAD CARDS */
   .triad-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 14px;
-    margin-bottom: 18px;
+    margin-bottom: 16px;
   }
   @media (max-width: 1100px) { .triad-grid { grid-template-columns: 1fr; } }
   .agent-card {
     background: var(--bg-panel);
     border: 1px solid var(--border-teal);
     border-radius: 7px;
-    padding: 13px 16px;
+    padding: 12px 15px;
     position: relative;
     overflow: hidden;
   }
@@ -183,14 +184,14 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 6px;
+    margin-bottom: 5px;
     font-family: var(--font-mono);
   }
-  .agent-name { font-size: 14px; font-weight: 700; color: var(--teal); }
+  .agent-name { font-size: 13.5px; font-weight: 700; color: var(--teal); }
   .agent-card.p2 .agent-name { color: var(--gold); }
   .agent-card.pz .agent-name { color: var(--red); }
   .agent-role {
-    font-size: 11px;
+    font-size: 10.5px;
     padding: 2px 7px;
     border-radius: 4px;
     background: rgba(255,255,255,0.06);
@@ -198,7 +199,7 @@
   }
   .agent-stats {
     font-family: var(--font-mono);
-    font-size: 11.8px;
+    font-size: 11.5px;
     color: var(--txt-sub);
     line-height: 1.55;
   }
@@ -207,17 +208,17 @@
   /* TABS */
   .tabs {
     display: flex;
-    gap: 8px;
-    margin-bottom: 16px;
+    gap: 7px;
+    margin-bottom: 15px;
     border-bottom: 1px solid rgba(52, 168, 138, 0.25);
     padding-bottom: 8px;
     flex-wrap: wrap;
   }
   .tab-btn {
     font-family: var(--font-mono);
-    font-size: 12.5px;
+    font-size: 12px;
     font-weight: 700;
-    padding: 8px 16px;
+    padding: 7px 13px;
     border-radius: 5px;
     cursor: pointer;
     background: var(--bg-panel);
@@ -250,8 +251,8 @@
     overflow: hidden;
   }
   .panel-header {
-    padding: 11px 15px;
-    background: rgba(16, 29, 38, 0.85);
+    padding: 10px 14px;
+    background: rgba(16, 29, 38, 0.88);
     border-bottom: 1px solid rgba(52, 168, 138, 0.25);
     display: flex;
     flex-wrap: wrap;
@@ -261,7 +262,7 @@
   }
   .panel-title {
     font-family: var(--font-mono);
-    font-size: 13px;
+    font-size: 12.5px;
     font-weight: 700;
     color: var(--teal);
   }
@@ -271,7 +272,7 @@
 
   .panel-controls {
     display: flex;
-    gap: 8px;
+    gap: 7px;
     align-items: center;
     flex-wrap: wrap;
   }
@@ -280,23 +281,22 @@
     border: 1px solid rgba(52, 168, 138, 0.4);
     color: var(--txt-main);
     font-family: var(--font-mono);
-    font-size: 12px;
-    padding: 6px 10px;
+    font-size: 11.5px;
+    padding: 5px 9px;
     border-radius: 4px;
     outline: none;
   }
   .input-txt:focus { border-color: var(--teal); }
 
   .table-wrap {
-    max-height: 390px;
+    max-height: 360px;
     overflow-y: auto;
   }
-  .table-wrap.tall { max-height: 540px; }
   table {
     width: 100%;
     border-collapse: collapse;
     font-family: var(--font-mono);
-    font-size: 11.8px;
+    font-size: 11.5px;
   }
   th {
     position: sticky;
@@ -304,13 +304,13 @@
     background: #0d1821;
     color: var(--txt-sub);
     text-align: left;
-    padding: 8px 10px;
+    padding: 7px 9px;
     border-bottom: 1px solid rgba(52, 168, 138, 0.3);
     font-weight: 700;
     z-index: 2;
   }
   td {
-    padding: 7px 10px;
+    padding: 6px 9px;
     border-bottom: 1px solid rgba(255,255,255,0.05);
     vertical-align: top;
     word-break: break-word;
@@ -322,7 +322,7 @@
     display: inline-block;
     padding: 2px 6px;
     border-radius: 3px;
-    font-size: 10.5px;
+    font-size: 10px;
     font-weight: 700;
     font-family: var(--font-mono);
   }
@@ -331,27 +331,55 @@
   .b-info { background: rgba(52, 211, 153, 0.15); color: #6ee7b7; border: 1px solid rgba(52, 211, 153, 0.35); }
   .b-mitre { background: rgba(56, 189, 248, 0.15); color: #7dd3fc; border: 1px solid rgba(56, 189, 248, 0.35); }
 
-  /* DROPZONE */
+  /* DROPZONE & SUBBARS */
   .scan-bar {
-    padding: 12px 15px;
-    background: rgba(12, 22, 30, 0.9);
+    padding: 10px 14px;
+    background: rgba(12, 22, 30, 0.92);
     border-bottom: 1px solid rgba(255,255,255,0.06);
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: 8px;
     align-items: center;
   }
   .drop-zone {
     border: 1px dashed var(--gold);
     background: rgba(250, 204, 21, 0.05);
     color: var(--gold);
-    padding: 6px 12px;
+    padding: 5px 11px;
     border-radius: 4px;
     font-family: var(--font-mono);
-    font-size: 11.5px;
+    font-size: 11px;
     cursor: pointer;
   }
   .drop-zone:hover { background: rgba(250, 204, 21, 0.12); }
+
+  .soar-grid {
+    padding: 14px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+  }
+  @media (max-width: 780px) { .soar-grid { grid-template-columns: 1fr; } }
+  .soar-box {
+    background: rgba(8, 15, 22, 0.75);
+    border: 1px solid rgba(52, 168, 138, 0.25);
+    border-radius: 6px;
+    padding: 11px 13px;
+  }
+  .soar-box h4 {
+    color: var(--cyan);
+    margin-bottom: 8px;
+    font-size: 12px;
+  }
+  .form-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 8px;
+  }
+  .form-row label { color: var(--txt-sub); font-size: 10.5px; }
 
   /* TOAST */
   #toast {
@@ -369,7 +397,7 @@
     box-shadow: 0 10px 25px rgba(0,0,0,0.65);
     display: none;
     z-index: 999;
-    max-width: 480px;
+    max-width: 520px;
   }
   .hidden { display: none !important; }
 </style>
@@ -381,34 +409,39 @@
     <div class="brand">
       <div class="brand-badge" id="connDot"></div>
       <div>
-        <div class="brand-title">🛡️ PORYGON CYBER-DEFENSE SOC // WEB COMMAND CENTER</div>
-        <div class="brand-sub" id="subStatus">SIEM + Antivirus/EDR + Active IPS Firewall + Live Kernel TCP/PID Mapper (Modo Híbrido)</div>
+        <div class="brand-title">🛡️ PORYGON ENTERPRISE XDR / IDS / IPS SOC v3.0</div>
+        <div class="brand-sub" id="subStatus">SIEM ChainHash SHA-256 · CTI Threat Feeds · YARA/Sigma · Multi-Host Fleet · SOAR CEF/FortiGate</div>
       </div>
     </div>
     <div class="sys-pills">
       <div class="pill">CPU: <strong id="kCpu">--%</strong></div>
       <div class="pill gold">GPU: <strong id="kGpu">--%</strong> (<span id="kFps">--</span> FPS)</div>
       <div class="pill">RAM: <strong id="kRam">--%</strong></div>
-      <div class="pill cyan">NET: <strong id="kNet">-- KB/s</strong> | PING: <strong id="kPing">--ms</strong></div>
+      <div class="pill cyan">CTI IOCs: <strong id="kCtiCnt">0</strong></div>
+      <div class="pill gold">Flota: <strong id="kFleetCnt">1</strong> Hosts</div>
+      <div class="pill red">Kills EDR: <strong id="kKillCnt">0</strong></div>
+      <div class="pill cyan" title="Último eslabón SHA-256 de la cadena forense SIEM">ChainHash: <strong id="kChainHash">GENESIS</strong></div>
     </div>
   </header>
 
   <main class="container">
     <!-- STATUS BANNER -->
     <div class="action-banner">
-      <div>⚡ ESTADO SOC: <span class="status-text" id="bannerText">CONECTANDO CON PORYGON CYBER-DEFENSE ENGINE...</span></div>
+      <div>⚡ ESTADO SOC EMPRESARIAL: <span class="status-text" id="bannerText">CONECTANDO CON PORYGON ENTERPRISE XDR ENGINE...</span></div>
       <div class="log-path">SIEM JSONL: <span id="jsonlPath">C:\Users\Admin\Porygon-Cyber-IDS-Wallpaper\logs\siem_security_events.jsonl</span></div>
     </div>
 
-    <!-- GLOBAL ACTION TOOLBAR -->
+    <!-- GLOBAL ENTERPRISE ACTION TOOLBAR -->
     <div class="toolbar">
-      <button class="btn" onclick="triggerAudit()">🔍 Auditar Red TCP/PID + Registro + Startup Ahora</button>
-      <button class="btn btn-cyan" onclick="swarmAction('train_wave')">⚡ Simular Oleada IDS</button>
-      <button class="btn btn-gold" onclick="swarmAction('force_evo')">🧬 Forzar Cruce Generacional (+1 Gen)</button>
-      <button class="btn btn-gold" onclick="swarmAction('boost_lvl')">🚀 Subir Nivel Sináptico (+1 LVL)</button>
-      <button class="btn btn-cyan" onclick="swarmAction('cycle_scene')">🌲 Cambiar Escena 3D (<span id="lblScene">1/3</span>)</button>
+      <button class="btn" onclick="triggerAudit()">🔍 Auditar Red TCP/PID + Registro + Startup</button>
+      <button class="btn btn-cyan" onclick="syncCtiFeeds()">🌐 Sincronizar Feeds CTI (Feodo C2 / CINS)</button>
+      <button class="btn btn-cyan" onclick="triggerDnsAudit()">🔎 Auditar DNS / DGA / C2 Beaconing</button>
+      <a class="btn btn-gold" href="/api/report" target="_blank">📊 Reporte Forense Ejecutivo (HTML / PDF)</a>
+      <a class="btn btn-cyan" href="/api/agent-script" target="_blank">📥 Descargar Agente Remoto (Porygon-Sensor.ps1)</a>
+      <button class="btn btn-gold" onclick="swarmAction('force_evo')">🧬 Cruce Generacional (+1 Gen)</button>
+      <button class="btn btn-cyan" onclick="swarmAction('cycle_scene')">🌲 Escena 3D (<span id="lblScene">1/3</span>)</button>
       <button class="btn" id="btnGamer" onclick="swarmAction('toggle_gamer')">🎮 Modo Gamer 0% GPU</button>
-      <a class="btn btn-gold" href="/api/siem-jsonl" target="_blank">📥 Ver / Descargar SIEM JSONL</a>
+      <a class="btn" href="/api/siem-jsonl" target="_blank">📄 SIEM JSONL</a>
     </div>
 
     <!-- 3 PORYGON EVOLUTION CARDS -->
@@ -416,7 +449,7 @@
       <div class="agent-card p1">
         <div class="agent-header">
           <span class="agent-name" id="ag0Name">PORYGON // GEN G1</span>
-          <span class="agent-role">NIDS + PID MAPPER + SIEM</span>
+          <span class="agent-role">NIDS + PID + CTI + DNS AUDITOR</span>
         </div>
         <div class="agent-stats" id="ag0Stats">
           Procesos TCP Auditados: <strong id="kPidCnt">0</strong> | Alertas SIEM: <strong id="kSiemCnt">0</strong><br>
@@ -427,10 +460,10 @@
       <div class="agent-card p2">
         <div class="agent-header">
           <span class="agent-name" id="ag1Name">PORYGON2 // GEN G1</span>
-          <span class="agent-role">REAL-TIME AV / EDR ENGINE</span>
+          <span class="agent-role">EDR + YARA/SIGMA + KILL PROCESS</span>
         </div>
         <div class="agent-stats" id="ag1Stats">
-          Archivos Analizados (SHA-256 + Entropía): <strong id="kAvCnt">0</strong><br>
+          Archivos Analizados (SHA-256 + YARA): <strong id="kAvCnt">0</strong><br>
           Candidato Cuarentena: <strong id="kCandFile">Ninguno</strong>
         </div>
       </div>
@@ -438,10 +471,10 @@
       <div class="agent-card pz">
         <div class="agent-header">
           <span class="agent-name" id="ag2Name">PORYGON-Z // GEN G1</span>
-          <span class="agent-role">ACTIVE IPS FIREWALL + VAULT</span>
+          <span class="agent-role">ACTIVE IPS + SOAR + HOST ISOLATION</span>
         </div>
         <div class="agent-stats" id="ag2Stats">
-          Acciones IPS: <strong id="kIpsCnt">0</strong> | IPs Bloqueadas: <strong id="kFwCnt">0</strong> | En Cuarentena: <strong id="kQuarCnt">0</strong><br>
+          Acciones IPS: <strong id="kIpsCnt">0</strong> | IPs Bloqueadas: <strong id="kFwCnt">0</strong> | Cuarentena: <strong id="kQuarCnt">0</strong><br>
           Candidato Bloqueo IP: <strong id="kCandIp">Ninguna</strong>
         </div>
       </div>
@@ -449,20 +482,22 @@
 
     <!-- VIEW TABS -->
     <div class="tabs">
-      <button class="tab-btn active" onclick="switchTab('all', this)">🛡️ Vista Unificada SOC (4 Consolas)</button>
-      <button class="tab-btn" onclick="switchTab('tcp', this)">🌐 Conexiones Activas TCP ↔ PID / Authenticode (<span id="tabTcpCnt">0</span>)</button>
-      <button class="tab-btn" onclick="switchTab('siem', this)">📡 Eventos SIEM & MITRE ATT&CK (<span id="tabSiemCnt">0</span>)</button>
-      <button class="tab-btn" onclick="switchTab('av', this)">🧬 Escáner Antivirus / EDR (<span id="tabAvCnt">0</span>)</button>
-      <button class="tab-btn" onclick="switchTab('ips', this)">🔥 Firewall IPS & Bóveda de Cuarentena</button>
+      <button class="tab-btn active" onclick="switchTab('all', this)">🛡️ Vista Unificada Enterprise SOC (8 Consolas)</button>
+      <button class="tab-btn" onclick="switchTab('tcp', this)">🌐 TCP ↔ PID / Authenticode / Kill PID (<span id="tabTcpCnt">0</span>)</button>
+      <button class="tab-btn" onclick="switchTab('fleet', this)">🖥️ Flota Multi-Host & Reglas YARA/Sigma (<span id="tabFleetCnt">1</span>)</button>
+      <button class="tab-btn" onclick="switchTab('dns', this)">🔎 Inspector DNS / DGA & SOAR Perimetral (<span id="tabDnsCnt">0</span>)</button>
+      <button class="tab-btn" onclick="switchTab('siem', this)">📡 SIEM + ChainHash SHA-256 (<span id="tabSiemCnt">0</span>)</button>
+      <button class="tab-btn" onclick="switchTab('av', this)">🧬 Antivirus / EDR (<span id="tabAvCnt">0</span>)</button>
+      <button class="tab-btn" onclick="switchTab('ips', this)">🔥 Firewall IPS & Cuarentena</button>
     </div>
 
-    <!-- SECTION: LIVE TCP <-> PID / AUTHENTICODE TABLE -->
+    <!-- SECTION 1: LIVE TCP <-> PID / AUTHENTICODE / CTI / KILL PID TABLE -->
     <section id="secTcp" class="panel" style="margin-bottom: 16px;">
       <div class="panel-header">
-        <div class="panel-title cyan">🌐 CONEXIONES TCP ACTIVAS EN TIEMPO REAL ↔ PROCESO / PID / FIRMA AUTHENTICODE (GetExtendedTcpTable)</div>
+        <div class="panel-title cyan">🌐 CONEXIONES TCP ACTIVAS ↔ PROCESO / PID / AUTHENTICODE / FEEDS CTI / EDR KILL PID</div>
         <div class="panel-controls">
-          <input type="text" id="tcpFilter" class="input-txt" placeholder="Filtrar por proceso, PID, IP o puerto..." oninput="renderTcpTable()">
-          <button class="btn btn-sm btn-cyan" onclick="fetchState()">🔄 Actualizar Tabla</button>
+          <input type="text" id="tcpFilter" class="input-txt" placeholder="Filtrar proceso, PID, IP, CTI o regla Sigma..." oninput="renderTcpTable()" style="width:260px;">
+          <button class="btn btn-sm btn-cyan" onclick="fetchState()">🔄 Actualizar</button>
         </div>
       </div>
       <div class="table-wrap">
@@ -474,9 +509,9 @@
               <th>Firma Authenticode</th>
               <th>Socket Local</th>
               <th>IP Remota : Puerto</th>
-              <th>Protocolo / Estado</th>
+              <th>Protocolo / Regla CTI-Sigma</th>
               <th>Riesgo</th>
-              <th>Acciones 1-Click</th>
+              <th>Acciones EDR / IPS 1-Click</th>
             </tr>
           </thead>
           <tbody id="tcpBody">
@@ -486,12 +521,166 @@
       </div>
     </section>
 
-    <!-- ROW 1: SIEM EVENTS & ANTIVIRUS / EDR -->
+    <!-- SECTION 2 (ENTERPRISE): MULTI-HOST FLEET MANAGEMENT & YARA/SIGMA RULE ENGINE -->
+    <div class="grid-2" id="secFleetRules">
+      <!-- PANEL 5: MULTI-HOST FLEET MANAGEMENT -->
+      <section class="panel">
+        <div class="panel-header">
+          <div class="panel-title">🖥️ GESTIÓN DE FLOTA MULTI-HOST (XDR FLEET SENSORS)</div>
+          <div class="panel-controls">
+            <button class="btn btn-sm btn-gold" onclick="simulateRemoteAgentHeartbeat()">🧪 Simular Sensor Remoto</button>
+            <a class="btn btn-sm btn-cyan" href="/api/agent-script" target="_blank">📥 Descargar Porygon-Sensor.ps1</a>
+          </div>
+        </div>
+        <div class="scan-bar" style="justify-content:space-between;">
+          <span style="font-family:var(--font-mono);font-size:11px;color:var(--txt-sub);">
+            Despliega <code>Porygon-Sensor.ps1 -SocMasterUrl "http://IP_SOC:5090"</code> en otros PCs/servidores de tu LAN para centralizar telemetría.
+          </span>
+        </div>
+        <div class="table-wrap" style="max-height:290px;">
+          <table>
+            <thead>
+              <tr>
+                <th>Host / Rol</th>
+                <th>IP Local / OS</th>
+                <th>CPU / RAM / TCP</th>
+                <th>Estado / Riesgo</th>
+                <th>Contención EDR</th>
+              </tr>
+            </thead>
+            <tbody id="fleetBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- PANEL 6: YARA & SIGMA DETECTION RULES ENGINE -->
+      <section class="panel">
+        <div class="panel-header">
+          <div class="panel-title gold">📜 MOTOR DE REGLAS YARA & SIGMA EDITABLES EN VIVO (<span id="lblRulesCnt">0</span>)</div>
+          <div class="panel-controls">
+            <span style="font-family:var(--font-mono);font-size:11px;color:var(--txt-sub);">Hits Totales: <strong id="lblRuleHits" style="color:var(--gold)">0</strong></span>
+          </div>
+        </div>
+        <!-- ADD NEW YARA/SIGMA RULE BAR -->
+        <div class="scan-bar">
+          <input type="text" id="ruleId" class="input-txt" placeholder="ID (ej. YARA_CUSTOM_RAT)" style="width:155px;">
+          <select id="ruleType" class="input-txt">
+            <option value="YARA">YARA (Archivo/Memoria)</option>
+            <option value="SIGMA">SIGMA (Red/Proceso/DNS)</option>
+          </select>
+          <input type="text" id="ruleMitre" class="input-txt" placeholder="MITRE (T1059)" style="width:90px;" value="T1059">
+          <select id="ruleTarget" class="input-txt">
+            <option value="FILE_CONTENT">Contenido Archivo</option>
+            <option value="PROCESS_NET">Proceso / Red</option>
+            <option value="DNS_DOMAIN">Dominio DNS</option>
+          </select>
+          <input type="text" id="rulePattern" class="input-txt" placeholder="Patrones separados por | (ej. payload|rat.exe)" style="flex:1;min-width:160px;">
+          <button class="btn btn-sm btn-gold" onclick="addEnterpriseRule()">➕ Añadir Regla</button>
+        </div>
+        <div class="table-wrap" style="max-height:290px;">
+          <table>
+            <thead>
+              <tr>
+                <th>Regla ID / Tipo</th>
+                <th>MITRE / Severidad</th>
+                <th>Patrón de Detección</th>
+                <th>Hits</th>
+                <th>Acción</th>
+              </tr>
+            </thead>
+            <tbody id="rulesBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <!-- SECTION 3 (ENTERPRISE): DNS / DGA / C2 BEACONING & SOAR PERIMETER INTEGRATION -->
+    <div class="grid-2" id="secDnsSoar">
+      <!-- PANEL 7: DNS CACHE / DGA / C2 BEACONING INSPECTOR -->
+      <section class="panel">
+        <div class="panel-header">
+          <div class="panel-title cyan">🔎 INSPECTOR DNS CACHE, ENTROPÍA DGA & C2 BEACONING</div>
+          <div class="panel-controls">
+            <input type="text" id="dnsFilter" class="input-txt" placeholder="Filtrar dominio o IP..." oninput="renderDnsTable()">
+            <button class="btn btn-sm btn-cyan" onclick="triggerDnsAudit()">🔎 Auditar DNS Ahora</button>
+          </div>
+        </div>
+        <div class="table-wrap" style="max-height:285px;">
+          <table>
+            <thead>
+              <tr>
+                <th>Hora</th>
+                <th>Dominio Consultado</th>
+                <th>IP Resuelta</th>
+                <th>Entropía DGA</th>
+                <th>Veredicto / MITRE</th>
+                <th>Acción</th>
+              </tr>
+            </thead>
+            <tbody id="dnsBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- PANEL 8: SOAR PERIMETER (FORTIGATE WEBHOOK + SYSLOG CEF RFC 5424 UDP 514) -->
+      <section class="panel">
+        <div class="panel-header">
+          <div class="panel-title red">🔗 INTEGRACIÓN SOAR PERIMETRAL (FORTIGATE WEBHOOK & SYSLOG CEF UDP 514)</div>
+          <div class="panel-controls">
+            <span class="badge b-info">CEF Enviados: <span id="kCefSent">0</span></span>
+            <span class="badge b-high">Pushes FortiGate: <span id="kFgSent">0</span></span>
+          </div>
+        </div>
+        <div class="soar-grid">
+          <div class="soar-box">
+            <h4>📡 Exportador SIEM Syslog CEF (RFC 5424 UDP)</h4>
+            <div class="form-row">
+              <label><input type="checkbox" id="soarSyslogEn"> Activar reenvío automático CEF en tiempo real</label>
+            </div>
+            <div class="form-row">
+              <label>Servidor Collector SIEM (Wazuh / QRadar / Splunk / FortiSIEM):</label>
+              <input type="text" id="soarSyslogHost" class="input-txt" value="127.0.0.1" placeholder="192.168.1.200">
+            </div>
+            <div class="form-row">
+              <label>Puerto UDP Syslog:</label>
+              <input type="number" id="soarSyslogPort" class="input-txt" value="514">
+            </div>
+          </div>
+
+          <div class="soar-box">
+            <h4>🔥 Conector Perimetral FortiGate / Firewall Webhook</h4>
+            <div class="form-row">
+              <label><input type="checkbox" id="soarFgEn"> Propagar bloqueos IPS automáticamente a FortiGate</label>
+            </div>
+            <div class="form-row">
+              <label>FortiOS Automation Webhook URL:</label>
+              <input type="text" id="soarFgUrl" class="input-txt" placeholder="https://192.168.1.1/api/v2/monitor/system/automation-stitch/webhook/porygon">
+            </div>
+            <div class="form-row">
+              <label>Grupo de Direcciones FortiGate & API Bearer Token:</label>
+              <div style="display:flex;gap:6px;">
+                <input type="text" id="soarFgGroup" class="input-txt" value="PORYGON_IPS_BLOCKLIST" style="width:50%;">
+                <input type="password" id="soarFgToken" class="input-txt" placeholder="Bearer Token (opcional)" style="width:50%;">
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="scan-bar" style="justify-content:space-between;">
+          <span style="font-family:var(--font-mono);font-size:11px;color:var(--gold);" id="soarStatusTxt">Estado SOAR: STANDBY</span>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-sm" onclick="saveSoarConfig(false)">💾 Guardar Config SOAR</button>
+            <button class="btn btn-sm btn-gold" onclick="saveSoarConfig(true)">⚡ Guardar y Enviar Prueba CEF / Webhook</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- SECTION 4: SIEM EVENTS (WITH SHA-256 CHAINHASH) & ANTIVIRUS / EDR -->
     <div class="grid-2" id="secSiemAv">
       <!-- PANEL 1: SIEM -->
       <section class="panel" id="panelSiem">
         <div class="panel-header">
-          <div class="panel-title">📡 EVENTOS SIEM & CORRELACIÓN MITRE ATT&CK</div>
+          <div class="panel-title">📡 EVENTOS SIEM + CADENA FORENSE INMUTABLE SHA-256</div>
           <div class="panel-controls">
             <select id="siemSevFilter" class="input-txt" onchange="renderSiemTable()">
               <option value="ALL">Todas las Severidades</option>
@@ -506,7 +695,7 @@
           <table>
             <thead>
               <tr>
-                <th>Hora</th>
+                <th>Hora / ChainHash</th>
                 <th>Sev / MITRE</th>
                 <th>Agente / Proceso</th>
                 <th>Objetivo & Detalle</th>
@@ -521,17 +710,17 @@
       <!-- PANEL 2: ANTIVIRUS / EDR -->
       <section class="panel" id="panelAv">
         <div class="panel-header">
-          <div class="panel-title gold">🧬 ANTIVIRUS / EDR EN TIEMPO REAL — PORYGON2 (SHA-256 + Entropía)</div>
+          <div class="panel-title gold">🧬 ANTIVIRUS / EDR EN TIEMPO REAL — PORYGON2 (SHA-256 + YARA + Entropía)</div>
           <div class="panel-controls">
             <input type="text" id="avSearch" class="input-txt" placeholder="Filtrar archivo o SHA-256..." oninput="renderAvTable()">
           </div>
         </div>
         <!-- ON-DEMAND FILE SCANNER FROM BROWSER -->
         <div class="scan-bar">
-          <input type="text" id="customScanPath" class="input-txt" style="flex:1; min-width:220px;" placeholder="Ruta local a escanear (ej. C:\Users\Admin\Downloads\archivo.exe)">
+          <input type="text" id="customScanPath" class="input-txt" style="flex:1; min-width:210px;" placeholder="Ruta local a escanear (ej. C:\Users\Admin\Downloads\archivo.exe)">
           <button class="btn btn-sm btn-gold" onclick="scanLocalPath()">🔍 Escanear Ruta</button>
           <label class="drop-zone">
-            📂 Subir / Analizar Archivo desde Navegador
+            📂 Subir / Analizar Archivo
             <input type="file" id="fileUploadInput" style="display:none" onchange="uploadAndScanFile(this)">
           </label>
         </div>
@@ -541,7 +730,7 @@
               <tr>
                 <th>Hora</th>
                 <th>Veredicto / Riesgo</th>
-                <th>Archivo & Indicadores</th>
+                <th>Archivo & Reglas YARA</th>
                 <th>Entropía / SHA-256</th>
                 <th>Acción</th>
               </tr>
@@ -552,14 +741,14 @@
       </section>
     </div>
 
-    <!-- ROW 2: FIREWALL IPS & QUARANTINE VAULT -->
+    <!-- SECTION 5: FIREWALL IPS & QUARANTINE VAULT -->
     <div class="grid-2" id="secIpsQuar">
       <!-- PANEL 3: FIREWALL IPS -->
       <section class="panel">
         <div class="panel-header">
           <div class="panel-title red">🔥 IPS ACTIVO // REGLAS DE BLOQUEO EN WINDOWS FIREWALL (PORYGON-Z)</div>
           <div class="panel-controls">
-            <input type="text" id="manualBlockIp" class="input-txt" placeholder="IP a bloquear (ej. 217.20.155.41)" style="width:185px;">
+            <input type="text" id="manualBlockIp" class="input-txt" placeholder="IP a bloquear (ej. 217.20.155.41)" style="width:175px;">
             <button class="btn btn-sm btn-red" onclick="blockIpManual()">🔥 Bloquear IP</button>
             <button class="btn btn-sm btn-gold" onclick="blockCandidateIp()">⚡ Bloquear Candidata</button>
           </div>
@@ -609,6 +798,13 @@
 <script>
   let lastState = null;
   let activeTab = 'all';
+  let soarFormDirty = false;
+
+  ['soarSyslogEn','soarSyslogHost','soarSyslogPort','soarFgEn','soarFgUrl','soarFgGroup','soarFgToken'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', () => { soarFormDirty = true; });
+    if (el) el.addEventListener('change', () => { soarFormDirty = true; });
+  });
 
   function showToast(msg, isAlert) {
     const t = document.getElementById('toast');
@@ -617,7 +813,7 @@
     t.innerHTML = msg;
     t.style.display = 'block';
     clearTimeout(window._toastTimer);
-    window._toastTimer = setTimeout(() => { t.style.display = 'none'; }, 3600);
+    window._toastTimer = setTimeout(() => { t.style.display = 'none'; }, 3800);
   }
 
   function switchTab(tab, btn) {
@@ -626,34 +822,30 @@
     if (btn) btn.classList.add('active');
 
     const secTcp = document.getElementById('secTcp');
+    const secFleetRules = document.getElementById('secFleetRules');
+    const secDnsSoar = document.getElementById('secDnsSoar');
     const secSiemAv = document.getElementById('secSiemAv');
     const panelSiem = document.getElementById('panelSiem');
     const panelAv = document.getElementById('panelAv');
     const secIpsQuar = document.getElementById('secIpsQuar');
 
-    secTcp.classList.remove('hidden');
-    secSiemAv.classList.remove('hidden');
-    panelSiem.classList.remove('hidden');
-    panelAv.classList.remove('hidden');
-    secIpsQuar.classList.remove('hidden');
+    [secTcp, secFleetRules, secDnsSoar, secSiemAv, panelSiem, panelAv, secIpsQuar].forEach(el => el.classList.remove('hidden'));
     secSiemAv.style.gridTemplateColumns = '1fr 1fr';
 
     if (tab === 'tcp') {
-      secSiemAv.classList.add('hidden');
-      secIpsQuar.classList.add('hidden');
+      [secFleetRules, secDnsSoar, secSiemAv, secIpsQuar].forEach(el => el.classList.add('hidden'));
+    } else if (tab === 'fleet') {
+      [secTcp, secDnsSoar, secSiemAv, secIpsQuar].forEach(el => el.classList.add('hidden'));
+    } else if (tab === 'dns') {
+      [secTcp, secFleetRules, secSiemAv, secIpsQuar].forEach(el => el.classList.add('hidden'));
     } else if (tab === 'siem') {
-      secTcp.classList.add('hidden');
-      panelAv.classList.add('hidden');
-      secIpsQuar.classList.add('hidden');
+      [secTcp, secFleetRules, secDnsSoar, panelAv, secIpsQuar].forEach(el => el.classList.add('hidden'));
       secSiemAv.style.gridTemplateColumns = '1fr';
     } else if (tab === 'av') {
-      secTcp.classList.add('hidden');
-      panelSiem.classList.add('hidden');
-      secIpsQuar.classList.add('hidden');
+      [secTcp, secFleetRules, secDnsSoar, panelSiem, secIpsQuar].forEach(el => el.classList.add('hidden'));
       secSiemAv.style.gridTemplateColumns = '1fr';
     } else if (tab === 'ips') {
-      secTcp.classList.add('hidden');
-      secSiemAv.classList.add('hidden');
+      [secTcp, secFleetRules, secDnsSoar, secSiemAv].forEach(el => el.classList.add('hidden'));
     }
   }
 
@@ -676,8 +868,84 @@
   }
 
   function triggerAudit() {
-    showToast('🔍 Ejecutando auditoría rápida TCP/PID + Registro Run + Startup + Downloads...', false);
+    showToast('🔍 Ejecutando auditoría completa TCP/PID + Registro Run + Startup + Downloads + DNS...', false);
     apiPost('/api/audit', {});
+  }
+
+  function syncCtiFeeds() {
+    showToast('🌐 Descargando Feeds CTI en vivo (Feodo Tracker C2 Botnet + CINS Army)...', false);
+    apiPost('/api/sync-cti', {});
+  }
+
+  function triggerDnsAudit() {
+    showToast('🔎 Auditando caché DNS de Windows, entropía DGA y patrones C2 Beaconing...', false);
+    apiPost('/api/dns-audit', {});
+  }
+
+  function killPid(pid, procName) {
+    if (!pid || pid <= 4) {
+      showToast('PID de sistema protegido por el kernel.', true);
+      return;
+    }
+    apiPost('/api/kill-pid', { pid: pid, reason: 'Terminación EDR desde Web SOC (' + procName + ')' });
+  }
+
+  function toggleHostIsolation(hostId) {
+    apiPost('/api/host-isolate', { hostId: hostId });
+  }
+
+  function simulateRemoteAgentHeartbeat() {
+    const num = Math.floor(10 + Math.random() * 80);
+    apiPost('/api/agent-heartbeat', {
+      hostname: 'SRV-FINANZAS-' + num,
+      ip: '192.168.100.' + num,
+      os: 'Windows Server 2022 Datacenter',
+      cpu: Math.floor(12 + Math.random() * 45),
+      ramPct: Math.floor(38 + Math.random() * 40),
+      tcpCount: Math.floor(18 + Math.random() * 35),
+      alerts: 1,
+      risk: 78
+    });
+  }
+
+  function addEnterpriseRule() {
+    const name = document.getElementById('ruleId').value.trim();
+    const ruleType = document.getElementById('ruleType').value;
+    const mitre = document.getElementById('ruleMitre').value.trim() || 'T1059';
+    const targetField = document.getElementById('ruleTarget').value;
+    const pattern = document.getElementById('rulePattern').value.trim();
+    if (!name || !pattern) {
+      showToast('Especifica un nombre/ID y un patrón de detección para la regla YARA/Sigma.', true);
+      return;
+    }
+    apiPost('/api/rules-add', {
+      name: name,
+      ruleType: ruleType,
+      mitre: mitre,
+      risk: 92,
+      targetField: targetField,
+      pattern: pattern
+    });
+    document.getElementById('ruleId').value = '';
+    document.getElementById('rulePattern').value = '';
+  }
+
+  function toggleEnterpriseRule(id, del) {
+    apiPost('/api/rules-toggle', { id: id, delete: !!del });
+  }
+
+  function saveSoarConfig(testEvent) {
+    soarFormDirty = false;
+    apiPost('/api/soar-config', {
+      syslogEnabled: document.getElementById('soarSyslogEn').checked,
+      syslogHost: document.getElementById('soarSyslogHost').value.trim(),
+      syslogPort: parseInt(document.getElementById('soarSyslogPort').value || '514', 10),
+      fortiGateEnabled: document.getElementById('soarFgEn').checked,
+      fortiGateUrl: document.getElementById('soarFgUrl').value.trim(),
+      fortiGateGroup: document.getElementById('soarFgGroup').value.trim(),
+      fortiGateToken: document.getElementById('soarFgToken').value.trim(),
+      testEvent: !!testEvent
+    });
   }
 
   function swarmAction(act) {
@@ -742,7 +1010,7 @@
   async function uploadAndScanFile(input) {
     if (!input.files || !input.files[0]) return;
     const file = input.files[0];
-    showToast('🧬 Analizando ' + file.name + ' con Porygon2 (SHA-256 + Entropía)...', false);
+    showToast('🧬 Analizando ' + file.name + ' con Porygon2 (SHA-256 + YARA + Entropía)...', false);
     const reader = new FileReader();
     reader.onload = async function(evt) {
       const base64 = evt.target.result.split(',')[1] || '';
@@ -766,6 +1034,7 @@
              String(c.pid).includes(q) ||
              (c.remoteEp || '').toLowerCase().includes(q) ||
              (c.localEp || '').toLowerCase().includes(q) ||
+             (c.matchedRule || '').toLowerCase().includes(q) ||
              (c.signer || '').toLowerCase().includes(q);
     });
     document.getElementById('tabTcpCnt').textContent = rows.length;
@@ -777,25 +1046,131 @@
     tb.innerHTML = rows.map(c => {
       const sevClass = c.risk >= 75 ? 'b-crit' : (c.risk >= 45 ? 'b-high' : 'b-info');
       const signBadge = c.isSigned
-        ? `<span class="badge b-info">✔ SIGNED</span> <span style="color:var(--txt-sub);font-size:11px;">${esc(c.signer)}</span>`
+        ? `<span class="badge b-info">✔ SIGNED</span> <span style="color:var(--txt-sub);font-size:10.5px;">${esc(c.signer)}</span>`
         : `<span class="badge b-crit">⚠ UNSIGNED</span>`;
       const remIpOnly = (c.remoteEp || '').split(':')[0];
       const safePath = (c.exePath || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      let ruleBadge = '';
+      if (c.isCtiMatch) {
+        ruleBadge += ` <span class="badge b-crit">🌐 CTI BOTNET IOC</span>`;
+      } else if (c.matchedRule) {
+        ruleBadge += ` <span class="badge b-high">📜 ${esc(c.matchedRule)}</span>`;
+      }
       return `<tr>
         <td><strong>${c.pid}</strong></td>
         <td>
           <strong style="color:${c.isLolBin ? 'var(--gold)' : 'var(--txt-main)'}">${esc(c.processName)}.exe</strong>
           ${c.isLolBin ? '<span class="badge b-high">LOLBIN</span>' : ''}
-          <div style="color:var(--txt-sub);font-size:10.5px;">${esc(c.exePath)}</div>
+          <div style="color:var(--txt-sub);font-size:10px;">${esc(c.exePath)}</div>
         </td>
         <td>${signBadge}</td>
         <td>${esc(c.localEp)}</td>
         <td><strong style="color:var(--cyan)">${esc(c.remoteEp)}</strong></td>
-        <td>${esc(c.proto)} <span style="color:var(--txt-sub)">[${esc(c.state)}]</span></td>
+        <td>${esc(c.proto)} <span style="color:var(--txt-sub)">[${esc(c.state)}]</span>${ruleBadge}</td>
         <td><span class="badge ${sevClass}">${c.risk}%</span></td>
         <td style="white-space:nowrap;">
           <button class="btn btn-sm btn-red" onclick="blockIp('${esc(remIpOnly)}', 'TCP Table Block (${esc(c.processName)})')">🔥 Bloquear IP</button>
-          <button class="btn btn-sm btn-gold" onclick="scanProcessExe('${safePath}')">🔍 Analizar .exe</button>
+          <button class="btn btn-sm btn-gold" onclick="scanProcessExe('${safePath}')">🔍 .exe</button>
+          <button class="btn btn-sm btn-red" onclick="killPid(${c.pid}, '${esc(c.processName)}')" title="Terminar proceso en memoria (EDR Kill Process)">💀 Kill PID</button>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  function renderFleetAndRules() {
+    if (!lastState) return;
+    const fleet = lastState.fleetNodes || [];
+    document.getElementById('tabFleetCnt').textContent = fleet.length;
+    document.getElementById('kFleetCnt').textContent = fleet.length;
+    const fb = document.getElementById('fleetBody');
+    if (fleet.length === 0) {
+      fb.innerHTML = '<tr><td colspan="5" style="color:var(--txt-sub);">Sin nodos registrados.</td></tr>';
+    } else {
+      fb.innerHTML = fleet.map(n => {
+        const hId = n.hostId || n.hostname || n.hostName;
+        const stCls = (n.status === 'ISOLATED' || n.isIsolated) ? 'b-crit' : (n.risk >= 75 ? 'b-high' : 'b-info');
+        const isoBtn = (n.status === 'ISOLATED' || n.isIsolated)
+          ? `<button class="btn btn-sm" onclick="toggleHostIsolation('${esc(hId)}')">🔓 Levantar Aislamiento</button>`
+          : `<button class="btn btn-sm btn-red" onclick="toggleHostIsolation('${esc(hId)}')">🔒 Aislar Host</button>`;
+        return `<tr>
+          <td>
+            <strong style="color:var(--teal)">${esc(n.hostname || n.hostName)}</strong>
+            <div style="color:var(--txt-sub);font-size:10px;">${esc(n.role)} // Visto: ${esc(n.lastSeen)}</div>
+          </td>
+          <td>
+            <strong style="color:var(--cyan)">${esc(n.ip || n.ipAddress)}</strong>
+            <div style="color:var(--txt-sub);font-size:10px;">${esc(n.os || n.osVersion)}</div>
+          </td>
+          <td>CPU: <strong>${n.cpu}%</strong> | RAM: <strong>${n.ramPct}%</strong> | TCP: <strong>${n.tcpCount}</strong></td>
+          <td>
+            <span class="badge ${stCls}">${esc(n.status)}</span>
+            <span class="badge b-mitre">Riesgo ${n.risk}%</span>
+          </td>
+          <td>${isoBtn}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    const rules = lastState.detectionRules || [];
+    document.getElementById('lblRulesCnt').textContent = rules.length;
+    let totalRuleHits = 0;
+    rules.forEach(r => { totalRuleHits += (r.hits || 0); });
+    document.getElementById('lblRuleHits').textContent = totalRuleHits;
+    const rb = document.getElementById('rulesBody');
+    rb.innerHTML = rules.map(r => {
+      const tCls = r.ruleType === 'YARA' ? 'b-high' : 'b-mitre';
+      const enBadge = r.enabled ? '<span class="badge b-info">ACTIVA</span>' : '<span class="badge b-crit">PAUSADA</span>';
+      return `<tr>
+        <td>
+          <strong>${esc(r.name || r.id)}</strong><br>
+          <span class="badge ${tCls}">${esc(r.ruleType)}</span> ${enBadge}
+        </td>
+        <td>
+          <span class="badge b-mitre">${esc(r.mitre)}</span><br>
+          <span style="color:var(--txt-sub);font-size:10px;">${esc(r.targetField)}</span>
+        </td>
+        <td>
+          <code style="color:var(--gold);font-size:10.5px;">${esc(r.pattern)}</code>
+        </td>
+        <td><strong style="color:var(--cyan)">${r.hits || 0}</strong></td>
+        <td style="white-space:nowrap;">
+          <button class="btn btn-sm" onclick="toggleEnterpriseRule('${esc(r.id)}', false)">${r.enabled ? '⏸' : '▶'}</button>
+          <button class="btn btn-sm btn-red" onclick="toggleEnterpriseRule('${esc(r.id)}', true)">🗑️</button>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  function renderDnsTable() {
+    if (!lastState || !lastState.dnsAudits) return;
+    const q = (document.getElementById('dnsFilter').value || '').toLowerCase();
+    const rows = lastState.dnsAudits.filter(d => {
+      if (!q) return true;
+      return (d.domain || '').toLowerCase().includes(q) ||
+             (d.resolvedIp || '').toLowerCase().includes(q) ||
+             (d.verdict || '').toLowerCase().includes(q);
+    });
+    document.getElementById('tabDnsCnt').textContent = rows.length;
+    const tb = document.getElementById('dnsBody');
+    if (rows.length === 0) {
+      tb.innerHTML = '<tr><td colspan="6" style="color:var(--txt-sub);">Pulsa [🔎 Auditar DNS Ahora] para analizar dominios en caché, DGA y C2 Beaconing.</td></tr>';
+      return;
+    }
+    tb.innerHTML = rows.map(d => {
+      const isSusp = (d.risk || 0) >= 70;
+      const bCls = isSusp ? 'b-crit' : 'b-info';
+      const hasIp = d.resolvedIp && d.resolvedIp !== 'N/A' && /^\d+\./.test(d.resolvedIp);
+      return `<tr>
+        <td style="color:var(--txt-sub);white-space:nowrap;">${esc(d.timestamp)}</td>
+        <td><strong style="color:${isSusp ? 'var(--gold)' : 'var(--txt-main)'}">${esc(d.domain)}</strong></td>
+        <td><code style="color:var(--cyan)">${esc(d.resolvedIp)}</code></td>
+        <td><strong>${d.entropy} bits/B</strong></td>
+        <td>
+          <span class="badge ${bCls}">${esc(d.verdict)} (${d.risk}%)</span>
+          <span class="badge b-mitre">${esc(d.mitre)}</span>
+        </td>
+        <td>
+          ${hasIp ? `<button class="btn btn-sm btn-red" onclick="blockIp('${esc(d.resolvedIp)}', 'DNS DGA/CTI Block (${esc(d.domain)})')">🔥 Bloquear IP</button>` : '-'}
         </td>
       </tr>`;
     }).join('');
@@ -832,8 +1207,12 @@
       } else if (isFile && e.action !== 'QUARANTINED' && e.action !== 'AUTO_QUARANTINED') {
         actBtn += ` <button class="btn btn-sm btn-gold" onclick="quarantinePath('${safeTarget}')">☣️ Aislar</button>`;
       }
+      const chShort = (e.chainHash || '').substring(0, 10);
       return `<tr>
-        <td style="white-space:nowrap;color:var(--txt-sub);">${esc(e.timestamp)}</td>
+        <td style="white-space:nowrap;color:var(--txt-sub);">
+          <div>${esc(e.timestamp)}</div>
+          <span class="badge b-mitre" title="SHA-256 ChainHash: ${esc(e.chainHash)}">🔗 ${esc(chShort)}</span>
+        </td>
         <td style="white-space:nowrap;">
           <span class="badge ${bCls}">${esc(e.severity)}</span>
           <span class="badge b-mitre">${esc(e.mitre)}</span>
@@ -864,7 +1243,7 @@
     document.getElementById('tabAvCnt').textContent = rows.length;
     const tb = document.getElementById('avBody');
     if (rows.length === 0) {
-      tb.innerHTML = '<tr><td colspan="5" style="color:var(--txt-sub);">Pulsa [🔍 Auditar Red TCP/PID + Registro + Startup Ahora] o sube un archivo para analizarlo.</td></tr>';
+      tb.innerHTML = '<tr><td colspan="5" style="color:var(--txt-sub);">Pulsa [🔍 Auditar Red TCP/PID + Registro + Startup] o sube un archivo para analizarlo.</td></tr>';
       return;
     }
     tb.innerHTML = rows.map(r => {
@@ -879,11 +1258,11 @@
         <td>
           <strong style="color:var(--txt-main)">${esc(r.fileName)}</strong> <span style="color:var(--txt-sub)">(${Number(r.sizeBytes || 0).toLocaleString()} B)</span>
           <div style="color:var(--gold);font-size:11px;">${esc(r.detail)}</div>
-          <div style="color:var(--txt-sub);font-size:10.5px;">${esc(r.fullPath)}</div>
+          <div style="color:var(--txt-sub);font-size:10px;">${esc(r.fullPath)}</div>
         </td>
         <td>
           <div>Entropía: <strong>${r.entropy} bits/B</strong></div>
-          <div style="color:var(--txt-sub);font-size:10.5px;" title="${esc(r.sha256)}">SHA256: ${esc((r.sha256 || '').substring(0, 16))}...</div>
+          <div style="color:var(--txt-sub);font-size:10px;" title="${esc(r.sha256)}">SHA256: ${esc((r.sha256 || '').substring(0, 16))}...</div>
         </td>
         <td style="white-space:nowrap;">
           <button class="btn btn-sm btn-gold" onclick="quarantinePath('${safePath}')">☣️ Cuarentena</button>
@@ -915,12 +1294,12 @@
       qTb.innerHTML = qFiles.map(q => `<tr>
         <td>
           <strong>${esc(q.id)}</strong>
-          <div style="color:var(--txt-sub);font-size:10.5px;">${esc(q.timestamp)}</div>
+          <div style="color:var(--txt-sub);font-size:10px;">${esc(q.timestamp)}</div>
         </td>
         <td><strong style="color:var(--gold)">${esc(q.fileName)}</strong></td>
         <td>
           <div style="font-size:11px;">${esc(q.originalPath)}</div>
-          <div style="color:var(--txt-sub);font-size:10.5px;">SHA256: ${esc((q.sha256 || '').substring(0, 20))}...</div>
+          <div style="color:var(--txt-sub);font-size:10px;">SHA256: ${esc((q.sha256 || '').substring(0, 20))}...</div>
         </td>
         <td><button class="btn btn-sm" onclick="restoreQuarantine('${esc(q.id)}')">♻️ Restaurar Archivo</button></td>
       </tr>`).join('');
@@ -938,10 +1317,11 @@
       document.getElementById('kGpu').textContent = st.gpu + '%';
       document.getElementById('kFps').textContent = st.fps;
       document.getElementById('kRam').textContent = st.ramPct + '% (' + st.ramUsed + 'G)';
-      document.getElementById('kNet').textContent = '↓' + st.downKbps + ' ↑' + st.upKbps + ' KB/s';
-      document.getElementById('kPing').textContent = st.pingMs + 'ms';
+      document.getElementById('kCtiCnt').textContent = Number(st.ctiTotalIndicators || 0).toLocaleString();
+      document.getElementById('kKillCnt').textContent = st.totalEdrKills || 0;
+      document.getElementById('kChainHash').textContent = (st.siemChainHash || 'GENESIS').substring(0, 12);
 
-      document.getElementById('bannerText').textContent = st.lastActionBanner || 'HYBRID_DEFENSE_ONLINE';
+      document.getElementById('bannerText').textContent = st.lastActionBanner || 'ENTERPRISE_XDR_ONLINE';
       document.getElementById('jsonlPath').textContent = st.jsonlPath || '';
       document.getElementById('lblScene').textContent = (st.bgSceneMode + 1) + '/3 ' + st.bgSceneName;
 
@@ -958,12 +1338,12 @@
         const a0 = st.agents[0], a1 = st.agents[1], a2 = st.agents[2];
         document.getElementById('ag0Name').textContent = `${a0.name} // GEN G${a0.gen} · LVL ${a0.lvl}`;
         document.getElementById('ag0Stats').innerHTML =
-          `Procesos TCP Auditados: <strong>${st.totalPidAudits}</strong> | Alertas SIEM: <strong>${st.totalSiemAlerts}</strong><br>` +
+          `Procesos TCP Auditados: <strong>${st.totalPidAudits}</strong> | Alertas SIEM: <strong>${st.totalSiemAlerts}</strong> | Feeds CTI: <strong>${st.ctiTotalIndicators || 0} IOCs</strong><br>` +
           `F2-Score Anti-FN: <strong>${a0.f2}%</strong> | Fitness: <strong>${a0.fit}</strong> | Precisión: <strong>${a0.acc}%</strong>`;
 
         document.getElementById('ag1Name').textContent = `${a1.name} // GEN G${a1.gen} · LVL ${a1.lvl}`;
         document.getElementById('ag1Stats').innerHTML =
-          `Archivos Escaneados (SHA-256 + Entropía): <strong>${st.totalAvScans}</strong> | Candidato: <strong>${esc(st.candidateQuarantineName || 'Ninguno')}</strong><br>` +
+          `Archivos Analizados: <strong>${st.totalAvScans}</strong> | Candidato: <strong>${esc(st.candidateQuarantineName || 'Ninguno')}</strong><br>` +
           `F2-Score Anti-FN: <strong>${a1.f2}%</strong> | Fitness: <strong>${a1.fit}</strong> | Precisión: <strong>${a1.acc}%</strong>`;
 
         document.getElementById('ag2Name').textContent = `${a2.name} // GEN G${a2.gen} · LVL ${a2.lvl}`;
@@ -972,12 +1352,28 @@
           `Candidato Bloqueo IP: <strong style="color:var(--red)">${esc(st.candidateBlockIp || 'Ninguna')}</strong> (${esc(st.candidateBlockProc || '-')})`;
       }
 
+      if (st.soar) {
+        document.getElementById('kCefSent').textContent = st.soar.totalCefSent || 0;
+        document.getElementById('kFgSent').textContent = st.soar.totalFortiGatePushes || 0;
+        document.getElementById('soarStatusTxt').textContent = 'Estado SOAR: ' + (st.soar.lastStatus || 'STANDBY');
+        if (!soarFormDirty) {
+          document.getElementById('soarSyslogEn').checked = !!st.soar.syslogEnabled;
+          document.getElementById('soarSyslogHost').value = st.soar.syslogHost || '127.0.0.1';
+          document.getElementById('soarSyslogPort').value = st.soar.syslogPort || 514;
+          document.getElementById('soarFgEn').checked = !!st.soar.fortiGateEnabled;
+          document.getElementById('soarFgUrl').value = st.soar.fortiGateUrl || '';
+          document.getElementById('soarFgGroup').value = st.soar.fortiGateGroup || 'PORYGON_XDR_BLOCKLIST';
+        }
+      }
+
       const manualIpInput = document.getElementById('manualBlockIp');
       if (!manualIpInput.value && st.candidateBlockIp) {
         manualIpInput.value = st.candidateBlockIp;
       }
 
       renderTcpTable();
+      renderFleetAndRules();
+      renderDnsTable();
       renderSiemTable();
       renderAvTable();
       renderFwAndQuar();
@@ -987,7 +1383,7 @@
   }
 
   fetchState();
-  setInterval(fetchState, 1500);
+  setInterval(fetchState, 1600);
 </script>
 </body>
 </html>

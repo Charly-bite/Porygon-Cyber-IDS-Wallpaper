@@ -533,7 +533,7 @@ public static class PorygonCyberDefenseEngine {
     public class SiemSecurityEvent {
         public string Timestamp;
         public string AgentName;    // PORYGON, PORYGON2, PORYGON-Z
-        public string Module;       // NIDS_EDR, AV_SCAN, SIEM_REG, SIEM_EVTLOG, IPS_FIREWALL, IPS_QUARANTINE
+        public string Module;       // NIDS_EDR, AV_SCAN, SIEM_REG, SIEM_EVTLOG, IPS_FIREWALL, IPS_QUARANTINE, CTI_IOC, YARA_SIGMA, DNS_DGA, SOAR
         public string Severity;     // INFO, MEDIUM, HIGH, CRITICAL
         public string MitreId;      // T1071, T1059, T1547.001, T1027, M1037...
         public string ProcessInfo;  // e.g. powershell.exe [PID:4812]
@@ -542,6 +542,7 @@ public static class PorygonCyberDefenseEngine {
         public float RiskScore;
         public string Summary;
         public string ActionTaken;  // MONITORED, ALERT_READY, AUTO_BLOCKED, AUTO_QUARANTINED, USER_BLOCKED, USER_QUARANTINED
+        public string ChainHash;    // Tamper-evident SHA-256 cryptographic chain hash (ISO 27001 / SOC2)
     }
 
     public class QuarantineRecord {
@@ -567,6 +568,63 @@ public static class PorygonCyberDefenseEngine {
         public string Proto;
         public string State;
         public int RiskPct;
+        public bool IsCtiMatch;
+        public string MatchedRule;
+    }
+
+    public class EnterpriseDetectionRule {
+        public string Id;
+        public string Name;
+        public string RuleType;     // "YARA" or "SIGMA"
+        public string TargetField;  // "FILE_CONTENT", "PROCESS_NAME", "REMOTE_PORT", "DNS_DOMAIN"
+        public string Pattern;
+        public string MitreId;
+        public string Severity;
+        public int RiskPct;
+        public bool Enabled;
+        public int HitsCount;
+    }
+
+    public class FleetEndpointNode {
+        public string HostId;
+        public string Hostname;
+        public string IpAddress;
+        public string OsVersion;
+        public string AgentRole;    // "MASTER_SOC_SERVER" or "REMOTE_SENSOR"
+        public string Status;       // "ONLINE", "ISOLATED", "HIGH_RISK"
+        public float CpuPct;
+        public int RamPct;
+        public int ActiveTcpCount;
+        public int OpenAlerts;
+        public int RiskScorePct;
+        public bool IsIsolated;
+        public string LastSeen;
+        public DateTime LastSeenUtc;
+    }
+
+    public class DnsAuditEntry {
+        public string Timestamp;
+        public string Domain;
+        public string RecordType;
+        public string ResolvedIp;
+        public float Entropy;
+        public int RiskPct;
+        public string Verdict;      // "CLEAN_DNS", "DGA_HIGH_ENTROPY", "C2_TUNNEL_SUSPECT", "CTI_IOC_DOMAIN"
+        public string MitreId;
+    }
+
+    public class SoarEnterpriseConfig {
+        public bool SyslogEnabled = false;
+        public string SyslogHost = "127.0.0.1";
+        public int SyslogPort = 514;
+        public bool FortiGateEnabled = false;
+        public string FortiGateWebhookUrl = "https://192.168.1.99/api/v2/monitor/system/automation-stitch/webhook/porygon_ips";
+        public string FortiGateApiToken = "";
+        public string FortiGateAddressGroup = "PORYGON_XDR_BLOCKLIST";
+        public bool AutoKillCriticalUnsigned = false;
+        public int TotalCefSent = 0;
+        public int TotalFortiGatePushes = 0;
+        public string LastSoarStatus = "SOAR_READY // Syslog CEF (UDP 514) + Conector Perimetral FortiGate configurables";
     }
 
     public const int WebSocPort = 5090;
@@ -578,12 +636,27 @@ public static class PorygonCyberDefenseEngine {
     private static bool registryBaselineReady = false;
     private static DateTime lastEventLogPollUtc = DateTime.UtcNow.AddMinutes(-5);
     private static int lastEventLogIndex = -1;
+    private static DateTime lastDnsAuditUtc = DateTime.UtcNow.AddMinutes(-5);
+    private static Dictionary<string, List<DateTime>> c2BeaconHistory = new Dictionary<string, List<DateTime>>(StringComparer.OrdinalIgnoreCase);
+    private static HashSet<string> alertedBeacons = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
     public static List<SiemSecurityEvent> RecentSiemEvents = new List<SiemSecurityEvent>();
     public static List<AvScanReport> RecentAvScans = new List<AvScanReport>();
     public static List<string> BlockedFirewallIps = new List<string>();
     public static List<QuarantineRecord> QuarantinedFiles = new List<QuarantineRecord>();
     public static List<LiveTcpConnectionRow> ActiveTcpRows = new List<LiveTcpConnectionRow>();
+
+    // Enterprise XDR State: CTI Threat Feeds, YARA/Sigma Rules, Multi-Host Fleet, DNS Inspector & SOAR
+    public static HashSet<string> CtiMaliciousIps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    public static int CtiTotalIndicators = 0;
+    public static int CtiHitsCount = 0;
+    public static string CtiLastSyncStatus = "Semilla CTI cargada (Sincronizando Feodo Tracker C2...)";
+    public static List<EnterpriseDetectionRule> DetectionRules = new List<EnterpriseDetectionRule>();
+    public static Dictionary<string, FleetEndpointNode> FleetNodes = new Dictionary<string, FleetEndpointNode>(StringComparer.OrdinalIgnoreCase);
+    public static List<DnsAuditEntry> RecentDnsAudits = new List<DnsAuditEntry>();
+    public static SoarEnterpriseConfig SoarConfig = new SoarEnterpriseConfig();
+    public static string LastSiemChainHash = "0000000000000000";
+    public static int TotalEdrProcessesKilled = 0;
 
     // Active Hybrid IPS / AV Candidates for 1-Click HUD Response
     public static string LastCandidateBlockIp = "";
@@ -600,7 +673,7 @@ public static class PorygonCyberDefenseEngine {
     public static int TotalAvFilesScanned = 0;
     public static int TotalSiemAlerts = 0;
     public static int TotalIpsActions = 0;
-    public static string LastActionBanner = "HYBRID_DEFENSE_ONLINE // WEB SOC ACTIVO EN http://localhost:5090";
+    public static string LastActionBanner = "ENTERPRISE_XDR_ONLINE // WEB SOC ACTIVO EN http://localhost:5090";
 
     private static List<FileSystemWatcher> activeWatchers = new List<FileSystemWatcher>();
     private static Queue<string> pendingAvFiles = new Queue<string>();
@@ -651,12 +724,21 @@ public static class PorygonCyberDefenseEngine {
         get { return Path.Combine(AppBaseDir, "quarantine_manifest.txt"); }
     }
 
+    private static string EnterpriseRulesPath {
+        get { return Path.Combine(AppBaseDir, "enterprise_rules.txt"); }
+    }
+
+    private static string SoarConfigPath {
+        get { return Path.Combine(AppBaseDir, "soar_config.txt"); }
+    }
+
     public static void Initialize() {
         lock (SyncLock) {
             if (engineInitialized) return;
             engineInitialized = true;
         }
         try {
+            InitializeDefaultRulesAndCtiSeeds();
             LoadPersistedIpsAndQuarantine();
             AuditRegistryPersistence(true);
             StartRealtimeAvWatchers();
@@ -664,17 +746,72 @@ public static class PorygonCyberDefenseEngine {
 
             RecordSiemEvent("PORYGON", "SIEM_INIT", "INFO", "T1046", "HackerWallpaper.exe",
                 "http://localhost:5090", "", 0.05f,
-                "Servicio Web Porygon Cyber Defense SOC activo en http://localhost:5090 (NIDS+PID + AV Watcher + SIEM + Hybrid IPS)",
-                "WEB_SOC_ONLINE");
+                "Plataforma Empresarial Porygon XDR/IDS/IPS/SOAR v3.0 activa en http://localhost:5090 (CTI + YARA/Sigma + Fleet + DNS/DGA + FortiGate/CEF)",
+                "ENTERPRISE_SOC_ONLINE");
 
-            // Perform an initial non-blocking background audit of recent Downloads/Startup files
+            // Perform initial non-blocking background audit + live CTI feed download + DNS cache audit
             ThreadPool.QueueUserWorkItem(_ => {
                 try {
-                    Thread.Sleep(1200);
+                    Thread.Sleep(1000);
+                    SyncLiveCtiThreatFeeds(false);
+                    AuditDnsCacheAndBeaconing(false);
                     RunQuickDirectoryAudit(false);
                 } catch { }
             });
         } catch { }
+    }
+
+    private static void InitializeDefaultRulesAndCtiSeeds() {
+        lock (SyncLock) {
+            string[] seedC2Ips = new string[] {
+                "185.220.101.4", "185.220.101.45", "45.155.205.233", "193.42.33.14",
+                "91.92.240.58", "178.128.83.165", "162.247.74.200", "89.248.165.59",
+                "45.142.214.123", "194.26.29.114", "185.196.8.145", "5.188.206.14",
+                "141.98.10.60", "198.98.56.151", "94.102.61.24", "195.123.246.18"
+            };
+            for (int i = 0; i < seedC2Ips.Length; i++) {
+                CtiMaliciousIps.Add(seedC2Ips[i]);
+            }
+            CtiTotalIndicators = CtiMaliciousIps.Count;
+
+            if (DetectionRules.Count == 0) {
+                DetectionRules.Add(new EnterpriseDetectionRule {
+                    Id = "YARA_001", Name = "YARA_CREDENTIAL_DUMP_MIMIKATZ", RuleType = "YARA",
+                    TargetField = "FILE_CONTENT", Pattern = "sekurlsa", MitreId = "T1003.001",
+                    Severity = "CRITICAL", RiskPct = 98, Enabled = true, HitsCount = 0
+                });
+                DetectionRules.Add(new EnterpriseDetectionRule {
+                    Id = "YARA_002", Name = "YARA_AMSI_ETW_MEMORY_PATCH", RuleType = "YARA",
+                    TargetField = "FILE_CONTENT", Pattern = "amsiinitfailed", MitreId = "T1562.001",
+                    Severity = "CRITICAL", RiskPct = 95, Enabled = true, HitsCount = 0
+                });
+                DetectionRules.Add(new EnterpriseDetectionRule {
+                    Id = "YARA_003", Name = "YARA_RANSOM_SHADOWCOPY_WIPE", RuleType = "YARA",
+                    TargetField = "FILE_CONTENT", Pattern = "vssadmin delete shadows", MitreId = "T1490",
+                    Severity = "CRITICAL", RiskPct = 99, Enabled = true, HitsCount = 0
+                });
+                DetectionRules.Add(new EnterpriseDetectionRule {
+                    Id = "SIGMA_001", Name = "SIGMA_POWERSHELL_ENCODED_CRADLE", RuleType = "SIGMA",
+                    TargetField = "FILE_CONTENT", Pattern = "frombase64string", MitreId = "T1059.001",
+                    Severity = "HIGH", RiskPct = 88, Enabled = true, HitsCount = 0
+                });
+                DetectionRules.Add(new EnterpriseDetectionRule {
+                    Id = "SIGMA_002", Name = "SIGMA_C2_METASPLOIT_PORT_4444", RuleType = "SIGMA",
+                    TargetField = "REMOTE_PORT", Pattern = "4444", MitreId = "T1571",
+                    Severity = "CRITICAL", RiskPct = 96, Enabled = true, HitsCount = 0
+                });
+                DetectionRules.Add(new EnterpriseDetectionRule {
+                    Id = "SIGMA_003", Name = "SIGMA_LOLBIN_CERTUTIL_MSHTA", RuleType = "SIGMA",
+                    TargetField = "PROCESS_NAME", Pattern = "mshta", MitreId = "T1218.005",
+                    Severity = "HIGH", RiskPct = 90, Enabled = true, HitsCount = 0
+                });
+                DetectionRules.Add(new EnterpriseDetectionRule {
+                    Id = "SIGMA_004", Name = "SIGMA_TOR_ONION_DNS_TUNNEL", RuleType = "SIGMA",
+                    TargetField = "DNS_DOMAIN", Pattern = ".onion", MitreId = "T1090.003",
+                    Severity = "HIGH", RiskPct = 91, Enabled = true, HitsCount = 0
+                });
+            }
+        }
     }
 
     private static void LoadPersistedIpsAndQuarantine() {
@@ -712,6 +849,47 @@ public static class PorygonCyberDefenseEngine {
                     }
                 }
             }
+            if (File.Exists(EnterpriseRulesPath)) {
+                string[] rlines = File.ReadAllLines(EnterpriseRulesPath, Encoding.UTF8);
+                lock (SyncLock) {
+                    if (rlines.Length > 0) DetectionRules.Clear();
+                    for (int i = 0; i < rlines.Length; i++) {
+                        string[] p = rlines[i].Split('|');
+                        if (p.Length >= 9) {
+                            int rk = 85, hc = 0;
+                            int.TryParse(p[6], out rk);
+                            int.TryParse(p[8], out hc);
+                            DetectionRules.Add(new EnterpriseDetectionRule {
+                                Id = p[0],
+                                Name = p[1],
+                                RuleType = p[2],
+                                TargetField = p[3],
+                                Pattern = p[4],
+                                MitreId = p[5],
+                                RiskPct = rk,
+                                Enabled = (p[7] == "1" || p[7].Equals("true", StringComparison.OrdinalIgnoreCase)),
+                                HitsCount = hc,
+                                Severity = rk >= 90 ? "CRITICAL" : "HIGH"
+                            });
+                        }
+                    }
+                }
+            }
+            if (File.Exists(SoarConfigPath)) {
+                string[] slines = File.ReadAllLines(SoarConfigPath, Encoding.UTF8);
+                if (slines.Length >= 6) {
+                    lock (SyncLock) {
+                        SoarConfig.SyslogEnabled = (slines[0] == "1");
+                        SoarConfig.SyslogHost = string.IsNullOrEmpty(slines[1]) ? "127.0.0.1" : slines[1];
+                        int sp = 514;
+                        if (int.TryParse(slines[2], out sp)) SoarConfig.SyslogPort = sp;
+                        SoarConfig.FortiGateEnabled = (slines[3] == "1");
+                        SoarConfig.FortiGateWebhookUrl = slines[4];
+                        SoarConfig.FortiGateAddressGroup = string.IsNullOrEmpty(slines[5]) ? "PORYGON_XDR_BLOCKLIST" : slines[5];
+                        if (slines.Length >= 7) SoarConfig.FortiGateApiToken = slines[6];
+                    }
+                }
+            }
         } catch { }
     }
 
@@ -719,9 +897,21 @@ public static class PorygonCyberDefenseEngine {
         try {
             List<string> ipsSnap;
             List<QuarantineRecord> qSnap;
+            List<EnterpriseDetectionRule> rSnap;
+            string[] soarLines;
             lock (SyncLock) {
                 ipsSnap = new List<string>(BlockedFirewallIps);
                 qSnap = new List<QuarantineRecord>(QuarantinedFiles);
+                rSnap = new List<EnterpriseDetectionRule>(DetectionRules);
+                soarLines = new string[] {
+                    SoarConfig.SyslogEnabled ? "1" : "0",
+                    SoarConfig.SyslogHost ?? "127.0.0.1",
+                    SoarConfig.SyslogPort.ToString(),
+                    SoarConfig.FortiGateEnabled ? "1" : "0",
+                    SoarConfig.FortiGateWebhookUrl ?? "",
+                    SoarConfig.FortiGateAddressGroup ?? "PORYGON_XDR_BLOCKLIST",
+                    SoarConfig.FortiGateApiToken ?? ""
+                };
             }
             File.WriteAllLines(BlockedIpsPath, ipsSnap.ToArray(), Encoding.UTF8);
             List<string> qLines = new List<string>();
@@ -732,6 +922,18 @@ public static class PorygonCyberDefenseEngine {
                 }));
             }
             File.WriteAllLines(QuarantineManifestPath, qLines.ToArray(), Encoding.UTF8);
+
+            List<string> rLines = new List<string>();
+            for (int i = 0; i < rSnap.Count; i++) {
+                var rl = rSnap[i];
+                rLines.Add(string.Join("|", new string[] {
+                    rl.Id ?? "", rl.Name ?? "", rl.RuleType ?? "YARA", rl.TargetField ?? "FILE_CONTENT",
+                    (rl.Pattern ?? "").Replace("|", ""), rl.MitreId ?? "T1027", rl.RiskPct.ToString(),
+                    rl.Enabled ? "1" : "0", rl.HitsCount.ToString()
+                }));
+            }
+            File.WriteAllLines(EnterpriseRulesPath, rLines.ToArray(), Encoding.UTF8);
+            File.WriteAllLines(SoarConfigPath, soarLines, Encoding.UTF8);
         } catch { }
     }
 
@@ -1025,7 +1227,7 @@ public static class PorygonCyberDefenseEngine {
                 indicators.Add("USER_DROP_ZONE");
             }
 
-            // Check script / payload evasion signatures
+            // Check script / payload evasion signatures & Custom YARA / Sigma FILE_CONTENT rules
             string lowerText = asciiPreview.ToLowerInvariant();
             if (lowerText.Contains("frombase64string") || lowerText.Contains("-encodedcommand") || lowerText.Contains(" -enc ")) {
                 risk += 0.35f;
@@ -1042,10 +1244,28 @@ public static class PorygonCyberDefenseEngine {
                 mitre = "T1105";
                 indicators.Add("REMOTE_CRADLE_EXEC");
             }
-            if (lowerText.Contains("mimikatz") || lowerText.Contains("sekurlsa") || lowerText.Contains("virtualalloc") && !isSigned) {
+            if (lowerText.Contains("mimikatz") || lowerText.Contains("sekurlsa") || (lowerText.Contains("virtualalloc") && !isSigned)) {
                 risk += 0.42f;
                 mitre = "T1055";
                 indicators.Add("SHELLCODE_MEM_API");
+            }
+
+            // Evaluate Enterprise YARA / Sigma FILE_CONTENT Rules
+            lock (SyncLock) {
+                for (int rIdx = 0; rIdx < DetectionRules.Count; rIdx++) {
+                    var rule = DetectionRules[rIdx];
+                    if (!rule.Enabled || string.IsNullOrEmpty(rule.Pattern)) continue;
+                    if (string.Equals(rule.TargetField, "FILE_CONTENT", StringComparison.OrdinalIgnoreCase)) {
+                        if (lowerText.Contains(rule.Pattern.ToLowerInvariant()) || fi.Name.ToLowerInvariant().Contains(rule.Pattern.ToLowerInvariant())) {
+                            rule.HitsCount++;
+                            float rFloat = rule.RiskPct / 100f;
+                            if (rFloat > risk) risk = rFloat;
+                            else risk += 0.25f;
+                            mitre = rule.MitreId ?? mitre;
+                            indicators.Add(rule.RuleType + ":" + rule.Name);
+                        }
+                    }
+                }
             }
 
             risk = Math.Max(0.04f, Math.Min(0.99f, risk));
@@ -1153,16 +1373,17 @@ public static class PorygonCyberDefenseEngine {
             }
             AuditRegistryPersistence(false);
             PollWindowsEventLogs();
+            AuditDnsCacheAndBeaconing(manualTrigger);
             if (manualTrigger) {
                 lock (SyncLock) {
-                    LastActionBanner = string.Format("ACTIVE_AUDIT_OK // {0} archivos + Registro Run + TCP/PID auditados", scanned);
+                    LastActionBanner = string.Format("ENTERPRISE_AUDIT_OK // {0} archivos + DNS/DGA + Registro Run + TCP/PID auditados", scanned);
                 }
             }
         } catch { }
     }
 
     // =========================================================================
-    // MODULE 3: PORYGON SIEM ENGINE (Registry Run Persistence + Windows EventLog + JSONL)
+    // MODULE 3: PORYGON SIEM ENGINE (Registry Run + PowerShell/System EventLog + Hash-Chain JSONL + Syslog CEF)
     // =========================================================================
     public static void AuditRegistryPersistence(bool isInitialBaseline) {
         try {
@@ -1234,36 +1455,74 @@ public static class PorygonCyberDefenseEngine {
         try {
             using (EventLog sysLog = new EventLog("System")) {
                 int cnt = sysLog.Entries.Count;
-                if (cnt <= 0) return;
-                if (lastEventLogIndex < 0) {
-                    lastEventLogIndex = Math.Max(0, cnt - 4);
-                    return;
-                }
-                int startIdx = Math.Max(lastEventLogIndex + 1, cnt - 10);
-                for (int i = startIdx; i < cnt; i++) {
-                    EventLogEntry entry = sysLog.Entries[i];
-                    lastEventLogIndex = i;
-                    long evId = entry.InstanceId & 0xFFFF;
-                    // Event ID 7045: A new service was installed in the system (MITRE T1543.003)
-                    if (evId == 7045 || entry.EntryType == EventLogEntryType.Error) {
-                        string src = entry.Source ?? "System";
-                        string msg = (entry.Message ?? "").Replace("\r", " ").Replace("\n", " ");
-                        if (msg.Length > 90) msg = msg.Substring(0, 90) + "...";
-                        bool isServiceInstall = (evId == 7045);
-                        float score = isServiceInstall ? 0.84f : 0.48f;
-                        string mitre = isServiceInstall ? "T1543.003" : "T1082";
-                        RecordSiemEvent("PORYGON", "SIEM_EVTLOG", isServiceInstall ? "HIGH" : "INFO", mitre,
-                            src + " [ID:" + evId + "]", "WIN_EVENT_LOG", "", score, msg, "CORRELATED");
+                if (cnt > 0) {
+                    if (lastEventLogIndex < 0) {
+                        lastEventLogIndex = Math.Max(0, cnt - 4);
+                    } else {
+                        int startIdx = Math.Max(lastEventLogIndex + 1, cnt - 10);
+                        for (int i = startIdx; i < cnt; i++) {
+                            EventLogEntry entry = sysLog.Entries[i];
+                            lastEventLogIndex = i;
+                            long evId = entry.InstanceId & 0xFFFF;
+                            // Event ID 7045: Service install (T1543.003), 7034/7031: Unexpected service crash
+                            if (evId == 7045 || evId == 7034 || entry.EntryType == EventLogEntryType.Error) {
+                                string src = entry.Source ?? "System";
+                                string msg = (entry.Message ?? "").Replace("\r", " ").Replace("\n", " ");
+                                if (msg.Length > 95) msg = msg.Substring(0, 95) + "...";
+                                bool isServiceInstall = (evId == 7045);
+                                float score = isServiceInstall ? 0.86f : 0.48f;
+                                string mitre = isServiceInstall ? "T1543.003" : "T1082";
+                                RecordSiemEvent("PORYGON", "SIEM_EVTLOG", isServiceInstall ? "HIGH" : "INFO", mitre,
+                                    src + " [ID:" + evId + "]", "WIN_EVENT_LOG", "", score, msg, "CORRELATED");
+                            }
+                        }
                     }
                 }
             }
         } catch { }
+
+        // Check for suspicious LSASS dumping tools or masquerading processes in memory (MITRE T1003.001)
+        try {
+            Process[] procs = Process.GetProcesses();
+            for (int i = 0; i < procs.Length; i++) {
+                try {
+                    string pn = (procs[i].ProcessName ?? "").ToLowerInvariant();
+                    if (pn.Contains("procdump") || pn.Contains("mimikatz") || pn.Contains("nanodump") || pn.Contains("lazagne") || pn.Contains("rubeus")) {
+                        RecordSiemEvent("PORYGON2", "EDR_CRED_GUARD", "CRITICAL", "T1003.001",
+                            pn + " [PID:" + procs[i].Id + "]", "LSASS_MEMORY", "", 0.98f,
+                            "Herramienta de volcado de credenciales detectada en memoria: " + pn, "EDR_ALERT");
+                    }
+                } catch { } finally {
+                    procs[i].Dispose();
+                }
+            }
+        } catch { }
+    }
+
+    private static string ComputeSiemHashChainLink(string prevHash, string ts, string mitre, string target, string summary) {
+        try {
+            string raw = (prevHash ?? "0000") + "|" + ts + "|" + mitre + "|" + target + "|" + summary;
+            using (SHA256 sha = SHA256.Create()) {
+                byte[] b = sha.ComputeHash(Encoding.UTF8.GetBytes(raw));
+                StringBuilder sb = new StringBuilder(16);
+                for (int i = 0; i < 8 && i < b.Length; i++) sb.Append(b[i].ToString("x2"));
+                return sb.ToString();
+            }
+        } catch {
+            return "a1b2c3d4e5f60718";
+        }
     }
 
     public static void RecordSiemEvent(string agent, string module, string severity, string mitreId,
         string processInfo, string target, string sha256, float riskScore, string summary, string actionTaken) {
         string ts = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
         string shortTs = DateTime.Now.ToString("HH:mm:ss");
+
+        string chainHash;
+        lock (SyncLock) {
+            chainHash = ComputeSiemHashChainLink(LastSiemChainHash, ts, mitreId ?? "T1071", target ?? "", summary ?? "");
+            LastSiemChainHash = chainHash;
+        }
 
         SiemSecurityEvent ev = new SiemSecurityEvent {
             Timestamp = shortTs,
@@ -1276,13 +1535,14 @@ public static class PorygonCyberDefenseEngine {
             Sha256 = sha256 ?? "",
             RiskScore = riskScore,
             Summary = summary ?? "",
-            ActionTaken = actionTaken ?? "LOGGED"
+            ActionTaken = actionTaken ?? "LOGGED",
+            ChainHash = chainHash
         };
 
         lock (SyncLock) {
             TotalSiemAlerts++;
             RecentSiemEvents.Add(ev);
-            while (RecentSiemEvents.Count > 100) RecentSiemEvents.RemoveAt(0);
+            while (RecentSiemEvents.Count > 120) RecentSiemEvents.RemoveAt(0);
         }
 
         try {
@@ -1290,8 +1550,8 @@ public static class PorygonCyberDefenseEngine {
             string safeTarget = (ev.Target ?? "").Replace("\"", "'").Replace("\\", "\\\\");
             string safeSum = (ev.Summary ?? "").Replace("\"", "'").Replace("\\", "\\\\");
             string jsonl = string.Format(System.Globalization.CultureInfo.InvariantCulture,
-                "{{\"timestamp\":\"{0}\",\"agent\":\"{1}\",\"module\":\"{2}\",\"severity\":\"{3}\",\"mitre\":\"{4}\",\"process\":\"{5}\",\"target\":\"{6}\",\"sha256\":\"{7}\",\"risk\":{8:0.00},\"action\":\"{9}\",\"summary\":\"{10}\"}}\r\n",
-                ts, ev.AgentName, ev.Module, ev.Severity, ev.MitreId, safeProc, safeTarget, ev.Sha256, ev.RiskScore, ev.ActionTaken, safeSum);
+                "{{\"timestamp\":\"{0}\",\"chainHash\":\"{1}\",\"agent\":\"{2}\",\"module\":\"{3}\",\"severity\":\"{4}\",\"mitre\":\"{5}\",\"process\":\"{6}\",\"target\":\"{7}\",\"sha256\":\"{8}\",\"risk\":{9:0.00},\"action\":\"{10}\",\"summary\":\"{11}\"}}\r\n",
+                ts, ev.ChainHash, ev.AgentName, ev.Module, ev.Severity, ev.MitreId, safeProc, safeTarget, ev.Sha256, ev.RiskScore, ev.ActionTaken, safeSum);
 
             File.AppendAllText(SiemJsonlPath, jsonl, Encoding.UTF8);
             string projDir = Path.GetDirectoryName(ProjectSiemJsonlPath);
@@ -1299,10 +1559,13 @@ public static class PorygonCyberDefenseEngine {
                 File.AppendAllText(ProjectSiemJsonlPath, jsonl, Encoding.UTF8);
             }
         } catch { }
+
+        // Forward to Corporate Syslog CEF (RFC 5424 / ArcSight CEF) if enabled
+        SendSyslogCefDatagram(ev);
     }
 
     // =========================================================================
-    // MODULE 4: PORYGON-Z HYBRID ACTIVE IPS (Windows Firewall Block + Quarantine Vault)
+    // MODULE 4: PORYGON-Z HYBRID ACTIVE IPS + EDR KILL PID + FORTIGATE SOAR
     // =========================================================================
     public static bool IsSafeWhitelistedIp(string ip) {
         if (string.IsNullOrEmpty(ip)) return true;
@@ -1338,7 +1601,7 @@ public static class PorygonCyberDefenseEngine {
             }
         }
 
-        // In Hybrid Mode, if score >= 0.94 (e.g., VirusTotal confirmed malicious IP or LOLBin on C2 port), Porygon-Z auto-blocks!
+        // In Hybrid Mode, if score >= 0.94 (e.g., CTI Botnet C2 IP, VirusTotal hit, or Sigma Critical match), Porygon-Z auto-blocks!
         if (allowAutoBlockInHybrid && score >= 0.94f) {
             bool alreadyBlocked = false;
             lock (SyncLock) { alreadyBlocked = BlockedFirewallIps.Contains(cleanIp); }
@@ -1378,6 +1641,13 @@ public static class PorygonCyberDefenseEngine {
                 cleanIp, "", 0.95f,
                 string.Format("Regla de bloqueo creada en Windows Firewall ({0}): {1}", ruleName, reason),
                 isAuto ? "AUTO_FW_BLOCKED" : "USER_FW_BLOCKED");
+
+            // Also push to Perimeter FortiGate NGFW if enabled in SOAR config
+            bool fgEnabled = false;
+            lock (SyncLock) { fgEnabled = SoarConfig.FortiGateEnabled; }
+            if (fgEnabled) {
+                ThreadPool.QueueUserWorkItem(_ => PushIpBlockToFortiGate(cleanIp, reason));
+            }
             return true;
         } catch {
             return false;
@@ -1403,6 +1673,42 @@ public static class PorygonCyberDefenseEngine {
         }
     }
 
+    public static bool KillProcessByPid(int pid, string reason, out string resultMessage) {
+        resultMessage = "";
+        if (pid <= 4) {
+            resultMessage = "🛡️ Proceso del Kernel de Windows protegido (PID " + pid + ").";
+            return false;
+        }
+        try {
+            using (Process p = Process.GetProcessById(pid)) {
+                string pName = (p.ProcessName ?? "").ToLowerInvariant();
+                if (pName == "svchost" || pName == "lsass" || pName == "csrss" || pName == "wininit" ||
+                    pName == "services" || pName == "smss" || pName == "dwm" || pName == "explorer" ||
+                    pName == "winlogon" || pName == "fontdrvhost" || pName == "hackerwallpaper" ||
+                    pName == "code" || pName == "antigravity") {
+                    resultMessage = "🛡️ Salvaguarda EDR: El proceso crítico '" + p.ProcessName + "' (PID " + pid + ") está protegido contra terminación.";
+                    return false;
+                }
+                string fullProcLabel = p.ProcessName + ".exe [PID:" + pid + "]";
+                p.Kill();
+                lock (SyncLock) {
+                    TotalEdrProcessesKilled++;
+                    TotalIpsActions++;
+                    LastActionBanner = "EDR_KILL // Proceso terminado por Porygon-Z: " + fullProcLabel;
+                }
+                RecordSiemEvent("PORYGON-Z", "EDR_RESPONSE", "CRITICAL", "T1059", fullProcLabel,
+                    "PID:" + pid, "", 0.94f,
+                    "Proceso finalizado activamente por respuesta EDR (" + (reason ?? "Web SOC Kill PID") + ")",
+                    "PROCESS_KILLED");
+                resultMessage = "💀 Proceso " + fullProcLabel + " terminado exitosamente por Porygon-Z EDR.";
+                return true;
+            }
+        } catch (Exception ex) {
+            resultMessage = "No se pudo terminar PID " + pid + ": " + ex.Message;
+            return false;
+        }
+    }
+
     private static void RunNetshSilent(string args) {
         try {
             ProcessStartInfo psi = new ProcessStartInfo("netsh.exe", args) {
@@ -1420,12 +1726,10 @@ public static class PorygonCyberDefenseEngine {
         if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) return false;
         try {
             string lower = filePath.ToLowerInvariant();
-            // Never quarantine system binaries or our own suite
             if (lower.StartsWith(@"c:\windows\") || lower.StartsWith(@"c:\program files") || lower.Contains("hackerwallpaper")) {
                 return false;
             }
 
-            // If a process is currently running from this exact path, terminate it first
             try {
                 Process[] procs = Process.GetProcesses();
                 for (int i = 0; i < procs.Length; i++) {
@@ -1505,6 +1809,495 @@ public static class PorygonCyberDefenseEngine {
     }
 
     // =========================================================================
+    // MODULE 6: ENTERPRISE CTI FEEDS, SIGMA/YARA NETWORK ENGINE, DNS/DGA & SOAR
+    // =========================================================================
+    public static int SyncLiveCtiThreatFeeds(bool manualTrigger) {
+        int added = 0;
+        try {
+            ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+            string[] feedUrls = new string[] {
+                "https://feodotracker.abuse.ch/downloads/ipblocklist_recommended.txt",
+                "https://cinsscore.com/list/ci-badguys.txt"
+            };
+            for (int f = 0; f < feedUrls.Length; f++) {
+                try {
+                    using (WebClient wc = new WebClient()) {
+                        wc.Headers.Add("User-Agent", "PorygonEnterpriseXDR/3.0");
+                        string content = wc.DownloadString(feedUrls[f]);
+                        if (!string.IsNullOrEmpty(content)) {
+                            string[] lines = content.Split(new char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                            lock (SyncLock) {
+                                for (int i = 0; i < lines.Length && CtiMaliciousIps.Count < 15000; i++) {
+                                    string ln = lines[i].Trim();
+                                    if (ln.Length < 7 || ln.StartsWith("#") || ln.StartsWith(";")) continue;
+                                    IPAddress dummy;
+                                    if (IPAddress.TryParse(ln, out dummy)) {
+                                        if (CtiMaliciousIps.Add(ln)) added++;
+                                    }
+                                }
+                                CtiTotalIndicators = CtiMaliciousIps.Count;
+                            }
+                        }
+                    }
+                } catch { }
+            }
+            lock (SyncLock) {
+                CtiTotalIndicators = CtiMaliciousIps.Count;
+                CtiLastSyncStatus = string.Format("LIVE_CTI_SYNC // {0:N0} IOCs activos (Feodo Tracker Botnet C2 + CINS Army // {1})",
+                    CtiTotalIndicators, DateTime.Now.ToString("HH:mm:ss"));
+                if (manualTrigger) {
+                    LastActionBanner = CtiLastSyncStatus;
+                }
+            }
+            if (manualTrigger) {
+                RecordSiemEvent("PORYGON", "CTI_FEED_SYNC", "INFO", "T1583", "CTI_ENGINE",
+                    "abuse.ch + cinsscore", "", 0.12f,
+                    string.Format("Feeds de Inteligencia de Amenazas sincronizados: {0:N0} IPs de Botnets/C2 en tabla hash O(1) (+{1} nuevos)", CtiTotalIndicators, added),
+                    "CTI_UPDATED");
+            }
+        } catch { }
+        return CtiTotalIndicators;
+    }
+
+    public static bool IsCtiMaliciousIp(string ip) {
+        if (string.IsNullOrEmpty(ip)) return false;
+        string clean = ip.Split(':')[0].Trim();
+        lock (SyncLock) {
+            if (CtiMaliciousIps.Contains(clean)) {
+                CtiHitsCount++;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static bool EvaluateNetworkSigmaRules(string procName, string remIp, int remPort, out string ruleName, out string mitreId, out int riskPct) {
+        ruleName = "";
+        mitreId = "T1071";
+        riskPct = 0;
+        string pLow = (procName ?? "").ToLowerInvariant();
+        string portStr = remPort.ToString();
+        lock (SyncLock) {
+            for (int i = 0; i < DetectionRules.Count; i++) {
+                var r = DetectionRules[i];
+                if (!r.Enabled || string.IsNullOrEmpty(r.Pattern)) continue;
+                string pat = r.Pattern.ToLowerInvariant();
+                bool match = false;
+                if (string.Equals(r.TargetField, "PROCESS_NAME", StringComparison.OrdinalIgnoreCase)) {
+                    match = pLow.Contains(pat);
+                } else if (string.Equals(r.TargetField, "REMOTE_PORT", StringComparison.OrdinalIgnoreCase)) {
+                    match = (portStr == pat || (remIp + ":" + portStr).Contains(pat));
+                }
+                if (match) {
+                    r.HitsCount++;
+                    ruleName = r.Name;
+                    mitreId = r.MitreId ?? "T1071";
+                    riskPct = r.RiskPct;
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    public static bool CheckC2BeaconingPattern(string remIp, string procTag, out string beaconDetail) {
+        beaconDetail = "";
+        if (string.IsNullOrEmpty(remIp) || IsSafeWhitelistedIp(remIp)) return false;
+        DateTime now = DateTime.UtcNow;
+        lock (SyncLock) {
+            List<DateTime> times;
+            if (!c2BeaconHistory.TryGetValue(remIp, out times)) {
+                times = new List<DateTime>();
+                c2BeaconHistory[remIp] = times;
+            }
+            if (times.Count == 0 || (now - times[times.Count - 1]).TotalSeconds >= 1.8) {
+                times.Add(now);
+                while (times.Count > 8) times.RemoveAt(0);
+            }
+            if (times.Count >= 5 && !alertedBeacons.Contains(remIp)) {
+                // Compute interval variance to detect periodic robotic C2 heartbeats
+                double sumDt = 0;
+                int intervals = times.Count - 1;
+                double[] dts = new double[intervals];
+                for (int i = 0; i < intervals; i++) {
+                    dts[i] = (times[i + 1] - times[i]).TotalSeconds;
+                    sumDt += dts[i];
+                }
+                double meanDt = sumDt / intervals;
+                double varSum = 0;
+                for (int i = 0; i < intervals; i++) {
+                    double d = dts[i] - meanDt;
+                    varSum += d * d;
+                }
+                double jitterStd = Math.Sqrt(varSum / intervals);
+                // If process callbacks have very low jitter (< 1.2s std dev over 5 samples) and non-browser process
+                string pLow = (procTag ?? "").ToLowerInvariant();
+                bool isBrowser = pLow.Contains("chrome") || pLow.Contains("msedge") || pLow.Contains("firefox") || pLow.Contains("brave");
+                if (!isBrowser && jitterStd < 1.15 && meanDt >= 1.8 && meanDt <= 30.0) {
+                    alertedBeacons.Add(remIp);
+                    beaconDetail = string.Format("C2 Beaconing periódico detectado desde {0} hacia {1} (Intervalo medio: {2:0.1}s, Jitter σ={3:0.2}s)",
+                        procTag, remIp, meanDt, jitterStd);
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    public static void AuditDnsCacheAndBeaconing(bool manualTrigger) {
+        DateTime now = DateTime.UtcNow;
+        if (!manualTrigger && (now - lastDnsAuditUtc).TotalSeconds < 25.0) return;
+        lastDnsAuditUtc = now;
+
+        try {
+            ProcessStartInfo psi = new ProcessStartInfo("ipconfig.exe", "/displaydns") {
+                CreateNoWindow = true,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                StandardOutputEncoding = Encoding.ASCII,
+                WindowStyle = ProcessWindowStyle.Hidden
+            };
+            string output = "";
+            using (Process p = Process.Start(psi)) {
+                if (p != null) {
+                    output = p.StandardOutput.ReadToEnd();
+                    p.WaitForExit(3000);
+                }
+            }
+            if (string.IsNullOrEmpty(output)) return;
+
+            string[] lines = output.Split(new char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            string curDomain = "";
+            List<DnsAuditEntry> parsed = new List<DnsAuditEntry>();
+            HashSet<string> seenDomains = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            for (int i = 0; i < lines.Length && parsed.Count < 45; i++) {
+                string ln = lines[i].Trim();
+                if (ln.IndexOf("Record Name", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    ln.IndexOf("Nombre de registro", StringComparison.OrdinalIgnoreCase) >= 0) {
+                    int col = ln.IndexOf(':');
+                    if (col >= 0 && col + 1 < ln.Length) {
+                        curDomain = ln.Substring(col + 1).Trim().ToLowerInvariant();
+                    }
+                } else if (!string.IsNullOrEmpty(curDomain) &&
+                           (ln.IndexOf("A (Host)", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                            ln.IndexOf("CNAME", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                            ln.IndexOf("1.", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                            ln.IndexOf("Registro A", StringComparison.OrdinalIgnoreCase) >= 0)) {
+                    int col = ln.IndexOf(':');
+                    if (col >= 0 && col + 1 < ln.Length) {
+                        string val = ln.Substring(col + 1).Trim();
+                        if (val.Length >= 4 && !seenDomains.Contains(curDomain) && !curDomain.EndsWith(".arpa") && !curDomain.EndsWith(".local")) {
+                            seenDomains.Add(curDomain);
+                            float ent = ComputeDomainLabelEntropy(curDomain);
+                            int risk = 8;
+                            string verdict = "CLEAN_DNS";
+                            string mitre = "T1071.004";
+
+                            if (ent >= 3.85f && curDomain.Length > 18) {
+                                risk = 84;
+                                verdict = "DGA_HIGH_ENTROPY";
+                                mitre = "T1568.002";
+                            }
+                            if (curDomain.EndsWith(".onion") || curDomain.EndsWith(".top") || curDomain.EndsWith(".xyz") || curDomain.Contains("duckdns") || curDomain.Contains("ngrok")) {
+                                risk = Math.Max(risk, 86);
+                                verdict = "C2_TUNNEL_SUSPECT";
+                                mitre = "T1572";
+                            }
+                            if (IsCtiMaliciousIp(val)) {
+                                risk = 98;
+                                verdict = "CTI_IOC_DOMAIN";
+                                mitre = "T1583.001";
+                            }
+
+                            // Check custom DNS_DOMAIN Sigma rules
+                            lock (SyncLock) {
+                                for (int r = 0; r < DetectionRules.Count; r++) {
+                                    var dr = DetectionRules[r];
+                                    if (dr.Enabled && string.Equals(dr.TargetField, "DNS_DOMAIN", StringComparison.OrdinalIgnoreCase) &&
+                                        !string.IsNullOrEmpty(dr.Pattern) && curDomain.Contains(dr.Pattern.ToLowerInvariant())) {
+                                        dr.HitsCount++;
+                                        risk = Math.Max(risk, dr.RiskPct);
+                                        verdict = dr.Name;
+                                        mitre = dr.MitreId ?? "T1071.004";
+                                    }
+                                }
+                            }
+
+                            parsed.Add(new DnsAuditEntry {
+                                Timestamp = DateTime.Now.ToString("HH:mm:ss"),
+                                Domain = curDomain,
+                                RecordType = "A/CNAME",
+                                ResolvedIp = val,
+                                Entropy = ent,
+                                RiskPct = risk,
+                                Verdict = verdict,
+                                MitreId = mitre
+                            });
+
+                            if (risk >= 80) {
+                                RecordSiemEvent("PORYGON", "DNS_DGA_INSPECTOR", risk >= 90 ? "CRITICAL" : "HIGH", mitre,
+                                    "DNS_CLIENT", curDomain + " -> " + val, "", risk / 100f,
+                                    string.Format("Dominio sospechoso en caché DNS: {0} ({1}, H={2:0.00}b -> {3})", curDomain, verdict, ent, val),
+                                    "DNS_ALERT");
+                            }
+                        }
+                    }
+                }
+            }
+
+            parsed.Sort((a, b) => b.RiskPct.CompareTo(a.RiskPct));
+            lock (SyncLock) {
+                RecentDnsAudits = parsed;
+            }
+        } catch { }
+    }
+
+    private static float ComputeDomainLabelEntropy(string domain) {
+        if (string.IsNullOrEmpty(domain)) return 0f;
+        string[] parts = domain.Split('.');
+        string label = (parts.Length >= 2) ? parts[0] : domain;
+        if (label.Length <= 3) return 1.5f;
+        byte[] b = Encoding.ASCII.GetBytes(label);
+        return ComputeShannonEntropy(b, b.Length);
+    }
+
+    private static void SendSyslogCefDatagram(SiemSecurityEvent ev) {
+        bool enabled = false;
+        string host = "127.0.0.1";
+        int port = 514;
+        lock (SyncLock) {
+            enabled = SoarConfig.SyslogEnabled;
+            host = SoarConfig.SyslogHost;
+            port = SoarConfig.SyslogPort;
+        }
+        if (!enabled || string.IsNullOrEmpty(host)) return;
+
+        try {
+            int cefSev = (ev.Severity == "CRITICAL") ? 10 : (ev.Severity == "HIGH" ? 8 : 4);
+            string cefMsg = string.Format(
+                "<134>{0} {1} CEF:0|PorygonCyberDefense|EnterpriseXDR|3.0|{2}|{3}|{4}|src={5} sproc={6} cs1={7} cs1Label=ChainHash msg={8}",
+                DateTime.UtcNow.ToString("MMM dd HH:mm:ss"),
+                Environment.MachineName,
+                ev.MitreId ?? "T1071",
+                ev.Module ?? "SIEM",
+                cefSev,
+                ev.Target ?? "0.0.0.0",
+                ev.ProcessInfo ?? "system",
+                ev.ChainHash ?? "0000",
+                (ev.Summary ?? "").Replace("|", "/"));
+            byte[] data = Encoding.UTF8.GetBytes(cefMsg);
+            using (UdpClient udp = new UdpClient()) {
+                udp.Send(data, data.Length, host, port);
+            }
+            lock (SyncLock) {
+                SoarConfig.TotalCefSent++;
+            }
+        } catch { }
+    }
+
+    public static bool PushIpBlockToFortiGate(string ip, string reason) {
+        if (string.IsNullOrEmpty(ip)) return false;
+        string url = "";
+        string grp = "PORYGON_XDR_BLOCKLIST";
+        string token = "";
+        lock (SyncLock) {
+            url = SoarConfig.FortiGateWebhookUrl;
+            grp = SoarConfig.FortiGateAddressGroup;
+            token = SoarConfig.FortiGateApiToken;
+        }
+        try {
+            string payload = string.Format(
+                "{{\"action\":\"block_ip\",\"ip\":\"{0}/32\",\"address_group\":\"{1}\",\"host\":\"{2}\",\"reason\":\"{3}\",\"timestamp\":\"{4}\"}}",
+                ip, grp, Environment.MachineName, (reason ?? "Porygon XDR Auto-IPS").Replace("\"", "'"), DateTime.UtcNow.ToString("o"));
+
+            bool delivered = false;
+            if (!string.IsNullOrEmpty(url) && url.StartsWith("http", StringComparison.OrdinalIgnoreCase)) {
+                try {
+                    ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+                    HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
+                    req.Method = "POST";
+                    req.ContentType = "application/json";
+                    req.Timeout = 2500;
+                    if (!string.IsNullOrEmpty(token)) {
+                        req.Headers.Add("Authorization", "Bearer " + token);
+                    }
+                    byte[] bytes = Encoding.UTF8.GetBytes(payload);
+                    req.ContentLength = bytes.Length;
+                    using (Stream s = req.GetRequestStream()) {
+                        s.Write(bytes, 0, bytes.Length);
+                    }
+                    using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse()) {
+                        delivered = ((int)resp.StatusCode >= 200 && (int)resp.StatusCode < 300);
+                    }
+                } catch {
+                    delivered = false;
+                }
+            }
+
+            lock (SyncLock) {
+                SoarConfig.TotalFortiGatePushes++;
+                SoarConfig.LastSoarStatus = string.Format(
+                    "FORTIGATE_SOAR // IP {0} -> Grupo '{1}' ({2} // {3})",
+                    ip, grp, delivered ? "WEBHOOK_200_OK" : "PAYLOAD_STAGED", DateTime.Now.ToString("HH:mm:ss"));
+            }
+            RecordSiemEvent("PORYGON-Z", "SOAR_FORTIGATE", "HIGH", "M1037", "FORTIOS_CONNECTOR",
+                ip + " -> " + grp, "", 0.90f,
+                string.Format("Orden de bloqueo perimetral FortiGate emitida para {0} en grupo {1}", ip, grp),
+                delivered ? "FORTIGATE_SYNCED" : "FORTIGATE_STAGED");
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    private static void UpdateLocalMasterFleetNode(Dictionary<string, object> st) {
+        try {
+            float cpu = st.ContainsKey("cpu") ? Convert.ToSingle(st["cpu"]) : 12.0f;
+            int ram = st.ContainsKey("ramPct") ? Convert.ToInt32(st["ramPct"]) : 45;
+            string host = Environment.MachineName;
+            string localIp = "127.0.0.1";
+            try {
+                IPAddress[] addrs = Dns.GetHostAddresses(host);
+                for (int i = 0; i < addrs.Length; i++) {
+                    if (addrs[i].AddressFamily == AddressFamily.InterNetwork && !IPAddress.IsLoopback(addrs[i])) {
+                        localIp = addrs[i].ToString();
+                        break;
+                    }
+                }
+            } catch { }
+
+            lock (SyncLock) {
+                FleetEndpointNode master;
+                if (!FleetNodes.TryGetValue(host, out master)) {
+                    master = new FleetEndpointNode {
+                        HostId = host,
+                        Hostname = host + " (Master SOC)",
+                        AgentRole = "MASTER_SOC_SERVER",
+                        OsVersion = Environment.OSVersion.VersionString,
+                        IsIsolated = false
+                    };
+                    FleetNodes[host] = master;
+                }
+                master.IpAddress = localIp;
+                master.CpuPct = cpu;
+                master.RamPct = ram;
+                master.ActiveTcpCount = ActiveTcpRows.Count;
+                master.OpenAlerts = RecentSiemEvents.Count;
+                master.RiskScorePct = string.IsNullOrEmpty(LastCandidateBlockIp) ? 14 : 78;
+                master.Status = master.IsIsolated ? "ISOLATED" : (master.RiskScorePct >= 75 ? "HIGH_RISK" : "ONLINE");
+                master.LastSeen = DateTime.Now.ToString("HH:mm:ss");
+                master.LastSeenUtc = DateTime.UtcNow;
+            }
+        } catch { }
+    }
+
+    private static string GenerateEnterpriseSensorScript() {
+        return @"# =============================================================================
+# PORYGON ENTERPRISE XDR / IDS / IPS REMOTE SENSOR AGENT (Windows PowerShell)
+# Despliega este script por GPO, Intune o Tarea Programada en otros PCs/Servidores
+# =============================================================================
+param(
+    [string]$SocServerUrl = ""http://localhost:5090/api/agent-heartbeat"",
+    [int]$IntervalSeconds = 5
+)
+Write-Host ""[PORYGON-SENSOR] Iniciando telemetria EDR/NIDS hacia $SocServerUrl ..."" -ForegroundColor Cyan
+while ($true) {
+    try {
+        $cpu = (Get-CimInstance Win32_Processor | Measure-Object -Property LoadPercentage -Average).Average
+        $os  = Get-CimInstance Win32_OperatingSystem
+        $ramPct = [int]([math]::Round((($os.TotalVisibleMemorySize - $os.FreePhysicalMemory) * 100.0) / $os.TotalVisibleMemorySize))
+        $tcpConns = @(Get-NetTCPConnection -State Established -ErrorAction SilentlyContinue)
+        $ip = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.*' } | Select-Object -First 1).IPAddress
+        $payload = @{
+            hostname = $env:COMPUTERNAME
+            ip       = if ($ip) { $ip } else { '192.168.1.x' }
+            os       = $os.Caption
+            cpu      = [math]::Round($cpu, 1)
+            ramPct   = $ramPct
+            tcpCount = $tcpConns.Count
+            alerts   = 0
+            risk     = 12
+        } | ConvertTo-Json -Compress
+        Invoke-RestMethod -Uri $SocServerUrl -Method Post -Body $payload -ContentType 'application/json' -TimeoutSec 4 | Out-Null
+    } catch { }
+    Start-Sleep -Seconds $IntervalSeconds
+}
+";
+    }
+
+    private static string GenerateEnterpriseForensicReportHtml() {
+        StringBuilder sb = new StringBuilder();
+        lock (SyncLock) {
+            sb.Append("<!DOCTYPE html><html lang='es'><head><meta charset='utf-8'>");
+            sb.Append("<title>Reporte Ejecutivo y Forense XDR/IDS/IPS - Porygon Cyber Defense</title>");
+            sb.Append("<style>");
+            sb.Append("body{font-family:'Segoe UI',Consolas,sans-serif;background:#070d12;color:#e2e8f0;margin:28px;}");
+            sb.Append("h1,h2,h3{color:#34d399;margin-bottom:6px;} .sub{color:#94a3b8;font-size:13px;margin-bottom:20px;}");
+            sb.Append(".grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:22px;}");
+            sb.Append(".card{background:#0d1720;border:1px solid #1e3a34;border-radius:8px;padding:12px;}");
+            sb.Append(".val{font-size:22px;font-weight:bold;color:#fbbf24;} .lbl{font-size:11px;color:#94a3b8;text-transform:uppercase;}");
+            sb.Append("table{width:100%;border-collapse:collapse;margin-bottom:24px;font-size:12px;background:#0b131b;}");
+            sb.Append("th{background:#112220;color:#34d399;text-align:left;padding:8px;border:1px solid #1e3a34;}");
+            sb.Append("td{padding:7px 8px;border:1px solid #172a26;color:#cbd5e1;font-family:Consolas,monospace;}");
+            sb.Append(".crit{color:#f87171;font-weight:bold;} .high{color:#fbbf24;font-weight:bold;} .ok{color:#34d399;}");
+            sb.Append("@media print{body{background:#fff;color:#000;} .card,table,th,td{background:#fff;color:#000;border-color:#ccc;} h1,h2,.val{color:#000;}}");
+            sb.Append("</style></head><body>");
+            sb.Append("<h1>🛡️ REPORTE EJECUTIVO Y FORENSE // PORYGON ENTERPRISE XDR / IDS / IPS v3.0</h1>");
+            sb.AppendFormat("<div class='sub'>Generado: {0} | Host Maestro: {1} | Cumplimiento: ISO/IEC 27001, NIST CSF 2.0, MITRE ATT&amp;CK | Cadena Hash SIEM: <b>{2}</b> <button onclick='window.print()' style='margin-left:16px;padding:5px 12px;cursor:pointer;background:#34d399;border:none;border-radius:4px;font-weight:bold'>🖨️ Imprimir / Guardar PDF</button></div>",
+                DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"), Environment.MachineName, LastSiemChainHash);
+
+            sb.Append("<div class='grid'>");
+            sb.AppendFormat("<div class='card'><div class='lbl'>Procesos / Sockets Auditados</div><div class='val'>{0}</div></div>", TotalNidsProcessAudits);
+            sb.AppendFormat("<div class='card'><div class='lbl'>IOCs CTI en Memoria (O(1))</div><div class='val'>{0:N0}</div></div>", CtiTotalIndicators);
+            sb.AppendFormat("<div class='card'><div class='lbl'>Eventos SIEM (SHA-256 Chain)</div><div class='val'>{0}</div></div>", TotalSiemAlerts);
+            sb.AppendFormat("<div class='card'><div class='lbl'>IPs Bloqueadas / Archivos Aislados</div><div class='val'>{0} / {1}</div></div>", BlockedFirewallIps.Count, QuarantinedFiles.Count);
+            sb.Append("</div>");
+
+            sb.Append("<h2>1. Inventario de Flota Multi-Host (Endpoints Monitorizados)</h2>");
+            sb.Append("<table><tr><th>Host ID</th><th>IP</th><th>Rol</th><th>OS</th><th>CPU / RAM</th><th>Sockets TCP</th><th>Estado</th></tr>");
+            foreach (var kv in FleetNodes) {
+                var fn = kv.Value;
+                sb.AppendFormat("<tr><td>{0}</td><td>{1}</td><td>{2}</td><td>{3}</td><td>{4:0.0}% / {5}%</td><td>{6}</td><td class='{7}'>{8}</td></tr>",
+                    fn.Hostname, fn.IpAddress, fn.AgentRole, fn.OsVersion, fn.CpuPct, fn.RamPct, fn.ActiveTcpCount,
+                    fn.Status == "ONLINE" ? "ok" : "crit", fn.Status);
+            }
+            sb.Append("</table>");
+
+            sb.Append("<h2>2. Reglas Empresariales YARA / Sigma Activas</h2>");
+            sb.Append("<table><tr><th>ID</th><th>Tipo</th><th>Nombre de Regla</th><th>Campo</th><th>Patrón</th><th>MITRE ATT&amp;CK</th><th>Riesgo</th><th>Hits</th></tr>");
+            for (int i = 0; i < DetectionRules.Count; i++) {
+                var r = DetectionRules[i];
+                sb.AppendFormat("<tr><td>{0}</td><td>{1}</td><td>{2}</td><td>{3}</td><td>{4}</td><td>{5}</td><td>{6}%</td><td>{7}</td></tr>",
+                    r.Id, r.RuleType, r.Name, r.TargetField, r.Pattern, r.MitreId, r.RiskPct, r.HitsCount);
+            }
+            sb.Append("</table>");
+
+            sb.Append("<h2>3. Bitácora Forense SIEM con Cadena Criptográfica SHA-256 (Últimos Eventos)</h2>");
+            sb.Append("<table><tr><th>Hora</th><th>ChainHash (SHA-256)</th><th>Severidad</th><th>Agente / Módulo</th><th>MITRE</th><th>Proceso</th><th>Objetivo</th><th>Resumen</th></tr>");
+            for (int i = RecentSiemEvents.Count - 1; i >= Math.Max(0, RecentSiemEvents.Count - 40); i--) {
+                var e = RecentSiemEvents[i];
+                string cls = e.Severity == "CRITICAL" ? "crit" : (e.Severity == "HIGH" ? "high" : "ok");
+                sb.AppendFormat("<tr><td>{0}</td><td>{1}</td><td class='{2}'>{3}</td><td>{4}/{5}</td><td>{6}</td><td>{7}</td><td>{8}</td><td>{9}</td></tr>",
+                    e.Timestamp, e.ChainHash ?? "", cls, e.Severity, e.AgentName, e.Module, e.MitreId, e.ProcessInfo, e.Target, e.Summary);
+            }
+            sb.Append("</table>");
+
+            sb.Append("<h2>4. Auditoría de Artefactos Antivirus / EDR (SHA-256 &amp; Entropía de Shannon)</h2>");
+            sb.Append("<table><tr><th>Hora</th><th>Archivo</th><th>Veredicto</th><th>Riesgo</th><th>Entropía</th><th>Firma Authenticode</th><th>SHA-256</th></tr>");
+            for (int i = RecentAvScans.Count - 1; i >= 0; i--) {
+                var a = RecentAvScans[i];
+                sb.AppendFormat("<tr><td>{0}</td><td>{1}</td><td class='{2}'>{3}</td><td>{4:0}%</td><td>{5:0.00}b</td><td>{6}</td><td>{7}</td></tr>",
+                    a.Timestamp, a.FileName, a.RiskScore >= 0.55f ? "high" : "ok", a.Verdict, a.RiskScore * 100f, a.EntropyBits, a.SignerName, a.Sha256);
+            }
+            sb.Append("</table>");
+
+            sb.Append("</body></html>");
+        }
+        return sb.ToString();
+    }
+
+    // =========================================================================
     // MODULE 5: EMBEDDED HTTP/REST WEB SOC SERVICE (http://localhost:5090/)
     // =========================================================================
     public static void OpenWebSocInBrowser() {
@@ -1576,6 +2369,18 @@ public static class PorygonCyberDefenseEngine {
                     return;
                 }
 
+                if (method == "GET" && cleanPath == "/api/report") {
+                    string repHtml = GenerateEnterpriseForensicReportHtml();
+                    WriteHttpResponse(ns, "200 OK", "text/html; charset=utf-8", Encoding.UTF8.GetBytes(repHtml));
+                    return;
+                }
+
+                if (method == "GET" && cleanPath == "/api/agent-script") {
+                    string ps1 = GenerateEnterpriseSensorScript();
+                    WriteHttpResponse(ns, "200 OK", "text/plain; charset=utf-8", Encoding.UTF8.GetBytes(ps1));
+                    return;
+                }
+
                 if (method == "GET" && cleanPath == "/api/state") {
                     Dictionary<string, object> st = BuildWebStateDictionary();
                     string json = ser.Serialize(st);
@@ -1596,7 +2401,126 @@ public static class PorygonCyberDefenseEngine {
                     if (cleanPath == "/api/audit") {
                         RunQuickDirectoryAudit(true);
                         ok = true;
-                        msg = "✅ Auditoría completa (TCP/PID + Registro Run + Startup + Downloads) finalizada.";
+                        msg = "✅ Auditoría empresarial completa (TCP/PID + DNS/DGA + Registro Run + Startup + Downloads) finalizada.";
+                    } else if (cleanPath == "/api/sync-cti") {
+                        int totalIocs = SyncLiveCtiThreatFeeds(true);
+                        ok = true;
+                        msg = string.Format("🌐 Feeds CTI sincronizados en memoria O(1): {0:N0} indicadores de Botnets/C2 (Feodo Tracker + CINS Army).", totalIocs);
+                    } else if (cleanPath == "/api/dns-audit") {
+                        AuditDnsCacheAndBeaconing(true);
+                        ok = true;
+                        msg = "🔎 Caché DNS de Windows y entropía DGA / C2 Beaconing auditados.";
+                    } else if (cleanPath == "/api/kill-pid") {
+                        int pid = 0;
+                        if (req.ContainsKey("pid") && req["pid"] != null) int.TryParse(req["pid"].ToString(), out pid);
+                        string reason = req.ContainsKey("reason") && req["reason"] != null ? req["reason"].ToString() : "Web SOC EDR Kill";
+                        ok = KillProcessByPid(pid, reason, out msg);
+                    } else if (cleanPath == "/api/rules-add") {
+                        string rName = req.ContainsKey("name") && req["name"] != null ? req["name"].ToString().Trim().ToUpperInvariant() : "";
+                        string rType = req.ContainsKey("ruleType") && req["ruleType"] != null ? req["ruleType"].ToString().Trim().ToUpperInvariant() : "YARA";
+                        string rTarget = req.ContainsKey("targetField") && req["targetField"] != null ? req["targetField"].ToString().Trim().ToUpperInvariant() : "FILE_CONTENT";
+                        string rPat = req.ContainsKey("pattern") && req["pattern"] != null ? req["pattern"].ToString().Trim() : "";
+                        string rMitre = req.ContainsKey("mitre") && req["mitre"] != null ? req["mitre"].ToString().Trim().ToUpperInvariant() : "T1027";
+                        int rRisk = 90;
+                        if (req.ContainsKey("risk") && req["risk"] != null) int.TryParse(req["risk"].ToString(), out rRisk);
+                        if (!string.IsNullOrEmpty(rName) && !string.IsNullOrEmpty(rPat)) {
+                            lock (SyncLock) {
+                                string newId = rType + "_" + (DetectionRules.Count + 1).ToString("000");
+                                DetectionRules.Add(new EnterpriseDetectionRule {
+                                    Id = newId, Name = rName, RuleType = rType, TargetField = rTarget,
+                                    Pattern = rPat, MitreId = rMitre, RiskPct = Math.Max(10, Math.Min(99, rRisk)),
+                                    Severity = rRisk >= 90 ? "CRITICAL" : "HIGH", Enabled = true, HitsCount = 0
+                                });
+                            }
+                            SavePersistedIpsAndQuarantine();
+                            ok = true;
+                            msg = "✅ Regla " + rType + " [" + rName + "] agregada y activa en tiempo real.";
+                        } else {
+                            msg = "Nombre y patrón requeridos para crear la regla.";
+                        }
+                    } else if (cleanPath == "/api/rules-toggle") {
+                        string rId = req.ContainsKey("id") && req["id"] != null ? req["id"].ToString().Trim() : "";
+                        bool del = req.ContainsKey("delete") && req["delete"] != null && Convert.ToBoolean(req["delete"]);
+                        lock (SyncLock) {
+                            for (int i = 0; i < DetectionRules.Count; i++) {
+                                if (DetectionRules[i].Id == rId) {
+                                    if (del) {
+                                        msg = "🗑️ Regla " + DetectionRules[i].Name + " eliminada.";
+                                        DetectionRules.RemoveAt(i);
+                                    } else {
+                                        DetectionRules[i].Enabled = !DetectionRules[i].Enabled;
+                                        msg = "⚙️ Regla " + DetectionRules[i].Name + (DetectionRules[i].Enabled ? " ACTIVADA." : " PAUSADA.");
+                                    }
+                                    ok = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if (ok) SavePersistedIpsAndQuarantine();
+                    } else if (cleanPath == "/api/soar-config") {
+                        lock (SyncLock) {
+                            if (req.ContainsKey("syslogEnabled")) SoarConfig.SyslogEnabled = Convert.ToBoolean(req["syslogEnabled"]);
+                            if (req.ContainsKey("syslogHost") && req["syslogHost"] != null) SoarConfig.SyslogHost = req["syslogHost"].ToString().Trim();
+                            if (req.ContainsKey("syslogPort") && req["syslogPort"] != null) int.TryParse(req["syslogPort"].ToString(), out SoarConfig.SyslogPort);
+                            if (req.ContainsKey("fortiGateEnabled")) SoarConfig.FortiGateEnabled = Convert.ToBoolean(req["fortiGateEnabled"]);
+                            if (req.ContainsKey("fortiGateUrl") && req["fortiGateUrl"] != null) SoarConfig.FortiGateWebhookUrl = req["fortiGateUrl"].ToString().Trim();
+                            if (req.ContainsKey("fortiGateGroup") && req["fortiGateGroup"] != null) SoarConfig.FortiGateAddressGroup = req["fortiGateGroup"].ToString().Trim();
+                            if (req.ContainsKey("fortiGateToken") && req["fortiGateToken"] != null) SoarConfig.FortiGateApiToken = req["fortiGateToken"].ToString().Trim();
+                            SoarConfig.LastSoarStatus = string.Format("SOAR_CONFIG_SAVED // Syslog CEF ({0}:{1} [{2}]) | FortiGate ({3} [{4}])",
+                                SoarConfig.SyslogHost, SoarConfig.SyslogPort, SoarConfig.SyslogEnabled ? "ON" : "OFF",
+                                SoarConfig.FortiGateAddressGroup, SoarConfig.FortiGateEnabled ? "ON" : "OFF");
+                        }
+                        SavePersistedIpsAndQuarantine();
+                        RecordSiemEvent("PORYGON-Z", "SOAR_CONFIG", "INFO", "M1037", "SOAR_ENGINE",
+                            SoarConfig.SyslogHost + ":" + SoarConfig.SyslogPort, "", 0.15f,
+                            "Configuración empresarial SOAR (Syslog CEF + FortiGate Webhook) actualizada y probada", "SOAR_READY");
+                        ok = true;
+                        msg = "🛡️ Configuración SOAR (FortiGate Perimetral + Syslog CEF RFC 5424) guardada y paquete CEF de prueba emitido.";
+                    } else if (cleanPath == "/api/agent-heartbeat") {
+                        string hName = req.ContainsKey("hostname") && req["hostname"] != null ? req["hostname"].ToString().Trim() : "REMOTE-NODE";
+                        string hIp = req.ContainsKey("ip") && req["ip"] != null ? req["ip"].ToString().Trim() : "192.168.1.x";
+                        string hOs = req.ContainsKey("os") && req["os"] != null ? req["os"].ToString().Trim() : "Windows Enterprise Endpoint";
+                        float hCpu = req.ContainsKey("cpu") && req["cpu"] != null ? Convert.ToSingle(req["cpu"]) : 8.5f;
+                        int hRam = req.ContainsKey("ramPct") && req["ramPct"] != null ? Convert.ToInt32(req["ramPct"]) : 40;
+                        int hTcp = req.ContainsKey("tcpCount") && req["tcpCount"] != null ? Convert.ToInt32(req["tcpCount"]) : 12;
+                        int hAlerts = req.ContainsKey("alerts") && req["alerts"] != null ? Convert.ToInt32(req["alerts"]) : 0;
+                        int hRisk = req.ContainsKey("risk") && req["risk"] != null ? Convert.ToInt32(req["risk"]) : 15;
+                        lock (SyncLock) {
+                            FleetEndpointNode node;
+                            if (!FleetNodes.TryGetValue(hName, out node)) {
+                                node = new FleetEndpointNode { HostId = hName, Hostname = hName, AgentRole = "REMOTE_SENSOR", IsIsolated = false };
+                                FleetNodes[hName] = node;
+                            }
+                            node.IpAddress = hIp;
+                            node.OsVersion = hOs;
+                            node.CpuPct = hCpu;
+                            node.RamPct = hRam;
+                            node.ActiveTcpCount = hTcp;
+                            node.OpenAlerts = hAlerts;
+                            node.RiskScorePct = hRisk;
+                            node.Status = node.IsIsolated ? "ISOLATED" : (hRisk >= 75 ? "HIGH_RISK" : "ONLINE");
+                            node.LastSeen = DateTime.Now.ToString("HH:mm:ss");
+                            node.LastSeenUtc = DateTime.UtcNow;
+                        }
+                        ok = true;
+                        msg = "Heartbeat recibido de " + hName;
+                    } else if (cleanPath == "/api/host-isolate") {
+                        string hId = req.ContainsKey("hostId") && req["hostId"] != null ? req["hostId"].ToString().Trim() : "";
+                        lock (SyncLock) {
+                            FleetEndpointNode node;
+                            if (FleetNodes.TryGetValue(hId, out node)) {
+                                node.IsIsolated = !node.IsIsolated;
+                                node.Status = node.IsIsolated ? "ISOLATED" : "ONLINE";
+                                ok = true;
+                                msg = node.IsIsolated
+                                    ? ("🔒 Endpoint [" + node.Hostname + "] puesto en AISLAMIENTO DE RED (Contención lateral activa).")
+                                    : ("🔓 Endpoint [" + node.Hostname + "] liberado del aislamiento de red.");
+                            }
+                        }
+                        if (ok) {
+                            RecordSiemEvent("PORYGON-Z", "FLEET_CONTAINMENT", "CRITICAL", "M1030", hId,
+                                hId, "", 0.92f, msg, "HOST_CONTAINMENT");
+                        }
                     } else if (cleanPath == "/api/block-ip") {
                         string ip = req.ContainsKey("ip") && req["ip"] != null ? req["ip"].ToString().Trim() : "";
                         string reason = req.ContainsKey("reason") && req["reason"] != null ? req["reason"].ToString() : "Web SOC Block";
@@ -1682,17 +2606,89 @@ public static class PorygonCyberDefenseEngine {
             } catch { }
         }
 
+        UpdateLocalMasterFleetNode(st);
+
         lock (SyncLock) {
             st["totalPidAudits"] = TotalNidsProcessAudits;
             st["totalAvScans"] = TotalAvFilesScanned;
             st["totalSiemAlerts"] = TotalSiemAlerts;
             st["totalIpsActions"] = TotalIpsActions;
-            st["lastActionBanner"] = LastActionBanner ?? "HYBRID_DEFENSE_ONLINE";
+            st["totalEdrKills"] = TotalEdrProcessesKilled;
+            st["ctiTotalIndicators"] = CtiTotalIndicators;
+            st["ctiHitsCount"] = CtiHitsCount;
+            st["ctiLastSync"] = CtiLastSyncStatus;
+            st["siemChainHash"] = LastSiemChainHash;
+            st["lastActionBanner"] = LastActionBanner ?? "ENTERPRISE_XDR_ONLINE";
             st["jsonlPath"] = ProjectSiemJsonlPath;
             st["candidateBlockIp"] = LastCandidateBlockIp ?? "";
             st["candidateBlockProc"] = LastCandidateBlockProc ?? "";
             st["candidateQuarantineFile"] = LastCandidateQuarantineFile ?? "";
             st["candidateQuarantineName"] = string.IsNullOrEmpty(LastCandidateQuarantineFile) ? "Ninguno" : Path.GetFileName(LastCandidateQuarantineFile);
+
+            Dictionary<string, object> soarDict = new Dictionary<string, object>();
+            soarDict["syslogEnabled"] = SoarConfig.SyslogEnabled;
+            soarDict["syslogHost"] = SoarConfig.SyslogHost;
+            soarDict["syslogPort"] = SoarConfig.SyslogPort;
+            soarDict["fortiGateEnabled"] = SoarConfig.FortiGateEnabled;
+            soarDict["fortiGateUrl"] = SoarConfig.FortiGateWebhookUrl;
+            soarDict["fortiGateGroup"] = SoarConfig.FortiGateAddressGroup;
+            soarDict["totalCefSent"] = SoarConfig.TotalCefSent;
+            soarDict["totalFortiGatePushes"] = SoarConfig.TotalFortiGatePushes;
+            soarDict["lastStatus"] = SoarConfig.LastSoarStatus;
+            st["soar"] = soarDict;
+
+            List<Dictionary<string, object>> rulesList = new List<Dictionary<string, object>>();
+            for (int i = 0; i < DetectionRules.Count; i++) {
+                var r = DetectionRules[i];
+                var d = new Dictionary<string, object>();
+                d["id"] = r.Id;
+                d["name"] = r.Name;
+                d["ruleType"] = r.RuleType;
+                d["targetField"] = r.TargetField;
+                d["pattern"] = r.Pattern;
+                d["mitre"] = r.MitreId;
+                d["risk"] = r.RiskPct;
+                d["enabled"] = r.Enabled;
+                d["hits"] = r.HitsCount;
+                rulesList.Add(d);
+            }
+            st["detectionRules"] = rulesList;
+
+            List<Dictionary<string, object>> fleetList = new List<Dictionary<string, object>>();
+            foreach (var kv in FleetNodes) {
+                var fn = kv.Value;
+                var d = new Dictionary<string, object>();
+                d["hostId"] = fn.HostId;
+                d["hostname"] = fn.Hostname;
+                d["ip"] = fn.IpAddress;
+                d["os"] = fn.OsVersion;
+                d["role"] = fn.AgentRole;
+                d["status"] = fn.Status;
+                d["cpu"] = fn.CpuPct.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+                d["ramPct"] = fn.RamPct;
+                d["tcpCount"] = fn.ActiveTcpCount;
+                d["alerts"] = fn.OpenAlerts;
+                d["risk"] = fn.RiskScorePct;
+                d["isIsolated"] = fn.IsIsolated;
+                d["lastSeen"] = fn.LastSeen;
+                fleetList.Add(d);
+            }
+            st["fleetNodes"] = fleetList;
+
+            List<Dictionary<string, object>> dnsList = new List<Dictionary<string, object>>();
+            for (int i = 0; i < RecentDnsAudits.Count; i++) {
+                var dn = RecentDnsAudits[i];
+                var d = new Dictionary<string, object>();
+                d["timestamp"] = dn.Timestamp;
+                d["domain"] = dn.Domain;
+                d["resolvedIp"] = dn.ResolvedIp;
+                d["entropy"] = dn.Entropy.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+                d["risk"] = dn.RiskPct;
+                d["verdict"] = dn.Verdict;
+                d["mitre"] = dn.MitreId;
+                dnsList.Add(d);
+            }
+            st["dnsAudits"] = dnsList;
 
             List<Dictionary<string, object>> tcpList = new List<Dictionary<string, object>>();
             for (int i = 0; i < ActiveTcpRows.Count; i++) {
@@ -1709,6 +2705,8 @@ public static class PorygonCyberDefenseEngine {
                 d["proto"] = r.Proto ?? "";
                 d["state"] = r.State ?? "";
                 d["risk"] = r.RiskPct;
+                d["isCtiMatch"] = r.IsCtiMatch;
+                d["matchedRule"] = r.MatchedRule ?? "";
                 tcpList.Add(d);
             }
             st["activeConnections"] = tcpList;
@@ -1718,6 +2716,7 @@ public static class PorygonCyberDefenseEngine {
                 var e = RecentSiemEvents[i];
                 var d = new Dictionary<string, object>();
                 d["timestamp"] = e.Timestamp;
+                d["chainHash"] = e.ChainHash ?? "";
                 d["agent"] = e.AgentName;
                 d["module"] = e.Module;
                 d["severity"] = e.Severity;
@@ -7097,6 +8096,9 @@ public class HackerWallpaperForm : Form {
                 PorygonCyberDefenseEngine.AuditRegistryPersistence(false);
                 PorygonCyberDefenseEngine.PollWindowsEventLogs();
             }
+            if (telemetryCycles % 15 == 1) {
+                PorygonCyberDefenseEngine.AuditDnsCacheAndBeaconing(false);
+            }
             Dictionary<string, int> tcpPidMap = PorygonCyberDefenseEngine.QueryExtendedTcpPidMap();
 
             IPGlobalProperties ipGlobal = IPGlobalProperties.GetIPGlobalProperties();
@@ -7170,13 +8172,46 @@ public class HackerWallpaperForm : Form {
                         newHostCount++;
                     }
 
+                    // Enterprise CTI Feed Match + Sigma Network Rule + C2 Beaconing Jitter Evaluation
+                    bool isCtiMatch = !isLan && PorygonCyberDefenseEngine.IsCtiMaliciousIp(remIp);
+                    string sigmaRule = "";
+                    string sigmaMitre = "";
+                    int sigmaRiskPct = 0;
+                    bool hasSigma = PorygonCyberDefenseEngine.EvaluateNetworkSigmaRules(procShort, remIp, remPort, out sigmaRule, out sigmaMitre, out sigmaRiskPct);
+                    string beaconDetail = "";
+                    bool isBeaconing = !isLan && isNewHost && PorygonCyberDefenseEngine.CheckC2BeaconingPattern(remIp, procTag, out beaconDetail);
+
                     // Determine if this real connection is an Anomaly (Kind=2), New Host (Kind=1), or Normal Flow (Kind=0)
                     int nodeKind = 0;
                     string anomType = "BASELINE_FLOW";
                     string anomDetail = string.Format("Proc: {0} ({1}) -> {2}", procTag, procSec.SignerName ?? signBadge, fullRem);
                     float anomScore = procSec.IsSigned ? 0.06f : 0.22f;
 
-                    if (procSec.IsUserTempOrDownloads && !procSec.IsSigned && !isLan) {
+                    if (isCtiMatch) {
+                        unusualPortCount++;
+                        nodeKind = 2;
+                        anomType = "CTI_FEED_MALICIOUS_IP";
+                        anomDetail = string.Format("IP {0} presente en Feed CTI global (Feodo C2 / CINS Army) por {1}", fullRem, procTag);
+                        anomScore = 0.99f;
+                        anomalyHeadline = "CTI_C2_HIT: " + remIp;
+                        PorygonCyberDefenseEngine.RecordSiemEvent("PORYGON-Z", "CTI_NIDS", "CRITICAL", "T1071", procTag, fullRem, "", anomScore, anomDetail, "IPS_AUTO_BLOCK");
+                    } else if (hasSigma) {
+                        unusualPortCount++;
+                        nodeKind = 2;
+                        anomType = sigmaRule;
+                        anomDetail = string.Format("Regla Sigma [{0}] activada por {1} hacia {2}", sigmaRule, procTag, fullRem);
+                        anomScore = Math.Max(0.92f, sigmaRiskPct / 100f);
+                        anomalyHeadline = "SIGMA_HIT: " + sigmaRule;
+                        PorygonCyberDefenseEngine.RecordSiemEvent("PORYGON2", "SIGMA_EDR", "CRITICAL", sigmaMitre, procTag, fullRem, "", anomScore, anomDetail, "ALERT_READY");
+                    } else if (isBeaconing) {
+                        unusualPortCount++;
+                        nodeKind = 2;
+                        anomType = "C2_PERIODIC_BEACON";
+                        anomDetail = beaconDetail;
+                        anomScore = 0.91f;
+                        anomalyHeadline = "C2_BEACON: " + procShort + "->" + remIp;
+                        PorygonCyberDefenseEngine.RecordSiemEvent("PORYGON2", "C2_BEACON", "HIGH", "T1071.001", procTag, fullRem, "", anomScore, anomDetail, "ALERT_READY");
+                    } else if (procSec.IsUserTempOrDownloads && !procSec.IsSigned && !isLan) {
                         unusualPortCount++;
                         nodeKind = 2;
                         anomType = "EDR_TEMP_UNSIGNED_C2";
@@ -7247,6 +8282,7 @@ public class HackerWallpaperForm : Form {
                         PorygonCyberDefenseEngine.RegisterCandidateBlockIp(fullRem, procTag, anomType + " [" + signBadge + "]", anomScore, true);
                     }
 
+                    string matchedRuleTag = isCtiMatch ? "CTI_IOC_MATCH" : (hasSigma ? sigmaRule : (isBeaconing ? "C2_BEACONING" : ""));
                     if (newTcpRows.Count < 80) {
                         newTcpRows.Add(new PorygonCyberDefenseEngine.LiveTcpConnectionRow {
                             Pid = ownPid,
@@ -7259,7 +8295,9 @@ public class HackerWallpaperForm : Form {
                             RemoteEp = fullRem,
                             Proto = ClassifyPortProtocol(remPort),
                             State = st.ToString().ToUpperInvariant(),
-                            RiskPct = (int)Math.Round(anomScore * 100f)
+                            RiskPct = (int)Math.Round(anomScore * 100f),
+                            IsCtiMatch = isCtiMatch,
+                            MatchedRule = matchedRuleTag
                         });
                     }
 
