@@ -457,6 +457,36 @@
     flex-direction: column;
     gap: 14px;
   }
+  .main-canvas > *,
+  .sec-block,
+  .bridge-banner,
+  .grid-2 {
+    flex-shrink: 0;
+  }
+
+  /* VISTA MOSAICO COMPLETA (2-Column Responsive Bento Grid) */
+  .main-canvas[data-mosaic="true"] {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    align-content: start;
+    gap: 14px;
+  }
+  .main-canvas[data-mosaic="true"] > .section-masthead,
+  .main-canvas[data-mosaic="true"] > #viewOverview,
+  .main-canvas[data-mosaic="true"] > #viewBridge,
+  .main-canvas[data-mosaic="true"] > #viewTcp,
+  .main-canvas[data-mosaic="true"] > #viewIps {
+    grid-column: 1 / -1;
+  }
+  .main-canvas[data-mosaic="true"] .table-wrap {
+    max-height: 300px;
+  }
+  @media (max-width: 1200px) {
+    .main-canvas[data-mosaic="true"] {
+      grid-template-columns: 1fr;
+    }
+  }
 
   /* Section Header Bar inside Main Viewport */
   .section-masthead {
@@ -467,6 +497,7 @@
     gap: 10px;
     padding-bottom: 10px;
     border-bottom: 1px solid var(--border-hairline);
+    flex-shrink: 0;
   }
   .section-masthead-title {
     font-size: 15px;
@@ -736,6 +767,7 @@
     display: flex;
     flex-direction: column;
     min-width: 0;
+    flex-shrink: 0;
     overflow: hidden;
   }
 
@@ -2082,10 +2114,13 @@
     document.getElementById('secHeadingSub').textContent = meta.sub;
     document.getElementById('subStatus').textContent = meta.title.toUpperCase();
 
+    const mc = document.getElementById('mainCanvas');
     const allBlocks = document.querySelectorAll('.sec-block');
     if (secKey === 'all') {
+      mc.setAttribute('data-mosaic', 'true');
       allBlocks.forEach(el => el.classList.remove('hidden'));
     } else {
+      mc.removeAttribute('data-mosaic');
       allBlocks.forEach(el => {
         el.classList.toggle('hidden', el.id !== meta.viewId);
       });
@@ -2094,7 +2129,7 @@
     // Close mobile drawer if open
     document.getElementById('sidebarNav').setAttribute('data-mobile-open', 'false');
     // Reset scroll position of main viewport instantly
-    document.getElementById('mainCanvas').scrollTop = 0;
+    mc.scrollTop = 0;
   }
 
   function toggleMobileSidebar() {
@@ -2810,8 +2845,18 @@
       tb.innerHTML = `<tr><td colspan="6"><div class="empty-state"><span>0 dominios DNS auditados en la vista actual.</span><button type="button" class="btn btn-sm btn-cyan" onclick="triggerDnsAudit()">Auditar Caché DNS Ahora</button></div></td></tr>`;
       return;
     }
+    const TRUSTED_DNS_SUFFIXES = [
+      '.googleapis.com', '.google.com', '.gstatic.com', '.gvt1.com', '.gvt2.com',
+      '.microsoft.com', '.windowsupdate.com', '.live.com', '.office.com', '.azure.com',
+      '.cloudflare.com', '.digicert.com', '.akamai.net', '.github.com', '.githubusercontent.com'
+    ];
     tb.innerHTML = rows.map(d => {
-      const isSusp = (d.risk || 0) >= 70;
+      const domLow = (d.domain || '').toLowerCase();
+      const isTrustedCorpDns = TRUSTED_DNS_SUFFIXES.some(sfx => domLow === sfx.slice(1) || domLow.endsWith(sfx));
+      const effRisk = (isTrustedCorpDns && d.verdict === 'DGA_HIGH_ENTROPY') ? 8 : (d.risk || 0);
+      const effVerdict = (isTrustedCorpDns && d.verdict === 'DGA_HIGH_ENTROPY') ? 'CLEAN_DNS (VERIFIED)' : d.verdict;
+      const effMitre = (isTrustedCorpDns && d.verdict === 'DGA_HIGH_ENTROPY') ? 'T1071.004' : d.mitre;
+      const isSusp = effRisk >= 70;
       const bCls = isSusp ? 'b-crit' : 'b-info';
       const hasIp = d.resolvedIp && d.resolvedIp !== 'N/A' && /^\d+\./.test(d.resolvedIp);
       return `<tr>
@@ -2820,8 +2865,8 @@
         <td><code style="color:var(--sig-cyan-txt)">${esc(d.resolvedIp)}</code></td>
         <td><strong>${d.entropy} bits/B</strong></td>
         <td>
-          <span class="badge ${bCls} truncate-90" title="${esc(d.verdict)}">${esc(d.verdict)} (${d.risk}%)</span>
-          <span class="badge b-mitre">${esc(d.mitre)}</span>
+          <span class="badge ${bCls} truncate-90" title="${esc(effVerdict)}">${esc(effVerdict)} (${effRisk}%)</span>
+          <span class="badge b-mitre">${esc(effMitre)}</span>
         </td>
         <td style="text-align:right;">
           ${hasIp ? `<button type="button" class="btn btn-sm btn-red" onclick="blockIp('${esc(d.resolvedIp)}', 'DNS DGA/CTI Block (${esc(d.domain)})')">Bloquear IP</button>` : '-'}
