@@ -447,43 +447,52 @@
     color: var(--txt-secondary);
   }
 
-  /* MAIN SECTION VIEWPORT */
+  /* MAIN SECTION VIEWPORT (Pure Scroll Container) */
   .main-canvas {
     flex: 1;
     min-width: 0;
+    height: 100%;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 16px 20px calc(92px + env(safe-area-inset-bottom, 0px));
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-  }
-  .main-canvas > *,
-  .sec-block,
-  .bridge-banner,
-  .grid-2 {
-    flex-shrink: 0;
+    display: block;
   }
 
-  /* VISTA MOSAICO COMPLETA (2-Column Responsive Bento Grid) */
-  .main-canvas[data-mosaic="true"] {
+  .mosaic-grid {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+
+  .sec-block {
+    margin-bottom: 14px;
+    height: auto;
+  }
+
+  /* VISTA MOSAICO COMPLETA (2-Column Unconstrained Bento Grid inside Scroll Container) */
+  .mosaic-grid[data-mosaic="true"] {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-rows: max-content;
     align-items: start;
-    align-content: start;
-    gap: 14px;
+    gap: 16px;
+    height: auto;
   }
-  .main-canvas[data-mosaic="true"] > .section-masthead,
-  .main-canvas[data-mosaic="true"] > #viewOverview,
-  .main-canvas[data-mosaic="true"] > #viewBridge,
-  .main-canvas[data-mosaic="true"] > #viewTcp,
-  .main-canvas[data-mosaic="true"] > #viewIps {
+  .mosaic-grid[data-mosaic="true"] > .sec-block {
+    margin-bottom: 0;
+    height: auto;
+  }
+  .mosaic-grid[data-mosaic="true"] > #viewOverview,
+  .mosaic-grid[data-mosaic="true"] > #viewBridge,
+  .mosaic-grid[data-mosaic="true"] > #viewTcp,
+  .mosaic-grid[data-mosaic="true"] > #viewIps {
     grid-column: 1 / -1;
   }
-  .main-canvas[data-mosaic="true"] .table-wrap {
+  .mosaic-grid[data-mosaic="true"] .table-wrap {
     max-height: 300px;
   }
   @media (max-width: 1200px) {
-    .main-canvas[data-mosaic="true"] {
+    .mosaic-grid[data-mosaic="true"] {
       grid-template-columns: 1fr;
     }
   }
@@ -496,8 +505,8 @@
     justify-content: space-between;
     gap: 10px;
     padding-bottom: 10px;
+    margin-bottom: 14px;
     border-bottom: 1px solid var(--border-hairline);
-    flex-shrink: 0;
   }
   .section-masthead-title {
     font-size: 15px;
@@ -768,13 +777,13 @@
     flex-direction: column;
     min-width: 0;
     flex-shrink: 0;
-    overflow: hidden;
   }
 
   .panel-header {
     padding: 9px 14px;
     background: var(--bg-surface-2);
     border-bottom: 1px solid var(--border-hairline);
+    border-radius: var(--radius-md) var(--radius-md) 0 0;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -1518,6 +1527,7 @@
         </div>
       </div>
 
+      <div id="mosaicGrid" class="mosaic-grid">
       <!-- ======================================================================
            SECCIÓN 1: RESUMEN EJECUTIVO & ENJAMBRE IA (sec-overview)
            ====================================================================== -->
@@ -1960,6 +1970,7 @@
           </div>
         </section>
       </div>
+      </div>
 
     </main>
   </div>
@@ -2115,12 +2126,13 @@
     document.getElementById('subStatus').textContent = meta.title.toUpperCase();
 
     const mc = document.getElementById('mainCanvas');
+    const mg = document.getElementById('mosaicGrid');
     const allBlocks = document.querySelectorAll('.sec-block');
     if (secKey === 'all') {
-      mc.setAttribute('data-mosaic', 'true');
+      mg.setAttribute('data-mosaic', 'true');
       allBlocks.forEach(el => el.classList.remove('hidden'));
     } else {
-      mc.removeAttribute('data-mosaic');
+      mg.removeAttribute('data-mosaic');
       allBlocks.forEach(el => {
         el.classList.toggle('hidden', el.id !== meta.viewId);
       });
@@ -2130,6 +2142,7 @@
     document.getElementById('sidebarNav').setAttribute('data-mobile-open', 'false');
     // Reset scroll position of main viewport instantly
     mc.scrollTop = 0;
+    try { history.replaceState(null, '', '#' + secKey); } catch (e) {}
   }
 
   function toggleMobileSidebar() {
@@ -3119,6 +3132,17 @@
       document.getElementById('connDot').style.background = 'var(--sig-crimson)';
     }
   }
+
+  const initHash = (window.location.hash || '').replace('#', '').trim();
+  if (initHash && SECTION_META[initHash]) {
+    selectSection(initHash);
+  }
+  window.addEventListener('hashchange', () => {
+    const h = (window.location.hash || '').replace('#', '').trim();
+    if (h && SECTION_META[h] && h !== activeSection) {
+      selectSection(h);
+    }
+  });
 
   fetchState();
   setInterval(fetchState, 1600);
