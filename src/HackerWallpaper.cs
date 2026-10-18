@@ -2800,6 +2800,16 @@ public static class PorygonCyberDefenseEngine {
                 } catch { }
                 sshTunnelProcess = null;
             }
+            if (forceRestart) {
+                // Also terminate any orphan ssh.exe processes holding 127.0.0.1:8002 or :5080 from previous sessions
+                try {
+                    Process[] sshProcs = Process.GetProcessesByName("ssh");
+                    for (int i = 0; i < sshProcs.Length; i++) {
+                        try { sshProcs[i].Kill(); } catch { } finally { sshProcs[i].Dispose(); }
+                    }
+                    Thread.Sleep(350);
+                } catch { }
+            }
 
             ProcessStartInfo psi = new ProcessStartInfo("ssh.exe",
                 "-N -o BatchMode=yes -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -L 127.0.0.1:5080:127.0.0.1:5080 -L 127.0.0.1:8002:127.0.0.1:8002 office-pc") {
@@ -2809,7 +2819,7 @@ public static class PorygonCyberDefenseEngine {
             };
             sshTunnelProcess = Process.Start(psi);
 
-            for (int i = 0; i < 12; i++) {
+            for (int i = 0; i < 20; i++) {
                 Thread.Sleep(220);
                 if (IsLocalPortListening(8002)) {
                     OfficePcTunnelOnline = true;
@@ -2856,6 +2866,8 @@ public static class PorygonCyberDefenseEngine {
         }
     }
 
+    private static DateTime lastOfficeSelfHealUtc = DateTime.UtcNow.AddMinutes(-10);
+
     public static void PollOfficePcC2AndIdsTelemetry(bool forceResync) {
         DateTime now = DateTime.UtcNow;
         if (!forceResync && (now - lastOfficeC2PollUtc).TotalSeconds < 6.0) return;
@@ -2878,13 +2890,35 @@ public static class PorygonCyberDefenseEngine {
                     var stObj = ser.Deserialize<Dictionary<string, object>>(stJson);
                     if (stObj != null) {
                         lock (SyncLock) {
+                            OfficePcTunnelOnline = true;
                             if (stObj.ContainsKey("logs_raw") && stObj["logs_raw"] != null) OfficePcLogsRaw = Convert.ToInt32(stObj["logs_raw"]);
                             if (stObj.ContainsKey("logs_decrypted") && stObj["logs_decrypted"] != null) OfficePcLogsDecrypted = Convert.ToInt32(stObj["logs_decrypted"]);
                             if (stObj.ContainsKey("credentials_count") && stObj["credentials_count"] != null) OfficePcCredentialsCount = Convert.ToInt32(stObj["credentials_count"]);
-                            if (stObj.ContainsKey("screenshots_count") && stObj["screenshots_count"] != null) OfficePcScreenshotsCount = Convert.ToInt32(stObj["screenshots_count"]);
+                            if (stObj.ContainsKey("screenshots_count") && stObj["screenshots_count"] != null) {
+                                OfficePcScreenshotsCount = Math.Max(OfficePcScreenshotsCount, Convert.ToInt32(stObj["screenshots_count"]));
+                            }
                         }
                     }
-                } catch { }
+                } catch {
+                    // Self-heal stale local SSH tunnel AND remote :8002 C2 server on office-pc (with 60s cooldown)
+                    if ((DateTime.UtcNow - lastOfficeSelfHealUtc).TotalSeconds > 60.0) {
+                        lastOfficeSelfHealUtc = DateTime.UtcNow;
+                        ThreadPool.QueueUserWorkItem(_ => {
+                            try {
+                                EnsureOfficePcSshProxyTunnel(true);
+                                ProcessStartInfo healPsi = new ProcessStartInfo("ssh.exe",
+                                    "office-pc \"Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File C:\\Users\\CarlosAlbertoAcevesC\\Desktop\\03-ciberseguridad-soc\\desencript\\c2_watchdog.ps1'; CurrentDirectory = 'C:\\Users\\CarlosAlbertoAcevesC\\Desktop\\03-ciberseguridad-soc\\desencript' }\"") {
+                                    CreateNoWindow = true,
+                                    UseShellExecute = false,
+                                    WindowStyle = ProcessWindowStyle.Hidden
+                                };
+                                using (Process hp = Process.Start(healPsi)) {
+                                    if (hp != null) hp.WaitForExit(10000);
+                                }
+                            } catch { }
+                        });
+                    }
+                }
 
                 // 2. Poll IDS Statistics & Top Risk Hosts (http://127.0.0.1:8002/api/ids/stats)
                 Dictionary<string, int> ruleHitsMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
