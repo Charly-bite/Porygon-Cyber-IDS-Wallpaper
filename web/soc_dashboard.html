@@ -1,16 +1,16 @@
 <!DOCTYPE html>
-<html lang="es" class="dark" data-variant="snappy" data-stress="live">
+<html lang="es" data-variant="snappy" data-stress="live">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
-<title>PORYGON ENTERPRISE XDR // C2-IDS CONSOLE — Obsidian Sentinel (Emil Craft)</title>
+<title>PORYGON ENTERPRISE XDR // C2-IDS CONSOLE — Daylight Sentinel (Emil Craft)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   /* ============================================================================
-     1. OBSIDIAN SENTINEL DESIGN TOKENS (STITCH MCP + EMIL KOWALSKI CRAFT)
-     - Zero AI Slop: No purple gradients, no heavy glows, hairline 1px borders
+     1. DAYLIGHT SENTINEL DESIGN TOKENS (LIGHT THEME BY DEFAULT — EMIL CRAFT)
+     - Zero AI Slop: No gradients, no fuzzy neon glows, crisp 1px hairline borders
      - Easing: ease-in FORBIDDEN. Mandatory cubic-bezier(0.23, 1, 0.32, 1)
      ============================================================================ */
   :root {
@@ -26,42 +26,47 @@
     --dur-drawer-out: 160ms;
     --dur-toast: 400ms;
 
-    /* Surface Elevation Hierarchy (Obsidian Sentinel) */
-    --bg-canvas: #090B0E;
-    --bg-surface-1: #0D1117;
-    --bg-surface-2: #151B23;
-    --bg-surface-3: #1C2430;
-    --bg-active: #242E3D;
+    /* Surface Elevation Hierarchy — Default Crisp Light Theme (Linear / Sonner Light) */
+    --bg-canvas: #F6F8FA;
+    --bg-surface-1: #FFFFFF;
+    --bg-surface-2: #F1F4F8;
+    --bg-surface-3: #E6ECF2;
+    --bg-sidebar: #F0F3F7;
+    --bg-overlay: #FFFFFF;
 
-    /* Subtle Semi-Transparent Hairline Infrastructure */
-    --border-subtle: rgba(255, 255, 255, 0.04);
-    --border-hairline: rgba(255, 255, 255, 0.07);
-    --border-elevated: rgba(255, 255, 255, 0.12);
-    --border-focus: rgba(16, 185, 129, 0.45);
+    /* Subtle Semi-Transparent Hairline Infrastructure (Dark Ink Alpha on Light) */
+    --border-subtle: rgba(15, 23, 42, 0.05);
+    --border-hairline: rgba(15, 23, 42, 0.09);
+    --border-elevated: rgba(15, 23, 42, 0.15);
+    --border-focus: rgba(5, 150, 105, 0.55);
 
-    /* Typography & Contrast Tokens */
-    --txt-primary: #F3F4F6;
-    --txt-secondary: #9CA3AF;
-    --txt-muted: #6B7280;
+    /* Typography & High-Contrast Ink Tokens */
+    --txt-primary: #0F172A;
+    --txt-secondary: #475569;
+    --txt-muted: #64748B;
 
-    /* Semantic Signal Tokens */
-    --sig-emerald: #10B981;
-    --sig-emerald-bg: rgba(16, 185, 129, 0.10);
-    --sig-emerald-bd: rgba(16, 185, 129, 0.25);
+    /* Semantic Signal Tokens Calibrated for Daylight Legibility */
+    --sig-emerald: #059669;
+    --sig-emerald-txt: #065F46;
+    --sig-emerald-bg: rgba(5, 150, 105, 0.10);
+    --sig-emerald-bd: rgba(5, 150, 105, 0.26);
 
-    --sig-cyan: #06B6D4;
-    --sig-cyan-bg: rgba(6, 182, 212, 0.10);
-    --sig-cyan-bd: rgba(6, 182, 212, 0.25);
+    --sig-cyan: #0284C7;
+    --sig-cyan-txt: #075985;
+    --sig-cyan-bg: rgba(2, 132, 199, 0.10);
+    --sig-cyan-bd: rgba(2, 132, 199, 0.25);
 
-    --sig-amber: #F59E0B;
-    --sig-amber-bg: rgba(245, 158, 11, 0.10);
-    --sig-amber-bd: rgba(245, 158, 11, 0.25);
+    --sig-amber: #D97706;
+    --sig-amber-txt: #92400E;
+    --sig-amber-bg: rgba(217, 119, 6, 0.11);
+    --sig-amber-bd: rgba(217, 119, 6, 0.28);
 
-    --sig-crimson: #EF4444;
-    --sig-crimson-bg: rgba(239, 68, 68, 0.12);
-    --sig-crimson-bd: rgba(239, 68, 68, 0.28);
+    --sig-crimson: #DC2626;
+    --sig-crimson-txt: #991B1B;
+    --sig-crimson-bg: rgba(220, 38, 38, 0.10);
+    --sig-crimson-bd: rgba(220, 38, 38, 0.28);
 
-    /* Geometry Tokens (Mutated by Prototype Variants) */
+    /* Geometry Tokens */
     --radius-sm: 4px;
     --radius-md: 6px;
     --radius-lg: 8px;
@@ -70,39 +75,43 @@
     --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     --font-mono: 'JetBrains Mono', 'Consolas', monospace;
 
-    /* Level 3 Floating Shadow (Restricted to Overlays Only) */
-    --shadow-overlay: 0 4px 12px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08);
+    /* Level 3 Floating Overlay Shadow (Subtle Daylight Occlusion) */
+    --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.03);
+    --shadow-overlay: 0 10px 28px -4px rgba(15, 23, 42, 0.12), 0 2px 6px rgba(15, 23, 42, 0.06), 0 0 0 1px rgba(15, 23, 42, 0.08);
   }
 
   /* ============================================================================
      PROTOTYPE PERSONALITY VARIANTS (Instant 0ms content swap via data-variant)
-     1. Quiet  — Ultra-muted hairlines, whisper-quiet visual weight
-     2. Paper  — Editorial warm carbon slate with crisp paper contrast
-     3. Round  — Tactile softer geometry (10px-14px radii)
-     4. Snappy — Default Linear/Raycast Obsidian Sentinel (4px razor geometry)
+     1. Quiet  — Ultra-minimal low-contrast alabaster light
+     2. Paper  — Editorial warm stone/ivory paper with carbon ink
+     3. Round  — Tactile softer geometry (8px–14px radii)
+     4. Snappy — Default Linear/Raycast Daylight Sentinel (4px razor geometry)
      ============================================================================ */
   html[data-variant="quiet"] {
-    --bg-canvas: #08090B;
-    --bg-surface-1: #0B0D10;
-    --bg-surface-2: #101318;
-    --bg-surface-3: #161A21;
-    --border-hairline: rgba(255, 255, 255, 0.045);
-    --border-subtle: rgba(255, 255, 255, 0.025);
-    --txt-primary: #E5E7EB;
-    --txt-secondary: #8B929E;
+    --bg-canvas: #FAFAFB;
+    --bg-surface-1: #FFFFFF;
+    --bg-surface-2: #F4F5F7;
+    --bg-surface-3: #EAECEF;
+    --bg-sidebar: #F5F6F8;
+    --border-hairline: rgba(15, 23, 42, 0.06);
+    --border-subtle: rgba(15, 23, 42, 0.035);
+    --txt-primary: #1E293B;
+    --txt-secondary: #64748B;
     --radius-sm: 3px;
     --radius-md: 4px;
   }
   html[data-variant="paper"] {
-    --bg-canvas: #121110;
-    --bg-surface-1: #181715;
-    --bg-surface-2: #201E1B;
-    --bg-surface-3: #282521;
-    --border-hairline: rgba(245, 240, 230, 0.09);
-    --border-subtle: rgba(245, 240, 230, 0.05);
-    --txt-primary: #F5F2EB;
-    --txt-secondary: #B5AFA4;
-    --txt-muted: #7D776D;
+    --bg-canvas: #F5F2EB;
+    --bg-surface-1: #FCFBF7;
+    --bg-surface-2: #EFECE3;
+    --bg-surface-3: #E5E0D5;
+    --bg-sidebar: #EFECE4;
+    --bg-overlay: #FCFBF7;
+    --border-hairline: rgba(28, 25, 23, 0.10);
+    --border-subtle: rgba(28, 25, 23, 0.05);
+    --txt-primary: #1C1917;
+    --txt-secondary: #57534E;
+    --txt-muted: #78716C;
     --radius-sm: 2px;
     --radius-md: 3px;
     --radius-lg: 4px;
@@ -111,7 +120,7 @@
     --radius-sm: 8px;
     --radius-md: 12px;
     --radius-lg: 16px;
-    --border-hairline: rgba(255, 255, 255, 0.085);
+    --border-hairline: rgba(15, 23, 42, 0.10);
   }
 
   /* ============================================================================
@@ -133,16 +142,12 @@
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     -webkit-font-smoothing: antialiased;
     overscroll-behavior: none;
-    min-height: 100dvh;
-  }
-
-  body {
-    padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px));
-    overflow-x: hidden;
+    height: 100dvh;
+    overflow: hidden;
   }
 
   /* Tabular numerals for all telemetry metrics, sockets, PIDs, hashes */
-  .tabular-nums, code, .mono, table td, table th, .pill-metric, .badge {
+  .tabular-nums, code, .mono, table td, table th, .pill-metric, .badge, .nav-count {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
     font-feature-settings: "zero", "tnum";
@@ -155,7 +160,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    max-width: 34ch;
+    max-width: 36ch;
     display: inline-block;
     vertical-align: bottom;
   }
@@ -164,25 +169,30 @@
     word-break: break-word;
   }
 
-  /* Custom subtle scrollbar */
-  ::-webkit-scrollbar { width: 5px; height: 5px; }
-  ::-webkit-scrollbar-track { background: var(--bg-canvas); }
-  ::-webkit-scrollbar-thumb { background: #262B33; border-radius: 3px; }
+  /* Custom subtle light scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(15, 23, 42, 0.16); border-radius: 3px; }
 
   /* ============================================================================
-     TOP COMMAND BAR (Level 1 Surface #0D1117, 1px hairline border)
+     APPLICATION SHELL (Topbar + Left Sidebar Panel + Main Section Canvas)
      ============================================================================ */
-  .topbar {
-    position: sticky;
-    top: 0;
-    z-index: 90;
-    background: rgba(13, 17, 23, 0.92);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border-bottom: 1px solid var(--border-hairline);
-    padding: 8px 16px;
+  .app-shell {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
+    height: 100dvh;
+    width: 100vw;
+    overflow: hidden;
+  }
+
+  .topbar {
+    height: 46px;
+    flex-shrink: 0;
+    z-index: 90;
+    background: var(--bg-surface-1);
+    border-bottom: 1px solid var(--border-hairline);
+    padding: 0 14px;
+    display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 10px;
@@ -191,8 +201,12 @@
   .brand-cluster {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     min-width: 0;
+  }
+
+  .mobile-menu-btn {
+    display: none;
   }
 
   .brand-shield {
@@ -204,10 +218,10 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    color: var(--sig-emerald);
+    color: var(--sig-emerald-txt);
     font-family: var(--font-mono);
     font-weight: 700;
-    font-size: 11px;
+    font-size: 10.5px;
     flex-shrink: 0;
   }
 
@@ -222,8 +236,8 @@
 
   .brand-title {
     font-family: var(--font-mono);
-    font-size: 13px;
-    font-weight: 600;
+    font-size: 12.5px;
+    font-weight: 700;
     color: var(--txt-primary);
     letter-spacing: -0.01em;
     white-space: nowrap;
@@ -232,8 +246,8 @@
   .brand-crumb {
     font-family: var(--font-mono);
     font-size: 11px;
-    color: var(--txt-muted);
-    padding: 2px 6px;
+    color: var(--txt-secondary);
+    padding: 2px 7px;
     background: var(--bg-surface-2);
     border: 1px solid var(--border-hairline);
     border-radius: var(--radius-sm);
@@ -242,40 +256,41 @@
 
   .telemetry-strip {
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
+    overflow-x: auto;
+    min-width: 0;
   }
 
   .pill-metric {
     font-size: 11px;
     background: var(--bg-surface-2);
     border: 1px solid var(--border-hairline);
-    padding: 3px 8px;
+    padding: 3px 7px;
     border-radius: var(--radius-sm);
     color: var(--txt-secondary);
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: 4px;
     white-space: nowrap;
   }
   .pill-metric strong { color: var(--txt-primary); font-weight: 600; }
-  .pill-metric.emerald strong { color: var(--sig-emerald); }
-  .pill-metric.cyan strong { color: var(--sig-cyan); }
-  .pill-metric.amber strong { color: var(--sig-amber); }
-  .pill-metric.crimson strong { color: var(--sig-crimson); }
+  .pill-metric.emerald strong { color: var(--sig-emerald-txt); }
+  .pill-metric.cyan strong { color: var(--sig-cyan-txt); }
+  .pill-metric.amber strong { color: var(--sig-amber-txt); }
+  .pill-metric.crimson strong { color: var(--sig-crimson-txt); }
 
   .topbar-actions {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     flex-shrink: 0;
   }
 
   /* Raycast / Linear Command-K Trigger */
   .cmdk-trigger {
     height: 28px;
-    padding: 0 10px;
+    padding: 0 9px;
     background: var(--bg-surface-2);
     border: 1px solid var(--border-hairline);
     border-radius: var(--radius-sm);
@@ -290,18 +305,199 @@
     touch-action: manipulation;
     transition: transform var(--dur-press) var(--ease-out), opacity var(--dur-press) var(--ease-out);
   }
-  .cmdk-trigger:active {
-    transform: scale(0.97);
-  }
+  .cmdk-trigger:active { transform: scale(0.97); }
   .cmdk-kbd {
     font-family: var(--font-mono);
     font-size: 10px;
     font-weight: 600;
     padding: 1px 5px;
     border-radius: 3px;
-    background: var(--bg-surface-3);
-    border: 1px solid var(--border-elevated);
+    background: var(--bg-surface-1);
+    border: 1px solid var(--border-hairline);
     color: var(--txt-primary);
+  }
+
+  /* ============================================================================
+     WORKSPACE SPLIT BODY (LEFT SIDEBAR + INDEPENDENT MAIN VIEWPORT)
+     ============================================================================ */
+  .workspace-body {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* LEFT SIDEBAR NAVIGATION PANEL */
+  .sidebar-nav {
+    width: 268px;
+    flex-shrink: 0;
+    background: var(--bg-sidebar);
+    border-right: 1px solid var(--border-hairline);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    overflow-y: auto;
+    padding: 10px 8px calc(76px + env(safe-area-inset-bottom, 0px));
+    user-select: none;
+    z-index: 60;
+  }
+
+  .nav-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: 12px;
+  }
+
+  .nav-group-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--txt-muted);
+    padding: 4px 8px 3px;
+  }
+
+  .nav-item {
+    width: 100%;
+    min-height: 31px;
+    padding: 5px 8px;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--txt-secondary);
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    cursor: pointer;
+    text-align: left;
+    touch-action: manipulation;
+    /* Instant 0ms section switch, tactile scale(0.97) on press */
+    transition: transform var(--dur-press) var(--ease-out), opacity var(--dur-press) var(--ease-out);
+  }
+  .nav-item:active {
+    transform: scale(0.97);
+  }
+  .nav-item.active {
+    background: var(--bg-surface-1);
+    color: var(--txt-primary);
+    font-weight: 600;
+    border-color: var(--border-hairline);
+    box-shadow: var(--shadow-card);
+  }
+  .nav-item.active .nav-dot {
+    background: var(--sig-emerald);
+  }
+
+  .nav-item-left {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+  }
+
+  .nav-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--txt-muted);
+    opacity: 0.5;
+    flex-shrink: 0;
+  }
+  .nav-item.active .nav-dot {
+    opacity: 1;
+  }
+
+  .nav-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .nav-count {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 5px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-surface-2);
+    border: 1px solid var(--border-subtle);
+    color: var(--txt-secondary);
+    flex-shrink: 0;
+  }
+  .nav-item.active .nav-count {
+    background: var(--sig-emerald-bg);
+    border-color: var(--sig-emerald-bd);
+    color: var(--sig-emerald-txt);
+  }
+
+  .sidebar-footer {
+    border-top: 1px solid var(--border-hairline);
+    padding: 10px 6px 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--txt-secondary);
+  }
+
+  /* MAIN SECTION VIEWPORT */
+  .main-canvas {
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+    padding: 16px 20px calc(92px + env(safe-area-inset-bottom, 0px));
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  /* Section Header Bar inside Main Viewport */
+  .section-masthead {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border-hairline);
+  }
+  .section-masthead-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--txt-primary);
+    letter-spacing: -0.015em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .section-masthead-sub {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--txt-secondary);
+  }
+
+  @media (max-width: 960px) {
+    .mobile-menu-btn { display: inline-flex; }
+    .sidebar-nav {
+      position: fixed;
+      top: 46px;
+      left: 0;
+      bottom: 0;
+      box-shadow: var(--shadow-overlay);
+      transform: translateX(-100%);
+      transition: transform var(--dur-drawer-out) var(--ease-out);
+    }
+    .sidebar-nav[data-mobile-open="true"] {
+      transform: translateX(0);
+      transition: transform var(--dur-drawer-in) var(--ease-out);
+    }
   }
 
   /* ============================================================================
@@ -315,8 +511,9 @@
     padding: 0 10px;
     border-radius: var(--radius-sm);
     border: 1px solid var(--border-hairline);
-    background: var(--bg-surface-2);
+    background: var(--bg-surface-1);
     color: var(--txt-primary);
+    box-shadow: var(--shadow-card);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -327,7 +524,6 @@
     flex-shrink: 0;
     user-select: none;
     touch-action: manipulation;
-    /* ONLY GPU-composited properties in transition */
     transition: transform var(--dur-press) var(--ease-out), opacity var(--dur-press) var(--ease-out);
   }
   .btn:active {
@@ -341,49 +537,52 @@
   }
   .btn-primary {
     background: var(--sig-emerald);
-    border-color: rgba(16, 185, 129, 0.4);
-    color: #06110C;
+    border-color: var(--sig-emerald);
+    color: #FFFFFF;
     font-weight: 600;
   }
   .btn-cyan {
     background: var(--sig-cyan-bg);
     border-color: var(--sig-cyan-bd);
-    color: #67E8F9;
+    color: var(--sig-cyan-txt);
+    font-weight: 600;
   }
   .btn-gold {
     background: var(--sig-amber-bg);
     border-color: var(--sig-amber-bd);
-    color: #FCD34D;
+    color: var(--sig-amber-txt);
+    font-weight: 600;
   }
   .btn-red {
     background: var(--sig-crimson-bg);
     border-color: var(--sig-crimson-bd);
-    color: #FCA5A5;
+    color: var(--sig-crimson-txt);
+    font-weight: 600;
   }
 
   /* Gate ALL :hover rules inside @media (hover: hover) and (pointer: fine) */
   @media (hover: hover) and (pointer: fine) {
-    .btn:hover { background: var(--bg-surface-3); border-color: var(--border-elevated); }
+    .btn:hover { background: var(--bg-surface-2); border-color: var(--border-elevated); }
     .btn-primary:hover { opacity: 0.92; background: var(--sig-emerald); }
-    .btn-cyan:hover { background: rgba(6, 182, 212, 0.18); }
-    .btn-gold:hover { background: rgba(245, 158, 11, 0.18); }
-    .btn-red:hover { background: rgba(239, 68, 68, 0.20); }
+    .btn-cyan:hover { background: rgba(2, 132, 199, 0.16); }
+    .btn-gold:hover { background: rgba(217, 119, 6, 0.17); }
+    .btn-red:hover { background: rgba(220, 38, 38, 0.16); }
     .cmdk-trigger:hover { border-color: var(--border-elevated); color: var(--txt-primary); }
-    tbody tr:hover td { background: rgba(255, 255, 255, 0.025); }
-    .tab-btn:hover { color: var(--txt-primary); background: var(--bg-surface-2); }
-    .cmdk-item:hover { background: var(--bg-surface-3); }
-    .popover-item:hover { background: var(--bg-surface-3); color: var(--txt-primary); }
-    .drop-zone:hover { background: rgba(245, 158, 11, 0.12); }
+    tbody tr:hover td { background: var(--bg-surface-2); }
+    .nav-item:hover:not(.active) { background: rgba(15, 23, 42, 0.04); color: var(--txt-primary); }
+    .cmdk-item:hover { background: var(--bg-surface-2); }
+    .popover-item:hover { background: var(--bg-surface-2); color: var(--txt-primary); }
+    .drop-zone:hover { background: rgba(217, 119, 6, 0.16); }
   }
 
-  /* Fast high-velocity spinner (emil-design-eng: fast rotation reduces perceived wait) */
+  /* Fast high-velocity spinner (550ms linear infinite) */
   @keyframes emilSpin {
     to { transform: rotate(360deg); }
   }
   .spinner {
     width: 12px;
     height: 12px;
-    border: 1.5px solid rgba(255, 255, 255, 0.22);
+    border: 1.5px solid rgba(15, 23, 42, 0.22);
     border-top-color: currentColor;
     border-radius: 50%;
     animation: emilSpin 550ms linear infinite;
@@ -393,25 +592,17 @@
   .is-loading .spinner { display: inline-block; }
 
   /* ============================================================================
-     WORKSPACE CONTAINER & BANNERS
+     CARDS, BANNERS & PANELS (Light Surface Hierarchy)
      ============================================================================ */
-  .container {
-    max-width: 1640px;
-    margin: 0 auto;
-    padding: 12px 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-
   .bridge-banner {
     background: var(--bg-surface-1);
     border: 1px solid var(--border-hairline);
     border-radius: var(--radius-md);
-    padding: 10px 14px;
+    box-shadow: var(--shadow-card);
+    padding: 12px 14px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
   }
 
   .bridge-row {
@@ -434,6 +625,37 @@
   }
   .bridge-meta strong { color: var(--txt-primary); }
 
+  .kpi-grid-4 {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+  }
+  @media (max-width: 1100px) { .kpi-grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 600px) { .kpi-grid-4 { grid-template-columns: 1fr; } }
+
+  .kpi-box {
+    background: var(--bg-surface-2);
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .kpi-box-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--txt-muted);
+  }
+  .kpi-box-val {
+    font-family: var(--font-mono);
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--txt-primary);
+  }
+
   .toolbar {
     display: flex;
     flex-wrap: wrap;
@@ -441,13 +663,10 @@
     gap: 6px;
   }
 
-  /* ============================================================================
-     EVOLUTIONARY PORYGON AI MODULES (3-Column Technical Grid)
-     ============================================================================ */
   .triad-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 10px;
+    gap: 12px;
   }
   @media (max-width: 1100px) {
     .triad-grid { grid-template-columns: 1fr; }
@@ -457,6 +676,7 @@
     background: var(--bg-surface-1);
     border: 1px solid var(--border-hairline);
     border-radius: var(--radius-md);
+    box-shadow: var(--shadow-card);
     padding: 12px 14px;
     display: flex;
     flex-direction: column;
@@ -476,13 +696,13 @@
   .agent-name {
     font-family: var(--font-mono);
     font-size: 12.5px;
-    font-weight: 600;
+    font-weight: 700;
     color: var(--txt-primary);
     letter-spacing: -0.01em;
   }
-  .agent-card.p1 .agent-name { color: var(--sig-emerald); }
-  .agent-card.p2 .agent-name { color: var(--sig-amber); }
-  .agent-card.pz .agent-name { color: var(--sig-crimson); }
+  .agent-card.p1 .agent-name { color: var(--sig-emerald-txt); }
+  .agent-card.p2 .agent-name { color: var(--sig-amber-txt); }
+  .agent-card.pz .agent-name { color: var(--sig-crimson-txt); }
 
   .agent-role {
     font-family: var(--font-mono);
@@ -508,53 +728,11 @@
   }
   .agent-stats strong { color: var(--txt-primary); font-weight: 600; }
 
-  /* ============================================================================
-     TABS & DATA PANELS (Level 1 & Level 2 Surfaces)
-     ============================================================================ */
-  .tabs {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-    border-bottom: 1px solid var(--border-hairline);
-    padding-bottom: 6px;
-  }
-
-  .tab-btn {
-    font-family: var(--font-mono);
-    font-size: 11.5px;
-    font-weight: 500;
-    height: 28px;
-    padding: 0 10px;
-    border-radius: var(--radius-sm);
-    border: 1px solid transparent;
-    background: transparent;
-    color: var(--txt-secondary);
-    cursor: pointer;
-    user-select: none;
-    touch-action: manipulation;
-    transition: transform var(--dur-press) var(--ease-out), opacity var(--dur-press) var(--ease-out);
-  }
-  .tab-btn:active { transform: scale(0.97); }
-  .tab-btn.active {
-    background: var(--bg-surface-2);
-    color: var(--sig-emerald);
-    border-color: var(--border-elevated);
-    font-weight: 600;
-  }
-
-  .grid-2 {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-  }
-  @media (max-width: 1180px) {
-    .grid-2 { grid-template-columns: 1fr; }
-  }
-
   .panel {
     background: var(--bg-surface-1);
     border: 1px solid var(--border-hairline);
     border-radius: var(--radius-md);
+    box-shadow: var(--shadow-card);
     display: flex;
     flex-direction: column;
     min-width: 0;
@@ -562,7 +740,7 @@
   }
 
   .panel-header {
-    padding: 8px 12px;
+    padding: 9px 14px;
     background: var(--bg-surface-2);
     border-bottom: 1px solid var(--border-hairline);
     display: flex;
@@ -576,7 +754,7 @@
   .panel-title {
     font-family: var(--font-mono);
     font-size: 11.5px;
-    font-weight: 600;
+    font-weight: 700;
     color: var(--txt-primary);
     letter-spacing: 0.01em;
     display: flex;
@@ -584,10 +762,10 @@
     gap: 6px;
     min-width: 0;
   }
-  .panel-title.emerald { color: var(--sig-emerald); }
-  .panel-title.cyan { color: var(--sig-cyan); }
-  .panel-title.gold { color: var(--sig-amber); }
-  .panel-title.red { color: var(--sig-crimson); }
+  .panel-title.emerald { color: var(--sig-emerald-txt); }
+  .panel-title.cyan { color: var(--sig-cyan-txt); }
+  .panel-title.gold { color: var(--sig-amber-txt); }
+  .panel-title.red { color: var(--sig-crimson-txt); }
 
   .panel-controls {
     display: flex;
@@ -597,7 +775,7 @@
   }
 
   .input-txt {
-    background: var(--bg-canvas);
+    background: var(--bg-surface-1);
     border: 1px solid var(--border-hairline);
     color: var(--txt-primary);
     font-family: var(--font-mono);
@@ -609,7 +787,7 @@
   }
   .input-txt:focus {
     border-color: var(--sig-emerald);
-    box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.25);
+    box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.15);
   }
 
   /* MOBILE-NATIVE: Prevent iOS Safari auto-zoom on input focus (>=16px on mobile/touch) */
@@ -621,7 +799,7 @@
   }
 
   .scan-bar {
-    padding: 8px 12px;
+    padding: 9px 14px;
     background: var(--bg-surface-1);
     border-bottom: 1px solid var(--border-subtle);
     display: flex;
@@ -633,7 +811,8 @@
   .drop-zone {
     border: 1px dashed var(--sig-amber-bd);
     background: var(--sig-amber-bg);
-    color: #FCD34D;
+    color: var(--sig-amber-txt);
+    font-weight: 600;
     height: 28px;
     padding: 0 10px;
     border-radius: var(--radius-sm);
@@ -649,7 +828,7 @@
      TECHNICAL DATA TABLES & PILL BADGES
      ============================================================================ */
   .table-wrap {
-    max-height: 340px;
+    max-height: 540px;
     overflow-y: auto;
     overflow-x: auto;
   }
@@ -665,20 +844,20 @@
     position: sticky;
     top: 0;
     z-index: 2;
-    background: var(--bg-surface-1);
+    background: var(--bg-surface-2);
     color: var(--txt-muted);
     text-align: left;
-    padding: 6px 10px;
+    padding: 7px 12px;
     border-bottom: 1px solid var(--border-hairline);
     font-size: 10.5px;
-    font-weight: 600;
+    font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.04em;
     white-space: nowrap;
   }
 
   td {
-    padding: 6px 10px;
+    padding: 7px 12px;
     border-bottom: 1px solid var(--border-subtle);
     vertical-align: middle;
     color: var(--txt-primary);
@@ -699,27 +878,27 @@
   }
   .b-crit {
     background: var(--sig-crimson-bg);
-    color: #FCA5A5;
+    color: var(--sig-crimson-txt);
     border: 1px solid var(--sig-crimson-bd);
   }
   .b-high {
     background: var(--sig-amber-bg);
-    color: #FCD34D;
+    color: var(--sig-amber-txt);
     border: 1px solid var(--sig-amber-bd);
   }
   .b-info {
     background: var(--sig-emerald-bg);
-    color: #6EE7B7;
+    color: var(--sig-emerald-txt);
     border: 1px solid var(--sig-emerald-bd);
   }
   .b-mitre {
     background: var(--sig-cyan-bg);
-    color: #67E8F9;
+    color: var(--sig-cyan-txt);
     border: 1px solid var(--sig-cyan-bd);
   }
 
   .empty-state {
-    padding: 24px 16px;
+    padding: 28px 16px;
     text-align: center;
     color: var(--txt-secondary);
     font-family: var(--font-mono);
@@ -730,27 +909,34 @@
     gap: 8px;
   }
 
-  .soar-grid {
-    padding: 12px;
+  .grid-2 {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+    gap: 14px;
+  }
+  @media (max-width: 1180px) { .grid-2 { grid-template-columns: 1fr; } }
+
+  .soar-grid {
+    padding: 14px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
     font-family: var(--font-mono);
     font-size: 11.5px;
   }
   @media (max-width: 780px) { .soar-grid { grid-template-columns: 1fr; } }
 
   .soar-box {
-    background: var(--bg-canvas);
+    background: var(--bg-surface-2);
     border: 1px solid var(--border-hairline);
     border-radius: var(--radius-sm);
-    padding: 10px 12px;
+    padding: 12px 14px;
   }
   .soar-box h4 {
-    color: var(--sig-cyan);
+    color: var(--sig-cyan-txt);
     margin-bottom: 8px;
-    font-size: 11.5px;
-    font-weight: 600;
+    font-size: 12px;
+    font-weight: 700;
   }
   .form-row {
     display: flex;
@@ -758,7 +944,7 @@
     gap: 4px;
     margin-bottom: 8px;
   }
-  .form-row label { color: var(--txt-secondary); font-size: 10.5px; }
+  .form-row label { color: var(--txt-secondary); font-size: 11px; }
 
   /* ============================================================================
      ORIGIN-AWARE POPOVER MENU (180ms entry / 150ms exit, scale(0.95), 0ms Escape)
@@ -766,8 +952,8 @@
   .origin-popover {
     position: fixed;
     z-index: 200;
-    width: 250px;
-    background: var(--bg-surface-3);
+    width: 260px;
+    background: var(--bg-overlay);
     border: 1px solid var(--border-elevated);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-overlay);
@@ -788,7 +974,6 @@
       transform var(--dur-popover-in) var(--ease-out),
       opacity var(--dur-popover-in) var(--ease-out);
   }
-  /* 100+/day Keyboard Rule: 0ms instant open/close when triggered by keyboard */
   .origin-popover[data-kb-instant="true"] {
     transition: none !important;
   }
@@ -797,7 +982,7 @@
     padding: 5px 8px;
     font-family: var(--font-mono);
     font-size: 10px;
-    font-weight: 600;
+    font-weight: 700;
     color: var(--txt-muted);
     text-transform: uppercase;
     letter-spacing: 0.04em;
@@ -812,6 +997,7 @@
     color: var(--txt-secondary);
     font-family: var(--font-sans);
     font-size: 12px;
+    font-weight: 500;
     padding: 6px 8px;
     border-radius: var(--radius-sm);
     display: flex;
@@ -834,8 +1020,8 @@
     position: fixed;
     inset: 0;
     z-index: 300;
-    background: rgba(5, 7, 10, 0.65);
-    backdrop-filter: blur(4px);
+    background: rgba(15, 23, 42, 0.28);
+    backdrop-filter: blur(3px);
     display: flex;
     align-items: flex-start;
     justify-content: center;
@@ -856,7 +1042,7 @@
 
   .cmdk-dialog {
     width: min(580px, 92vw);
-    background: var(--bg-surface-2);
+    background: var(--bg-overlay);
     border: 1px solid var(--border-elevated);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-overlay);
@@ -881,7 +1067,7 @@
     align-items: center;
     padding: 0 12px;
     border-bottom: 1px solid var(--border-hairline);
-    background: var(--bg-surface-1);
+    background: var(--bg-surface-2);
   }
   .cmdk-input {
     width: 100%;
@@ -894,7 +1080,7 @@
     font-size: 13.5px;
   }
   .cmdk-list {
-    max-height: 300px;
+    max-height: 320px;
     overflow-y: auto;
     padding: 6px;
   }
@@ -907,17 +1093,17 @@
     color: var(--txt-secondary);
     font-family: var(--font-sans);
     font-size: 12.5px;
+    font-weight: 500;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
     cursor: pointer;
     text-align: left;
-    /* 0ms instant highlight for keyboard navigation */
     transition: none;
   }
   .cmdk-item[data-active="true"] {
-    background: var(--bg-surface-3);
+    background: var(--bg-surface-2);
     color: var(--txt-primary);
   }
   .cmdk-item kbd {
@@ -940,7 +1126,7 @@
     bottom: 0;
     width: min(420px, 92vw);
     z-index: 250;
-    background: var(--bg-surface-2);
+    background: var(--bg-overlay);
     border-left: 1px solid var(--border-elevated);
     box-shadow: var(--shadow-overlay);
     padding: 16px;
@@ -982,7 +1168,7 @@
     bottom: 0;
     right: 0;
     width: 100%;
-    background: var(--bg-surface-3);
+    background: var(--bg-overlay);
     border: 1px solid var(--border-elevated);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-overlay);
@@ -996,12 +1182,12 @@
     gap: 8px;
     pointer-events: auto;
     transform-origin: bottom center;
-    /* Deliberate 400ms ease rhythm per Sonner / Emil specification */
     transition: transform var(--dur-toast) ease, opacity var(--dur-toast) ease;
   }
   .sonner-toast[data-alert="true"] {
     border-color: var(--sig-crimson-bd);
-    color: #FCA5A5;
+    color: var(--sig-crimson-txt);
+    background: #FEF2F2;
   }
 
   /* ============================================================================
@@ -1009,7 +1195,7 @@
      ============================================================================ */
   .proto-dock {
     position: fixed;
-    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    bottom: calc(14px + env(safe-area-inset-bottom, 0px));
     left: 50%;
     transform: translateX(-50%);
     z-index: 2147483647;
@@ -1027,13 +1213,13 @@
     gap: 2px;
     padding: 4px;
     border-radius: 9999px;
-    background: rgba(15, 16, 18, 0.85);
+    background: rgba(15, 23, 42, 0.90);
     backdrop-filter: blur(12px) saturate(180%);
     -webkit-backdrop-filter: blur(12px) saturate(180%);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
     box-shadow:
-      0 10px 30px -5px rgba(0, 0, 0, 0.5),
-      0 2px 6px rgba(0, 0, 0, 0.3);
+      0 10px 30px -5px rgba(15, 23, 42, 0.25),
+      0 2px 6px rgba(15, 23, 42, 0.15);
     font-family: -apple-system, BlinkMacSystemFont, "Inter", system-ui, sans-serif;
     font-size: 12px;
     line-height: 1;
@@ -1043,7 +1229,7 @@
 
   .proto-picker-label {
     padding: 0 8px 0 10px;
-    color: rgba(255, 255, 255, 0.45);
+    color: rgba(255, 255, 255, 0.55);
     font-weight: 500;
     letter-spacing: -0.01em;
   }
@@ -1061,8 +1247,8 @@
     left: 0;
     height: 100%;
     border-radius: 9999px;
-    background: rgba(255, 255, 255, 0.12);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.16);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.20);
     pointer-events: none;
   }
 
@@ -1078,7 +1264,7 @@
     appearance: none;
     border: 0;
     background: transparent;
-    color: rgba(255, 255, 255, 0.6);
+    color: rgba(255, 255, 255, 0.65);
     padding: 6px 11px;
     border-radius: 9999px;
     font: inherit;
@@ -1096,14 +1282,12 @@
 
   @media (hover: hover) and (pointer: fine) {
     .proto-picker-btn:hover {
-      color: rgba(255, 255, 255, 0.9);
+      color: rgba(255, 255, 255, 0.95);
     }
   }
 
   /* ============================================================================
      ACCESSIBILITY: PREFERS-REDUCED-MOTION (emil-design-eng Section 2.D)
-     Eliminate spatial movement (translate/scale) while keeping a gentle 150ms
-     opacity fade. Never abruptly disable everything to none.
      ============================================================================ */
   @media (prefers-reduced-motion: reduce) {
     .origin-popover,
@@ -1112,12 +1296,13 @@
     .cmdk-backdrop[data-open="true"] .cmdk-dialog,
     .forensic-drawer,
     .forensic-drawer[data-open="true"],
-    .sonner-toast {
+    .sonner-toast,
+    .sidebar-nav {
       transform: none !important;
       transition: opacity 150ms ease !important;
     }
     .btn:active,
-    .tab-btn:active,
+    .nav-item:active,
     .cmdk-trigger:active,
     .proto-picker-btn:active {
       transform: none !important;
@@ -1135,17 +1320,19 @@
 </head>
 <body>
 
+<div class="app-shell">
   <!-- ==========================================================================
-       1. TOP COMMAND BAR (Obsidian Sentinel Level 1)
+       1. TOP COMMAND BAR (Daylight Sentinel Level 1)
        ========================================================================== -->
   <header class="topbar">
     <div class="brand-cluster">
-      <div class="brand-shield" title="Obsidian Sentinel XDR">XDR</div>
+      <button type="button" class="btn btn-sm mobile-menu-btn" onclick="toggleMobileSidebar()">☰ Secciones</button>
+      <div class="brand-shield" title="Daylight Sentinel XDR">XDR</div>
       <span class="status-dot" id="connDot"></span>
       <div class="min-w-0">
         <div class="brand-title">PORYGON // C2-IDS CONSOLE</div>
       </div>
-      <span class="brand-crumb" id="subStatus">SOC-OFFICE-PC · SHA-256 LEDGER</span>
+      <span class="brand-crumb" id="subStatus">RESUMEN EJECUTIVO & ENJAMBRE</span>
     </div>
 
     <div class="telemetry-strip">
@@ -1162,7 +1349,7 @@
 
     <div class="topbar-actions">
       <button type="button" class="cmdk-trigger" id="cmdkTriggerBtn" onclick="openCommandPalette(false, event)" title="Abrir Command Palette (⌘K / Ctrl+K — 0ms por teclado)">
-        <span>Buscar o ejecutar acción...</span>
+        <span>Ir a sección o acción...</span>
         <kbd class="cmdk-kbd">⌘K</kbd>
       </button>
       <button type="button" class="btn btn-primary" id="playbookTriggerBtn" onclick="togglePlaybookPopover(event)">
@@ -1198,186 +1385,295 @@
   </div>
 
   <!-- ==========================================================================
-       MAIN WORKSPACE CONTAINER
+       2. SPLIT WORKSPACE: LEFT SIDEBAR PANEL + DEDICATED SECTION CANVAS
        ========================================================================== -->
-  <main class="container">
+  <div class="workspace-body">
 
-    <!-- LIVE ENGINE BANNER -->
-    <div class="bridge-banner" style="padding: 7px 12px;">
-      <div class="bridge-row">
-        <div class="bridge-meta">
-          <span class="badge b-info">LIVE ENGINE</span>
-          <strong id="bannerText" class="break-anywhere">CONECTANDO CON PORYGON ENTERPRISE XDR ENGINE...</strong>
+    <!-- LEFT SIDEBAR NAVIGATION PANEL (Each section has its own dedicated view) -->
+    <aside class="sidebar-nav" id="sidebarNav" data-mobile-open="false" aria-label="Secciones de Consola SOC">
+      <div>
+        <div class="nav-group">
+          <div class="nav-group-label">Mando & Telemetría C2</div>
+          <button type="button" class="nav-item active" data-sec="overview" onclick="selectSection('overview', this)">
+            <span class="nav-item-left"><span class="nav-dot"></span><span class="nav-label">Resumen & Enjambre IA</span></span>
+            <span class="nav-count" id="navCntOverview">3 IA</span>
+          </button>
+          <button type="button" class="nav-item" data-sec="bridge" onclick="selectSection('bridge', this)">
+            <span class="nav-item-left"><span class="nav-dot"></span><span class="nav-label">Proxy SSH & C2/IDS</span></span>
+            <span class="nav-count" id="navCntBridge">0 online</span>
+          </button>
         </div>
-        <div class="bridge-meta">
-          <span>SIEM Ledger:</span>
-          <code id="jsonlPath" class="truncate-90" title="C:\Users\Admin\Porygon-Cyber-IDS-Wallpaper\logs\siem_security_events.jsonl">C:\Users\Admin\Porygon-Cyber-IDS-Wallpaper\logs\siem_security_events.jsonl</code>
+
+        <div class="nav-group">
+          <div class="nav-group-label">Inspección de Red & Flota</div>
+          <button type="button" class="nav-item" data-sec="tcp" onclick="selectSection('tcp', this)">
+            <span class="nav-item-left"><span class="nav-dot"></span><span class="nav-label">Sockets TCP ↔ PID</span></span>
+            <span class="nav-count" id="navCntTcp">0</span>
+          </button>
+          <button type="button" class="nav-item" data-sec="fleet" onclick="selectSection('fleet', this)">
+            <span class="nav-item-left"><span class="nav-dot"></span><span class="nav-label">Flota Multi-Host XDR</span></span>
+            <span class="nav-count" id="navCntFleet">1</span>
+          </button>
+          <button type="button" class="nav-item" data-sec="dns" onclick="selectSection('dns', this)">
+            <span class="nav-item-left"><span class="nav-dot"></span><span class="nav-label">Inspector DNS & DGA</span></span>
+            <span class="nav-count" id="navCntDns">0</span>
+          </button>
+        </div>
+
+        <div class="nav-group">
+          <div class="nav-group-label">Detección & Forense</div>
+          <button type="button" class="nav-item" data-sec="rules" onclick="selectSection('rules', this)">
+            <span class="nav-item-left"><span class="nav-dot"></span><span class="nav-label">Motor YARA & Sigma</span></span>
+            <span class="nav-count" id="navCntRules">0</span>
+          </button>
+          <button type="button" class="nav-item" data-sec="siem" onclick="selectSection('siem', this)">
+            <span class="nav-item-left"><span class="nav-dot"></span><span class="nav-label">SIEM Ledger SHA-256</span></span>
+            <span class="nav-count" id="navCntSiem">0</span>
+          </button>
+          <button type="button" class="nav-item" data-sec="av" onclick="selectSection('av', this)">
+            <span class="nav-item-left"><span class="nav-dot"></span><span class="nav-label">Antivirus & EDR</span></span>
+            <span class="nav-count" id="navCntAv">0</span>
+          </button>
+        </div>
+
+        <div class="nav-group">
+          <div class="nav-group-label">Respuesta Activa & SOAR</div>
+          <button type="button" class="nav-item" data-sec="ips" onclick="selectSection('ips', this)">
+            <span class="nav-item-left"><span class="nav-dot"></span><span class="nav-label">Firewall IPS & Cuarentena</span></span>
+            <span class="nav-count" id="navCntIps">0</span>
+          </button>
+          <button type="button" class="nav-item" data-sec="soar" onclick="selectSection('soar', this)">
+            <span class="nav-item-left"><span class="nav-dot"></span><span class="nav-label">Conector SOAR Perimetral</span></span>
+            <span class="nav-count" id="navCntSoar">CEF</span>
+          </button>
+        </div>
+
+        <div class="nav-group">
+          <div class="nav-group-label">Supervisión Global</div>
+          <button type="button" class="nav-item" data-sec="all" onclick="selectSection('all', this)">
+            <span class="nav-item-left"><span class="nav-dot"></span><span class="nav-label">Vista Mosaico Completa</span></span>
+            <span class="nav-count">10</span>
+          </button>
         </div>
       </div>
-    </div>
+
+      <div class="sidebar-footer">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <span>Túnel office-pc</span>
+          <span class="badge b-info" id="sidebarBridgeBadge">ONLINE</span>
+        </div>
+        <div class="truncate-90" style="color:var(--txt-muted);" title="Lista blanca mutua activa entre Porygon XDR y office-pc C2/IDS">
+          Whitelist Mutua Porygon ↔ C2
+        </div>
+      </div>
+    </aside>
 
     <!-- ========================================================================
-         2. UNIFIED SSH PROXY BRIDGE BANNER (office-pc :8002 C2/IDS & :5080 NIDS)
+         MAIN DEDICATED SECTION VIEWPORT
          ======================================================================== -->
-    <section class="bridge-banner">
-      <div class="bridge-row">
-        <div class="bridge-meta">
-          <span class="status-dot"></span>
-          <strong>SSH PROXY BRIDGE // office-pc (100.89.1.27 → :8002 C2/IDS & :5080 NIDS/VT)</strong>
-          <span class="badge b-info" id="officeBadge">ONLINE</span>
-          <span class="badge b-info">MUTUAL WHITELIST PORYGON ↔ C2</span>
-          <span>
-            Flota C2: <strong style="color:var(--sig-emerald)" id="offOnlineAgents">2 agentes online</strong> / <span id="offTotalAgents">40 registrados</span> ·
-            Logs C2: <strong id="offLogsRaw">0</strong> (<span id="offLogsDec">0</span> dec) ·
-            Creds: <strong id="offCreds">0</strong> ·
-            Capturas: <strong id="offScreens">0</strong> ·
-            Alertas IDS: <strong style="color:var(--sig-crimson)" id="offIdsAlerts">0 alertas</strong> ·
-            LAN: <strong id="offLanHosts">0 hosts</strong>
-          </span>
+    <main class="main-canvas" id="mainCanvas">
+
+      <!-- ACTIVE SECTION MASTHEAD -->
+      <div class="section-masthead">
+        <div>
+          <div class="section-masthead-title" id="secHeadingTitle">Resumen Ejecutivo & Enjambre Evolutivo IA</div>
+          <div class="section-masthead-sub" id="secHeadingSub">Telemetría en tiempo real de los 3 agentes defensivos Porygon y controles operativos del SOC</div>
         </div>
         <div class="toolbar">
-          <button type="button" class="btn btn-sm btn-gold" id="btnProbeOnline" onclick="probeOnlineC2Agents()" title="Sonda IDS unificada de solo lectura sobre los agentes C2 online">
-            <span class="spinner"></span>
-            <span>Probar Agentes Online (Read-Only)</span>
-          </button>
-          <button type="button" class="btn btn-sm btn-cyan" id="btnSyncBridge" onclick="syncOfficePcC2(false)">
-            <span class="spinner"></span>
-            <span>Sincronizar C2/IDS</span>
-          </button>
-          <button type="button" class="btn btn-sm btn-gold" onclick="triggerOfficeIdsScan()">
-            <span>Escanear Logs IDS (:8002)</span>
-          </button>
-          <button type="button" class="btn btn-sm" onclick="syncOfficePcC2(true)" title="Reiniciar túnel SSH local 127.0.0.1:8002 y :5080">
-            <span>Reconectar SSH</span>
-          </button>
-        </div>
-      </div>
-      <div class="bridge-row" style="border-top: 1px solid var(--border-subtle); padding-top: 6px; font-size: 11px;">
-        <div class="bridge-meta">
-          <span>Heartbeats Activos:</span>
-          <strong id="offOnlineList" style="color:var(--sig-cyan)" class="break-anywhere">Detectando agentes C2 online...</strong>
-        </div>
-        <div id="offProbeReport" class="mono break-anywhere" style="color:var(--sig-amber); font-size:11px;">
-          Listo para probar agentes online (Solo lectura, sin modificar binarios)
-        </div>
-      </div>
-    </section>
-
-    <!-- GLOBAL TACTICAL ACTION BAR -->
-    <div class="toolbar">
-      <button type="button" class="btn" id="btnAuditAll" onclick="triggerAudit()">
-        <span class="spinner"></span>
-        <span>Auditar Red TCP/PID + Startup</span>
-      </button>
-      <button type="button" class="btn btn-cyan" onclick="syncCtiFeeds()">Sincronizar Feeds CTI</button>
-      <button type="button" class="btn btn-cyan" onclick="triggerDnsAudit()">Auditar DNS / DGA</button>
-      <a class="btn btn-gold" href="/api/report" target="_blank">Reporte Ejecutivo</a>
-      <a class="btn btn-cyan" href="/api/agent-script" target="_blank">Descargar Porygon-Sensor.ps1</a>
-      <button type="button" class="btn btn-gold" onclick="swarmAction('force_evo')">Evolución (+1 Gen)</button>
-      <button type="button" class="btn btn-cyan" onclick="swarmAction('cycle_scene')">Escena 3D (<span id="lblScene">1/3</span>)</button>
-      <button type="button" class="btn" id="btnGamer" onclick="swarmAction('toggle_gamer')">Modo Gamer 0% GPU</button>
-      <a class="btn" href="/api/siem-jsonl" target="_blank">SIEM JSONL</a>
-    </div>
-
-    <!-- ========================================================================
-         3. EVOLUTIONARY PORYGON AI DEFENSE MODULES (3-Column Grid)
-         ======================================================================== -->
-    <section class="triad-grid">
-      <div class="agent-card p1">
-        <div class="agent-header">
-          <span class="agent-name" id="ag0Name">PORYGON // GEN G1</span>
-          <span class="agent-role">NIDS · PID · CTI · DNS</span>
-        </div>
-        <div class="agent-stats" id="ag0Stats">
-          Procesos TCP Auditados: <strong id="kPidCnt">0</strong> | Alertas SIEM: <strong id="kSiemCnt">0</strong><br>
-          F2-Score Anti-FN: <strong>--%</strong> | Fitness: <strong>--</strong> | Precisión: <strong>--%</strong>
+          <button type="button" class="btn btn-sm btn-gold" onclick="probeOnlineC2Agents()">Probar Agentes Online</button>
+          <button type="button" class="btn btn-sm btn-cyan" onclick="triggerAudit()">Auditar TCP/PID</button>
+          <a class="btn btn-sm" href="/api/report" target="_blank">Reporte Ejecutivo</a>
         </div>
       </div>
 
-      <div class="agent-card p2">
-        <div class="agent-header">
-          <span class="agent-name" id="ag1Name">PORYGON2 // GEN G1</span>
-          <span class="agent-role">KERNEL EDR · YARA/SIGMA</span>
+      <!-- ======================================================================
+           SECCIÓN 1: RESUMEN EJECUTIVO & ENJAMBRE IA (sec-overview)
+           ====================================================================== -->
+      <div id="viewOverview" class="sec-block" style="display:flex; flex-direction:column; gap:14px;">
+        <!-- Live Engine Status Banner -->
+        <div class="bridge-banner">
+          <div class="bridge-row">
+            <div class="bridge-meta">
+              <span class="badge b-info">LIVE ENGINE</span>
+              <strong id="bannerText" class="break-anywhere">CONECTANDO CON PORYGON ENTERPRISE XDR ENGINE...</strong>
+            </div>
+            <div class="bridge-meta">
+              <span>SIEM Ledger:</span>
+              <code id="jsonlPath" class="truncate-90" title="C:\Users\Admin\Porygon-Cyber-IDS-Wallpaper\logs\siem_security_events.jsonl">C:\Users\Admin\Porygon-Cyber-IDS-Wallpaper\logs\siem_security_events.jsonl</code>
+            </div>
+          </div>
+          <div class="toolbar" style="border-top:1px solid var(--border-subtle); padding-top:8px;">
+            <button type="button" class="btn" id="btnAuditAll" onclick="triggerAudit()">
+              <span class="spinner"></span>
+              <span>Auditar Red TCP/PID + Startup</span>
+            </button>
+            <button type="button" class="btn btn-cyan" onclick="syncCtiFeeds()">Sincronizar Feeds CTI</button>
+            <button type="button" class="btn btn-cyan" onclick="triggerDnsAudit()">Auditar DNS / DGA</button>
+            <a class="btn btn-gold" href="/api/report" target="_blank">Reporte Forense (HTML/PDF)</a>
+            <a class="btn btn-cyan" href="/api/agent-script" target="_blank">Descargar Porygon-Sensor.ps1</a>
+            <button type="button" class="btn btn-gold" onclick="swarmAction('force_evo')">Evolución (+1 Gen)</button>
+            <button type="button" class="btn btn-cyan" onclick="swarmAction('cycle_scene')">Escena 3D (<span id="lblScene">1/3</span>)</button>
+            <button type="button" class="btn" id="btnGamer" onclick="swarmAction('toggle_gamer')">Modo Gamer 0% GPU</button>
+            <a class="btn" href="/api/siem-jsonl" target="_blank">SIEM JSONL</a>
+          </div>
         </div>
-        <div class="agent-stats" id="ag1Stats">
-          Archivos Analizados (SHA-256 + YARA): <strong id="kAvCnt">0</strong><br>
-          Candidato Cuarentena: <strong id="kCandFile" class="truncate-90">Ninguno</strong>
+
+        <!-- 3 Porygon Evolutionary Cards -->
+        <div class="triad-grid">
+          <div class="agent-card p1">
+            <div class="agent-header">
+              <span class="agent-name" id="ag0Name">PORYGON // GEN G1</span>
+              <span class="agent-role">NIDS · PID · CTI · DNS</span>
+            </div>
+            <div class="agent-stats" id="ag0Stats">
+              Procesos TCP Auditados: <strong id="kPidCnt">0</strong> | Alertas SIEM: <strong id="kSiemCnt">0</strong><br>
+              F2-Score Anti-FN: <strong>--%</strong> | Fitness: <strong>--</strong> | Precisión: <strong>--%</strong>
+            </div>
+            <div style="display:flex; justify-content:flex-end;">
+              <button type="button" class="btn btn-sm btn-cyan" onclick="selectSection('tcp')">Abrir Sockets TCP →</button>
+            </div>
+          </div>
+
+          <div class="agent-card p2">
+            <div class="agent-header">
+              <span class="agent-name" id="ag1Name">PORYGON2 // GEN G1</span>
+              <span class="agent-role">KERNEL EDR · YARA/SIGMA</span>
+            </div>
+            <div class="agent-stats" id="ag1Stats">
+              Archivos Analizados (SHA-256 + YARA): <strong id="kAvCnt">0</strong><br>
+              Candidato Cuarentena: <strong id="kCandFile" class="truncate-90">Ninguno</strong>
+            </div>
+            <div style="display:flex; justify-content:flex-end;">
+              <button type="button" class="btn btn-sm btn-gold" onclick="selectSection('av')">Abrir Antivirus / EDR →</button>
+            </div>
+          </div>
+
+          <div class="agent-card pz">
+            <div class="agent-header">
+              <span class="agent-name" id="ag2Name">PORYGON-Z // GEN G1</span>
+              <span class="agent-role">ACTIVE IPS · SOAR · ISOLATION</span>
+            </div>
+            <div class="agent-stats" id="ag2Stats">
+              Acciones IPS: <strong id="kIpsCnt">0</strong> | Bloqueos FW: <strong id="kFwCnt">0</strong> | Cuarentena: <strong id="kQuarCnt">0</strong><br>
+              Candidato Bloqueo IP: <strong id="kCandIp">Ninguna</strong>
+            </div>
+            <div style="display:flex; justify-content:flex-end;">
+              <button type="button" class="btn btn-sm btn-red" onclick="selectSection('ips')">Abrir Firewall IPS →</button>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div class="agent-card pz">
-        <div class="agent-header">
-          <span class="agent-name" id="ag2Name">PORYGON-Z // GEN G1</span>
-          <span class="agent-role">ACTIVE IPS · SOAR · ISOLATION</span>
+      <!-- ======================================================================
+           SECCIÓN 2: PROXY SSH & C2/IDS UNIFICADO (sec-bridge)
+           ====================================================================== -->
+      <section id="viewBridge" class="sec-block bridge-banner hidden">
+        <div class="bridge-row">
+          <div class="bridge-meta">
+            <span class="status-dot"></span>
+            <strong>SSH PROXY BRIDGE // office-pc (100.89.1.27 → :8002 C2/IDS & :5080 NIDS/VT)</strong>
+            <span class="badge b-info" id="officeBadge">ONLINE</span>
+            <span class="badge b-info">LISTA BLANCA MUTUA PORYGON ↔ C2 ACTIVA</span>
+          </div>
+          <div class="toolbar">
+            <button type="button" class="btn btn-sm btn-gold" id="btnProbeOnline" onclick="probeOnlineC2Agents()" title="Sonda IDS unificada de solo lectura sobre los agentes C2 online">
+              <span class="spinner"></span>
+              <span>Probar Agentes Online (Read-Only)</span>
+            </button>
+            <button type="button" class="btn btn-sm btn-cyan" id="btnSyncBridge" onclick="syncOfficePcC2(false)">
+              <span class="spinner"></span>
+              <span>Sincronizar C2/IDS</span>
+            </button>
+            <button type="button" class="btn btn-sm btn-gold" onclick="triggerOfficeIdsScan()">
+              <span>Escanear Logs IDS (:8002)</span>
+            </button>
+            <button type="button" class="btn btn-sm" onclick="syncOfficePcC2(true)" title="Reiniciar túnel SSH local 127.0.0.1:8002 y :5080">
+              <span>Reconectar Túnel SSH</span>
+            </button>
+          </div>
         </div>
-        <div class="agent-stats" id="ag2Stats">
-          Acciones IPS: <strong id="kIpsCnt">0</strong> | Bloqueos FW: <strong id="kFwCnt">0</strong> | Cuarentena: <strong id="kQuarCnt">0</strong><br>
-          Candidato Bloqueo IP: <strong id="kCandIp">Ninguna</strong>
-        </div>
-      </div>
-    </section>
 
-    <!-- ========================================================================
-         4. MULTI-TAB FORENSIC DATA WORKSPACE
-         ======================================================================== -->
-    <nav class="tabs" aria-label="Vistas de consola SOC">
-      <button type="button" class="tab-btn active" onclick="switchTab('all', this)">Vista Unificada (8 Consolas)</button>
-      <button type="button" class="tab-btn" onclick="switchTab('tcp', this)">Sockets TCP ↔ PID (<span id="tabTcpCnt">0 conexiones</span>)</button>
-      <button type="button" class="tab-btn" onclick="switchTab('fleet', this)">Flota C2/XDR & YARA (<span id="tabFleetCnt">1 nodo</span>)</button>
-      <button type="button" class="tab-btn" onclick="switchTab('dns', this)">DNS / DGA & SOAR (<span id="tabDnsCnt">0 dominios</span>)</button>
-      <button type="button" class="tab-btn" onclick="switchTab('siem', this)">SIEM Ledger SHA-256 (<span id="tabSiemCnt">0 eventos</span>)</button>
-      <button type="button" class="tab-btn" onclick="switchTab('av', this)">Antivirus / EDR (<span id="tabAvCnt">0 análisis</span>)</button>
-      <button type="button" class="tab-btn" onclick="switchTab('ips', this)">Firewall IPS & Cuarentena</button>
-    </nav>
-
-    <!-- SECTION 1: LIVE TCP <-> PID / AUTHENTICODE / CTI / KILL PID TABLE -->
-    <section id="secTcp" class="panel">
-      <div class="panel-header">
-        <div class="panel-title cyan">
-          <span>ACTIVE TCP SOCKETS ↔ PROCESO / PID / AUTHENTICODE / CTI / KILL PID</span>
+        <div class="kpi-grid-4">
+          <div class="kpi-box">
+            <span class="kpi-box-label">Agentes C2 Online / Total</span>
+            <span class="kpi-box-val" style="color:var(--sig-emerald-txt)"><span id="offOnlineAgents">2 agentes online</span> <span style="font-size:12px;color:var(--txt-muted);">/ <span id="offTotalAgents">40 registrados</span></span></span>
+          </div>
+          <div class="kpi-box">
+            <span class="kpi-box-label">Logs C2 Ingeridos (:8002)</span>
+            <span class="kpi-box-val"><span id="offLogsRaw">0</span> <span style="font-size:12px;color:var(--txt-muted);">(<span id="offLogsDec">0</span> descifrados)</span></span>
+          </div>
+          <div class="kpi-box">
+            <span class="kpi-box-label">Credenciales & Capturas</span>
+            <span class="kpi-box-val" style="color:var(--sig-cyan-txt)"><span id="offCreds">0</span> creds · <span id="offScreens">0</span> caps</span>
+          </div>
+          <div class="kpi-box">
+            <span class="kpi-box-label">Alertas IDS & Hosts LAN</span>
+            <span class="kpi-box-val" style="color:var(--sig-crimson-txt)"><span id="offIdsAlerts">0 alertas</span> · <span style="color:var(--txt-primary)" id="offLanHosts">0 hosts</span></span>
+          </div>
         </div>
-        <div class="panel-controls">
-          <input type="text" id="tcpFilter" class="input-txt" placeholder="Filtrar proceso, PID, socket, firma..." oninput="renderTcpTable()" style="width:250px;">
-          <button type="button" class="btn btn-sm btn-cyan" onclick="fetchState()">Actualizar</button>
-        </div>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>PID</th>
-              <th>Proceso / Ruta</th>
-              <th>Firma Authenticode</th>
-              <th>Socket Local</th>
-              <th>Socket Remoto</th>
-              <th>Protocolo / Regla</th>
-              <th>Riesgo</th>
-              <th style="text-align:right;">Acciones Tácticas</th>
-            </tr>
-          </thead>
-          <tbody id="tcpBody">
-            <tr><td colspan="8"><div class="empty-state">Cargando telemetría de sockets TCP del kernel...</div></td></tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
 
-    <!-- SECTION 2: MULTI-HOST FLEET MANAGEMENT & YARA/SIGMA RULE ENGINE -->
-    <div class="grid-2" id="secFleetRules">
-      <section class="panel">
+        <div class="bridge-row" style="border-top: 1px solid var(--border-subtle); padding-top: 8px; font-size: 11.5px;">
+          <div class="bridge-meta">
+            <span>Dispositivos C2 con Heartbeat Activo:</span>
+            <strong id="offOnlineList" style="color:var(--sig-cyan-txt)" class="break-anywhere">Detectando agentes C2 online...</strong>
+          </div>
+          <div id="offProbeReport" class="mono break-anywhere" style="color:var(--sig-amber-txt); font-size:11.5px; font-weight:600;">
+            Listo para probar agentes online (Solo lectura, sin modificar binarios)
+          </div>
+        </div>
+      </section>
+
+      <!-- ======================================================================
+           SECCIÓN 3: SOCKETS TCP <-> PID / AUTHENTICODE (sec-tcp)
+           ====================================================================== -->
+      <section id="viewTcp" class="sec-block panel hidden">
         <div class="panel-header">
-          <div class="panel-title emerald">FLOTA MULTI-HOST UNIFICADA (C2 + XDR SENSORS)</div>
+          <div class="panel-title cyan">
+            <span>CONEXIONES TCP ACTIVAS ↔ PROCESO / PID / AUTHENTICODE / CTI / KILL PID (<span id="tabTcpCnt">0 conexiones</span>)</span>
+          </div>
           <div class="panel-controls">
-            <button type="button" class="btn btn-sm btn-gold" onclick="simulateRemoteAgentHeartbeat()">Simular Sensor</button>
-            <a class="btn btn-sm btn-cyan" href="/api/agent-script" target="_blank">Porygon-Sensor.ps1</a>
+            <input type="text" id="tcpFilter" class="input-txt" placeholder="Filtrar proceso, PID, socket, firma..." oninput="renderTcpTable()" style="width:260px;">
+            <button type="button" class="btn btn-sm btn-cyan" onclick="fetchState()">Actualizar</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>PID</th>
+                <th>Proceso / Ruta</th>
+                <th>Firma Authenticode</th>
+                <th>Socket Local</th>
+                <th>Socket Remoto</th>
+                <th>Protocolo / Regla</th>
+                <th>Riesgo</th>
+                <th style="text-align:right;">Acciones Tácticas</th>
+              </tr>
+            </thead>
+            <tbody id="tcpBody">
+              <tr><td colspan="8"><div class="empty-state">Cargando telemetría de sockets TCP del kernel...</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ======================================================================
+           SECCIÓN 4: FLOTA MULTI-HOST UNIFICADA (sec-fleet)
+           ====================================================================== -->
+      <section id="viewFleet" class="sec-block panel hidden">
+        <div class="panel-header">
+          <div class="panel-title emerald">FLOTA MULTI-HOST UNIFICADA C2 + XDR SENSORS (<span id="tabFleetCnt">1 nodo</span>)</div>
+          <div class="panel-controls">
+            <button type="button" class="btn btn-sm btn-gold" onclick="simulateRemoteAgentHeartbeat()">Simular Sensor Remoto</button>
+            <a class="btn btn-sm btn-cyan" href="/api/agent-script" target="_blank">Descargar Porygon-Sensor.ps1</a>
           </div>
         </div>
         <div class="scan-bar" style="justify-content:space-between;">
           <span class="mono" style="font-size:11px; color:var(--txt-secondary);">
-            Lista blanca mutua activa entre agentes C2 (<code>office-pc:8002</code>) y sensores Porygon XDR.
+            Lista blanca mutua activa entre agentes C2 (<code>office-pc:8002</code>) y sensores Porygon XDR. Despliega <code>Porygon-Sensor.ps1</code> en nuevos nodos.
           </span>
         </div>
-        <div class="table-wrap" style="max-height:280px;">
+        <div class="table-wrap">
           <table>
             <thead>
               <tr>
@@ -1385,7 +1681,7 @@
                 <th>IP Local / OS</th>
                 <th>Telemetría</th>
                 <th>Estado / Riesgo</th>
-                <th style="text-align:right;">Contención</th>
+                <th style="text-align:right;">Contención EDR</th>
               </tr>
             </thead>
             <tbody id="fleetBody"></tbody>
@@ -1393,35 +1689,38 @@
         </div>
       </section>
 
-      <section class="panel">
+      <!-- ======================================================================
+           SECCIÓN 5: MOTOR DE REGLAS YARA & SIGMA (sec-rules)
+           ====================================================================== -->
+      <section id="viewRules" class="sec-block panel hidden">
         <div class="panel-header">
-          <div class="panel-title gold">MOTOR YARA & SIGMA EN VIVO (<span id="lblRulesCnt">0 reglas</span>)</div>
+          <div class="panel-title gold">MOTOR DE REGLAS YARA & SIGMA EDITABLES EN VIVO (<span id="lblRulesCnt">0 reglas</span>)</div>
           <div class="panel-controls">
-            <span class="mono" style="font-size:11px; color:var(--txt-secondary);">Hits: <strong id="lblRuleHits" style="color:var(--sig-amber)">0</strong></span>
+            <span class="mono" style="font-size:11px; color:var(--txt-secondary);">Hits Totales: <strong id="lblRuleHits" style="color:var(--sig-amber-txt)">0</strong></span>
           </div>
         </div>
         <div class="scan-bar">
-          <input type="text" id="ruleId" class="input-txt" placeholder="ID (ej. YARA_COBALT_BEACON)" style="width:155px;">
+          <input type="text" id="ruleId" class="input-txt" placeholder="ID (ej. YARA_COBALT_BEACON)" style="width:175px;">
           <select id="ruleType" class="input-txt">
             <option value="YARA">YARA (Archivo/Mem)</option>
             <option value="SIGMA">SIGMA (Red/Proc/DNS)</option>
           </select>
-          <input type="text" id="ruleMitre" class="input-txt" placeholder="MITRE" style="width:76px;" value="T1059">
+          <input type="text" id="ruleMitre" class="input-txt" placeholder="MITRE" style="width:80px;" value="T1059">
           <select id="ruleTarget" class="input-txt">
             <option value="FILE_CONTENT">Archivo</option>
             <option value="PROCESS_NET">Proceso/Red</option>
             <option value="DNS_DOMAIN">Dominio DNS</option>
           </select>
-          <input type="text" id="rulePattern" class="input-txt" placeholder="Patrón (ej. payload|beacon.dll)" style="flex:1; min-width:140px;">
+          <input type="text" id="rulePattern" class="input-txt" placeholder="Patrón (ej. payload|beacon.dll)" style="flex:1; min-width:160px;">
           <button type="button" class="btn btn-sm btn-gold" onclick="addEnterpriseRule()">Añadir Regla</button>
         </div>
-        <div class="table-wrap" style="max-height:280px;">
+        <div class="table-wrap">
           <table>
             <thead>
               <tr>
                 <th>Regla / Tipo</th>
                 <th>MITRE / Campo</th>
-                <th>Patrón</th>
+                <th>Patrón de Detección</th>
                 <th>Hits</th>
                 <th style="text-align:right;">Acción</th>
               </tr>
@@ -1430,26 +1729,26 @@
           </table>
         </div>
       </section>
-    </div>
 
-    <!-- SECTION 3: DNS / DGA INSPECTOR & SOAR PERIMETER -->
-    <div class="grid-2" id="secDnsSoar">
-      <section class="panel">
+      <!-- ======================================================================
+           SECCIÓN 6: INSPECTOR DNS CACHE & DGA (sec-dns)
+           ====================================================================== -->
+      <section id="viewDns" class="sec-block panel hidden">
         <div class="panel-header">
-          <div class="panel-title cyan">INSPECTOR DNS CACHE, ENTROPÍA DGA & C2 BEACONING</div>
+          <div class="panel-title cyan">INSPECTOR DNS CACHE, ENTROPÍA DGA & C2 BEACONING (<span id="tabDnsCnt">0 dominios</span>)</div>
           <div class="panel-controls">
-            <input type="text" id="dnsFilter" class="input-txt" placeholder="Filtrar dominio o IP..." oninput="renderDnsTable()">
-            <button type="button" class="btn btn-sm btn-cyan" onclick="triggerDnsAudit()">Auditar DNS</button>
+            <input type="text" id="dnsFilter" class="input-txt" placeholder="Filtrar dominio o IP..." oninput="renderDnsTable()" style="width:240px;">
+            <button type="button" class="btn btn-sm btn-cyan" onclick="triggerDnsAudit()">Auditar DNS Ahora</button>
           </div>
         </div>
-        <div class="table-wrap" style="max-height:280px;">
+        <div class="table-wrap">
           <table>
             <thead>
               <tr>
                 <th>Hora</th>
                 <th>Dominio Consultado</th>
                 <th>IP Resuelta</th>
-                <th>Entropía</th>
+                <th>Entropía DGA</th>
                 <th>Veredicto / MITRE</th>
                 <th style="text-align:right;">Acción</th>
               </tr>
@@ -1459,26 +1758,29 @@
         </div>
       </section>
 
-      <section class="panel">
+      <!-- ======================================================================
+           SECCIÓN 7: CONECTOR SOAR PERIMETRAL (sec-soar)
+           ====================================================================== -->
+      <section id="viewSoar" class="sec-block panel hidden">
         <div class="panel-header">
-          <div class="panel-title red">CONECTOR SOAR PERIMETRAL (FORTIGATE & SYSLOG CEF UDP 514)</div>
+          <div class="panel-title red">CONECTOR SOAR PERIMETRAL (FORTIGATE WEBHOOK & SYSLOG CEF RFC 5424 UDP 514)</div>
           <div class="panel-controls">
-            <span class="badge b-info">CEF: <span id="kCefSent">0</span></span>
-            <span class="badge b-high">FortiGate: <span id="kFgSent">0</span></span>
+            <span class="badge b-info">CEF Enviados: <span id="kCefSent">0</span></span>
+            <span class="badge b-high">Pushes FortiGate: <span id="kFgSent">0</span></span>
           </div>
         </div>
         <div class="soar-grid">
           <div class="soar-box">
-            <h4>Syslog CEF (RFC 5424 UDP)</h4>
+            <h4>Exportador SIEM Syslog CEF (RFC 5424 UDP)</h4>
             <div class="form-row">
               <label><input type="checkbox" id="soarSyslogEn"> Reenvío automático CEF en tiempo real</label>
             </div>
             <div class="form-row">
-              <label>Collector SIEM (Wazuh / QRadar / Splunk):</label>
+              <label>Servidor Collector SIEM (Wazuh / QRadar / Splunk / FortiSIEM):</label>
               <input type="text" id="soarSyslogHost" class="input-txt" value="127.0.0.1">
             </div>
             <div class="form-row">
-              <label>Puerto UDP:</label>
+              <label>Puerto UDP Syslog:</label>
               <input type="number" id="soarSyslogPort" class="input-txt" value="514">
             </div>
           </div>
@@ -1486,44 +1788,44 @@
           <div class="soar-box">
             <h4>FortiGate Automation Webhook</h4>
             <div class="form-row">
-              <label><input type="checkbox" id="soarFgEn"> Propagar bloqueos IPS a FortiGate</label>
+              <label><input type="checkbox" id="soarFgEn"> Propagar bloqueos IPS automáticamente a FortiGate</label>
             </div>
             <div class="form-row">
-              <label>Webhook URL:</label>
+              <label>FortiOS Automation Webhook URL:</label>
               <input type="text" id="soarFgUrl" class="input-txt" placeholder="https://192.168.1.1/api/v2/monitor/.../porygon">
             </div>
             <div class="form-row">
-              <label>Address Group & Bearer Token:</label>
+              <label>Address Group & API Bearer Token:</label>
               <div style="display:flex; gap:6px;">
                 <input type="text" id="soarFgGroup" class="input-txt" value="PORYGON_IPS_BLOCKLIST" style="width:50%;">
-                <input type="password" id="soarFgToken" class="input-txt" placeholder="Token" style="width:50%;">
+                <input type="password" id="soarFgToken" class="input-txt" placeholder="Token (opcional)" style="width:50%;">
               </div>
             </div>
           </div>
         </div>
         <div class="scan-bar" style="justify-content:space-between;">
-          <span class="mono" style="font-size:11px; color:var(--sig-amber);" id="soarStatusTxt">Estado SOAR: STANDBY</span>
+          <span class="mono" style="font-size:11px; color:var(--sig-amber-txt); font-weight:600;" id="soarStatusTxt">Estado SOAR: STANDBY</span>
           <div style="display:flex; gap:6px;">
-            <button type="button" class="btn btn-sm" onclick="saveSoarConfig(false)">Guardar SOAR</button>
-            <button type="button" class="btn btn-sm btn-gold" onclick="saveSoarConfig(true)">Probar CEF / Webhook</button>
+            <button type="button" class="btn btn-sm" onclick="saveSoarConfig(false)">Guardar Config SOAR</button>
+            <button type="button" class="btn btn-sm btn-gold" onclick="saveSoarConfig(true)">Guardar y Probar CEF / Webhook</button>
           </div>
         </div>
       </section>
-    </div>
 
-    <!-- SECTION 4: SIEM EVENTS (SHA-256 CHAINHASH) & ANTIVIRUS / EDR -->
-    <div class="grid-2" id="secSiemAv">
-      <section class="panel" id="panelSiem">
+      <!-- ======================================================================
+           SECCIÓN 8: SIEM LEDGER + CADENA FORENSE SHA-256 (sec-siem)
+           ====================================================================== -->
+      <section id="viewSiem" class="sec-block panel hidden">
         <div class="panel-header">
-          <div class="panel-title emerald">SIEM LEDGER + CADENA FORENSE SHA-256</div>
+          <div class="panel-title emerald">SIEM LEDGER + CADENA FORENSE INMUTABLE SHA-256 (<span id="tabSiemCnt">0 eventos</span>)</div>
           <div class="panel-controls">
             <select id="siemSevFilter" class="input-txt" onchange="renderSiemTable()">
-              <option value="ALL">Todas</option>
+              <option value="ALL">Todas las Severidades</option>
               <option value="CRITICAL">CRITICAL</option>
               <option value="HIGH">HIGH</option>
               <option value="INFO">INFO</option>
             </select>
-            <input type="text" id="siemSearch" class="input-txt" placeholder="Buscar MITRE, proceso, IP..." oninput="renderSiemTable()">
+            <input type="text" id="siemSearch" class="input-txt" placeholder="Buscar MITRE, proceso, IP..." oninput="renderSiemTable()" style="width:240px;">
           </div>
         </div>
         <div class="table-wrap">
@@ -1542,18 +1844,21 @@
         </div>
       </section>
 
-      <section class="panel" id="panelAv">
+      <!-- ======================================================================
+           SECCIÓN 9: ANTIVIRUS / EDR EN TIEMPO REAL (sec-av)
+           ====================================================================== -->
+      <section id="viewAv" class="sec-block panel hidden">
         <div class="panel-header">
-          <div class="panel-title gold">ANTIVIRUS / EDR — PORYGON2 (SHA-256 + YARA + ENTROPÍA)</div>
+          <div class="panel-title gold">ANTIVIRUS / EDR EN TIEMPO REAL — PORYGON2 (<span id="tabAvCnt">0 análisis</span>)</div>
           <div class="panel-controls">
-            <input type="text" id="avSearch" class="input-txt" placeholder="Filtrar archivo o SHA-256..." oninput="renderAvTable()">
+            <input type="text" id="avSearch" class="input-txt" placeholder="Filtrar archivo o SHA-256..." oninput="renderAvTable()" style="width:240px;">
           </div>
         </div>
         <div class="scan-bar">
-          <input type="text" id="customScanPath" class="input-txt" style="flex:1; min-width:180px;" placeholder="Ruta local (ej. C:\Users\Admin\Downloads\sample.exe)">
+          <input type="text" id="customScanPath" class="input-txt" style="flex:1; min-width:200px;" placeholder="Ruta local a escanear (ej. C:\Users\Admin\Downloads\sample.exe)">
           <button type="button" class="btn btn-sm btn-gold" onclick="scanLocalPath()">Escanear Ruta</button>
           <label class="drop-zone">
-            <span>Subir Archivo</span>
+            <span>Subir / Analizar Archivo</span>
             <input type="file" id="fileUploadInput" style="display:none" onchange="uploadAndScanFile(this)">
           </label>
         </div>
@@ -1572,119 +1877,120 @@
           </table>
         </div>
       </section>
-    </div>
 
-    <!-- SECTION 5: FIREWALL IPS & QUARANTINE VAULT -->
-    <div class="grid-2" id="secIpsQuar">
-      <section class="panel">
-        <div class="panel-header">
-          <div class="panel-title red">ACTIVE IPS // REGLAS WINDOWS FIREWALL (PORYGON-Z)</div>
-          <div class="panel-controls">
-            <input type="text" id="manualBlockIp" class="input-txt" placeholder="IP a bloquear (ej. 185.220.101.4)" style="width:180px;">
-            <button type="button" class="btn btn-sm btn-red" onclick="blockIpManual()">Bloquear IP</button>
-            <button type="button" class="btn btn-sm btn-gold" onclick="blockCandidateIp()">Bloquear Candidata</button>
+      <!-- ======================================================================
+           SECCIÓN 10: FIREWALL IPS & BÓVEDA DE CUARENTENA (sec-ips)
+           ====================================================================== -->
+      <div id="viewIps" class="sec-block grid-2 hidden">
+        <section class="panel">
+          <div class="panel-header">
+            <div class="panel-title red">ACTIVE IPS // REGLAS WINDOWS FIREWALL (PORYGON-Z)</div>
+            <div class="panel-controls">
+              <input type="text" id="manualBlockIp" class="input-txt" placeholder="IP a bloquear (ej. 185.220.101.4)" style="width:175px;">
+              <button type="button" class="btn btn-sm btn-red" onclick="blockIpManual()">Bloquear IP</button>
+              <button type="button" class="btn btn-sm btn-gold" onclick="blockCandidateIp()">Bloquear Candidata</button>
+            </div>
           </div>
-        </div>
-        <div class="table-wrap" style="max-height:240px;">
-          <table>
-            <thead>
-              <tr>
-                <th>Regla Firewall</th>
-                <th>IP Remota Bloqueada</th>
-                <th>Estado</th>
-                <th style="text-align:right;">Acción</th>
-              </tr>
-            </thead>
-            <tbody id="fwBody"></tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-header">
-          <div class="panel-title gold">BÓVEDA DE CUARENTENA (.qz) — PORYGON2 / PORYGON-Z</div>
-          <div class="panel-controls">
-            <button type="button" class="btn btn-sm btn-gold" onclick="quarantineCandidateFile()">Aislar Candidato</button>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Regla Firewall</th>
+                  <th>IP Remota Bloqueada</th>
+                  <th>Estado</th>
+                  <th style="text-align:right;">Acción</th>
+                </tr>
+              </thead>
+              <tbody id="fwBody"></tbody>
+            </table>
           </div>
-        </div>
-        <div class="table-wrap" style="max-height:240px;">
-          <table>
-            <thead>
-              <tr>
-                <th>ID / Hora</th>
-                <th>Archivo</th>
-                <th>Ruta Original & SHA-256</th>
-                <th style="text-align:right;">Acción</th>
-              </tr>
-            </thead>
-            <tbody id="quarBody"></tbody>
-          </table>
-        </div>
-      </section>
-    </div>
+        </section>
 
-  </main>
-
-  <!-- ==========================================================================
-       COMMAND PALETTE MODAL (⌘K / Ctrl+K — 0ms instant on keyboard)
-       ========================================================================== -->
-  <div class="cmdk-backdrop" id="cmdPaletteBackdrop" data-open="false" onclick="if(event.target===this) closeCommandPalette(false)">
-    <div class="cmdk-dialog" role="dialog" aria-modal="true" aria-label="Command Palette">
-      <div class="cmdk-input-wrap">
-        <input type="text" class="cmdk-input" id="cmdkSearchInput" placeholder="Ejecutar comando táctico, filtrar host o cambiar variante..." oninput="renderCmdkItems()" autocomplete="off">
-        <kbd class="cmdk-kbd">ESC</kbd>
+        <section class="panel">
+          <div class="panel-header">
+            <div class="panel-title gold">BÓVEDA DE CUARENTENA (.qz) — PORYGON2 / PORYGON-Z</div>
+            <div class="panel-controls">
+              <button type="button" class="btn btn-sm btn-gold" onclick="quarantineCandidateFile()">Aislar Último Sospechoso</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID / Hora</th>
+                  <th>Archivo</th>
+                  <th>Ruta Original & SHA-256</th>
+                  <th style="text-align:right;">Acción</th>
+                </tr>
+              </thead>
+              <tbody id="quarBody"></tbody>
+            </table>
+          </div>
+        </section>
       </div>
-      <div class="cmdk-list" id="cmdkList"></div>
+
+    </main>
+  </div>
+</div>
+
+<!-- ==========================================================================
+     COMMAND PALETTE MODAL (⌘K / Ctrl+K — 0ms instant on keyboard)
+     ========================================================================== -->
+<div class="cmdk-backdrop" id="cmdPaletteBackdrop" data-open="false" onclick="if(event.target===this) closeCommandPalette(false)">
+  <div class="cmdk-dialog" role="dialog" aria-modal="true" aria-label="Command Palette">
+    <div class="cmdk-input-wrap">
+      <input type="text" class="cmdk-input" id="cmdkSearchInput" placeholder="Saltar a sección del panel lateral o ejecutar playbook..." oninput="renderCmdkItems()" autocomplete="off">
+      <kbd class="cmdk-kbd">ESC</kbd>
+    </div>
+    <div class="cmdk-list" id="cmdkList"></div>
+  </div>
+</div>
+
+<!-- ==========================================================================
+     CONTEXTUAL FORENSIC SOCKET INSPECTOR DRAWER (220ms entry / 0ms Esc)
+     ========================================================================== -->
+<aside class="forensic-drawer" id="forensicDrawer" data-open="false" aria-label="Inspector Forense de Socket">
+  <div style="display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border-hairline); padding-bottom:10px;">
+    <div>
+      <div class="mono" style="font-size:10px; color:var(--sig-cyan-txt); font-weight:700; text-transform:uppercase;">Forensic Socket Telemetry</div>
+      <div class="mono" style="font-size:13px; font-weight:700;" id="inspTitle">svchost.exe [PID 0]</div>
+    </div>
+    <button type="button" class="btn btn-sm" onclick="closeForensicDrawer(false)">Cerrar (ESC)</button>
+  </div>
+  <div id="inspBody" class="mono" style="font-size:11.5px; color:var(--txt-secondary); display:flex; flex-direction:column; gap:10px; overflow-y:auto;"></div>
+</aside>
+
+<!-- ==========================================================================
+     SONNER-STYLE STACKED TOASTER (Bottom-Right, 400ms ease)
+     ========================================================================== -->
+<div class="sonner-toaster" id="sonnerToaster" aria-live="polite"></div>
+
+<!-- ==========================================================================
+     5. BOTTOM FLOATING PROTOTYPE PICKER (PICKER.md) + BREAK-UI STRESS-TEST
+     ========================================================================== -->
+<div class="proto-dock">
+  <div class="proto-picker" role="tablist" aria-label="Prototype variants" id="variantPicker">
+    <span class="proto-picker-label">Variant</span>
+    <div class="proto-picker-options">
+      <span class="proto-picker-highlight" aria-hidden="true"></span>
+      <button type="button" role="tab" class="proto-picker-btn" data-variant="quiet" aria-selected="false">Quiet</button>
+      <button type="button" role="tab" class="proto-picker-btn" data-variant="paper" aria-selected="false">Paper</button>
+      <button type="button" role="tab" class="proto-picker-btn" data-variant="round" aria-selected="false">Round</button>
+      <button type="button" role="tab" class="proto-picker-btn" data-variant="snappy" aria-selected="true">Snappy</button>
     </div>
   </div>
 
-  <!-- ==========================================================================
-       CONTEXTUAL FORENSIC SOCKET INSPECTOR DRAWER (220ms entry / 0ms Esc)
-       ========================================================================== -->
-  <aside class="forensic-drawer" id="forensicDrawer" data-open="false" aria-label="Inspector Forense de Socket">
-    <div style="display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border-hairline); padding-bottom:10px;">
-      <div>
-        <div class="mono" style="font-size:10px; color:var(--sig-cyan); text-transform:uppercase;">Forensic Socket Telemetry</div>
-        <div class="mono" style="font-size:13px; font-weight:600;" id="inspTitle">svchost.exe [PID 0]</div>
-      </div>
-      <button type="button" class="btn btn-sm" onclick="closeForensicDrawer(false)">Cerrar (ESC)</button>
-    </div>
-    <div id="inspBody" class="mono" style="font-size:11.5px; color:var(--txt-secondary); display:flex; flex-direction:column; gap:10px; overflow-y:auto;"></div>
-  </aside>
-
-  <!-- ==========================================================================
-       SONNER-STYLE STACKED TOASTER (Bottom-Right, 400ms ease)
-       ========================================================================== -->
-  <div class="sonner-toaster" id="sonnerToaster" aria-live="polite"></div>
-
-  <!-- ==========================================================================
-       5. BOTTOM FLOATING PROTOTYPE PICKER (PICKER.md) + BREAK-UI STRESS-TEST
-       ========================================================================== -->
-  <div class="proto-dock">
-    <!-- Verbatim .proto-picker from prototype/PICKER.md -->
-    <div class="proto-picker" role="tablist" aria-label="Prototype variants" id="variantPicker">
-      <span class="proto-picker-label">Variant</span>
-      <div class="proto-picker-options">
-        <span class="proto-picker-highlight" aria-hidden="true"></span>
-        <button type="button" role="tab" class="proto-picker-btn" data-variant="quiet" aria-selected="false">Quiet</button>
-        <button type="button" role="tab" class="proto-picker-btn" data-variant="paper" aria-selected="false">Paper</button>
-        <button type="button" role="tab" class="proto-picker-btn" data-variant="round" aria-selected="false">Round</button>
-        <button type="button" role="tab" class="proto-picker-btn" data-variant="snappy" aria-selected="true">Snappy</button>
-      </div>
-    </div>
-
-    <!-- Companion break-ui Data Stress-Test Picker -->
-    <div class="proto-picker" role="tablist" aria-label="Data stress test modes" id="stressPicker">
-      <span class="proto-picker-label">Stress</span>
-      <div class="proto-picker-options">
-        <span class="proto-picker-highlight" aria-hidden="true"></span>
-        <button type="button" role="tab" class="proto-picker-btn" data-stress="live" aria-selected="true">Live</button>
-        <button type="button" role="tab" class="proto-picker-btn" data-stress="extreme" aria-selected="false" title="Textos de 90+ caracteres sin romper contenedores">90+ Chars</button>
-        <button type="button" role="tab" class="proto-picker-btn" data-stress="empty" aria-selected="false" title="Estado vacío (0 elementos)">Empty (0)</button>
-        <button type="button" role="tab" class="proto-picker-btn" data-stress="single" aria-selected="false" title="Gramática singular (1 elemento)">Single (1)</button>
-      </div>
+  <div class="proto-picker" role="tablist" aria-label="Data stress test modes" id="stressPicker">
+    <span class="proto-picker-label">Stress</span>
+    <div class="proto-picker-options">
+      <span class="proto-picker-highlight" aria-hidden="true"></span>
+      <button type="button" role="tab" class="proto-picker-btn" data-stress="live" aria-selected="true">Live</button>
+      <button type="button" role="tab" class="proto-picker-btn" data-stress="extreme" aria-selected="false" title="Textos de 90+ caracteres sin romper contenedores">90+ Chars</button>
+      <button type="button" role="tab" class="proto-picker-btn" data-stress="empty" aria-selected="false" title="Estado vacío (0 elementos)">Empty (0)</button>
+      <button type="button" role="tab" class="proto-picker-btn" data-stress="single" aria-selected="false" title="Gramática singular (1 elemento)">Single (1)</button>
     </div>
   </div>
+</div>
 
 <script>
   /* ============================================================================
@@ -1698,6 +2004,103 @@
   function esc(s) {
     if (s === null || s === undefined) return '';
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  /* ============================================================================
+     LEFT SIDEBAR SECTION ROUTER (0ms Instant Navigation per Section)
+     ============================================================================ */
+  const SECTION_META = {
+    overview: {
+      viewId: 'viewOverview',
+      title: 'Resumen Ejecutivo & Enjambre Evolutivo IA',
+      sub: 'Estado global del motor XDR y telemetría de aprendizaje evolutivo de Porygon, Porygon2 y Porygon-Z'
+    },
+    bridge: {
+      viewId: 'viewBridge',
+      title: 'Proxy SSH Unificado & Telemetría C2/IDS (office-pc)',
+      sub: 'Túnel SSH hacia 100.89.1.27 (:8002 C2/IDS & :5080 NIDS/VT) con Lista Blanca Mutua y sonda en vivo de agentes'
+    },
+    tcp: {
+      viewId: 'viewTcp',
+      title: 'Sockets TCP Activos ↔ Proceso / PID / Authenticode',
+      sub: 'Inspección de conexiones de red en tiempo real, validación de firmas digitales y contención EDR Kill PID'
+    },
+    fleet: {
+      viewId: 'viewFleet',
+      title: 'Flota Multi-Host Unificada (Agentes C2 + Sensores XDR)',
+      sub: 'Inventario centralizado de nodos reportando desde office-pc (:8002) y sensores Porygon-Sensor.ps1'
+    },
+    rules: {
+      viewId: 'viewRules',
+      title: 'Motor de Reglas YARA & Sigma Editables en Vivo',
+      sub: 'Compilación y evaluación caliente de firmas YARA (archivos/memoria) y reglas Sigma (red/procesos/DNS)'
+    },
+    dns: {
+      viewId: 'viewDns',
+      title: 'Inspector de Caché DNS, Entropía DGA & C2 Beaconing',
+      sub: 'Análisis de entropía de Shannon (bits/B) sobre resoluciones DNS para detectar dominios generados algorítmicamente'
+    },
+    soar: {
+      viewId: 'viewSoar',
+      title: 'Conector SOAR Perimetral (Syslog CEF & FortiGate Webhook)',
+      sub: 'Exportación en tiempo real RFC 5424 UDP 514 (Wazuh/QRadar/Splunk) y propagación de bloqueos a FortiOS'
+    },
+    siem: {
+      viewId: 'viewSiem',
+      title: 'SIEM Ledger & Cadena Forense Inmutable SHA-256',
+      sub: 'Registro de eventos de seguridad encadenados criptográficamente mediante ChainHash SHA-256 verificable'
+    },
+    av: {
+      viewId: 'viewAv',
+      title: 'Antivirus & EDR en Tiempo Real (Porygon2)',
+      sub: 'Análisis heurístico bajo demanda y en tiempo real con cálculo de entropía, SHA-256 y firmas YARA'
+    },
+    ips: {
+      viewId: 'viewIps',
+      title: 'Firewall IPS Activo & Bóveda de Cuarentena (.qz)',
+      sub: 'Reglas de bloqueo perimetral en Windows Firewall (Porygon-Z) y aislamiento cifrado de artefactos maliciosos'
+    },
+    all: {
+      viewId: 'ALL',
+      title: 'Vista Mosaico Completa (10 Secciones Unificadas)',
+      sub: 'Supervisión simultánea de todas las consolas tácticas del centro de operaciones SOC'
+    }
+  };
+
+  let activeSection = 'overview';
+
+  function selectSection(secKey, btnEl) {
+    if (!SECTION_META[secKey]) secKey = 'overview';
+    activeSection = secKey;
+
+    document.querySelectorAll('.nav-item').forEach(b => {
+      b.classList.toggle('active', b.getAttribute('data-sec') === secKey);
+    });
+
+    const meta = SECTION_META[secKey];
+    document.getElementById('secHeadingTitle').textContent = meta.title;
+    document.getElementById('secHeadingSub').textContent = meta.sub;
+    document.getElementById('subStatus').textContent = meta.title.toUpperCase();
+
+    const allBlocks = document.querySelectorAll('.sec-block');
+    if (secKey === 'all') {
+      allBlocks.forEach(el => el.classList.remove('hidden'));
+    } else {
+      allBlocks.forEach(el => {
+        el.classList.toggle('hidden', el.id !== meta.viewId);
+      });
+    }
+
+    // Close mobile drawer if open
+    document.getElementById('sidebarNav').setAttribute('data-mobile-open', 'false');
+    // Reset scroll position of main viewport instantly
+    document.getElementById('mainCanvas').scrollTop = 0;
+  }
+
+  function toggleMobileSidebar() {
+    const nav = document.getElementById('sidebarNav');
+    const isOpen = nav.getAttribute('data-mobile-open') === 'true';
+    nav.setAttribute('data-mobile-open', String(!isOpen));
   }
 
   /* ============================================================================
@@ -1787,16 +2190,21 @@
      COMMAND PALETTE (⌘K — 0ms instant on keyboard, 180ms on pointer click)
      ============================================================================ */
   const CMDK_COMMANDS = [
-    { label: 'Probar Agentes C2 Online (Sonda IDS Solo Lectura)', kbd: '↵ Probe', run: () => probeOnlineC2Agents() },
-    { label: 'Sincronizar Proxy SSH office-pc (:8002 C2/IDS & :5080 NIDS)', kbd: '↵ Sync', run: () => syncOfficePcC2(false) },
-    { label: 'Auditar Red TCP/PID + Registro Run + Startup', kbd: '↵ Audit', run: () => triggerAudit() },
-    { label: 'Auditar Caché DNS / Entropía DGA / C2 Beaconing', kbd: '↵ DNS', run: () => triggerDnsAudit() },
-    { label: 'Sincronizar Feeds CTI (Feodo Tracker + CINS Army)', kbd: '↵ CTI', run: () => syncCtiFeeds() },
-    { label: 'Stress Test: Textos Extremos de 90+ Caracteres (break-ui)', kbd: 'Stress', run: () => setStressMode('extreme') },
-    { label: 'Stress Test: Estado Vacío 0 Elementos (break-ui)', kbd: 'Empty', run: () => setStressMode('empty') },
-    { label: 'Stress Test: Singular 1 Elemento (break-ui)', kbd: 'Single', run: () => setStressMode('single') },
-    { label: 'Restaurar Telemetría en Vivo (Live Data)', kbd: 'Live', run: () => setStressMode('live') },
-    { label: 'Alternar Modo Gamer 0% GPU', kbd: 'GPU', run: () => swarmAction('toggle_gamer') }
+    { label: 'Ir a Sección: Resumen Ejecutivo & Enjambre IA', kbd: 'Sección', run: () => selectSection('overview') },
+    { label: 'Ir a Sección: Proxy SSH & C2/IDS Unificado (office-pc)', kbd: 'Sección', run: () => selectSection('bridge') },
+    { label: 'Ir a Sección: Sockets TCP ↔ PID / Authenticode', kbd: 'Sección', run: () => selectSection('tcp') },
+    { label: 'Ir a Sección: Flota Multi-Host XDR', kbd: 'Sección', run: () => selectSection('fleet') },
+    { label: 'Ir a Sección: Motor de Reglas YARA & Sigma', kbd: 'Sección', run: () => selectSection('rules') },
+    { label: 'Ir a Sección: Inspector DNS & Entropía DGA', kbd: 'Sección', run: () => selectSection('dns') },
+    { label: 'Ir a Sección: SIEM Ledger SHA-256', kbd: 'Sección', run: () => selectSection('siem') },
+    { label: 'Ir a Sección: Antivirus & EDR en Tiempo Real', kbd: 'Sección', run: () => selectSection('av') },
+    { label: 'Ir a Sección: Firewall IPS & Bóveda de Cuarentena', kbd: 'Sección', run: () => selectSection('ips') },
+    { label: 'Ir a Sección: Conector SOAR Perimetral', kbd: 'Sección', run: () => selectSection('soar') },
+    { label: 'Ir a Sección: Vista Mosaico Completa (Todas)', kbd: 'Sección', run: () => selectSection('all') },
+    { label: 'Acción: Probar Agentes C2 Online (Sonda IDS Solo Lectura)', kbd: '↵ Probe', run: () => probeOnlineC2Agents() },
+    { label: 'Acción: Sincronizar Proxy SSH office-pc (:8002 C2/IDS)', kbd: '↵ Sync', run: () => syncOfficePcC2(false) },
+    { label: 'Acción: Auditar Red TCP/PID + Startup', kbd: '↵ Audit', run: () => triggerAudit() },
+    { label: 'Stress Test: Textos Extremos de 90+ Caracteres (break-ui)', kbd: 'Stress', run: () => setStressMode('extreme') }
   ];
   let cmdkActiveIndex = 0;
 
@@ -1835,7 +2243,7 @@
     const items = getFilteredCmdk();
     if (cmdkActiveIndex >= items.length) cmdkActiveIndex = 0;
     if (items.length === 0) {
-      list.innerHTML = `<div class="empty-state">0 comandos coinciden con la búsqueda</div>`;
+      list.innerHTML = `<div class="empty-state">0 comandos o secciones coinciden con la búsqueda</div>`;
       return;
     }
     list.innerHTML = items.map((c, idx) => `
@@ -1864,15 +2272,15 @@
       <div class="soar-box">
         <h4>Identidad de Proceso & Firma</h4>
         <div>Proceso: <strong style="color:var(--txt-primary)">${esc(procName)}.exe</strong></div>
-        <div>PID Kernel: <strong style="color:var(--sig-cyan)">${esc(pid)}</strong></div>
-        <div>Authenticode: <strong style="color:var(--sig-emerald)">${esc(signer || 'UNSIGNED')}</strong></div>
+        <div>PID Kernel: <strong style="color:var(--sig-cyan-txt)">${esc(pid)}</strong></div>
+        <div>Authenticode: <strong style="color:var(--sig-emerald-txt)">${esc(signer || 'UNSIGNED')}</strong></div>
         <div class="break-anywhere" style="margin-top:4px;color:var(--txt-muted);">Ruta: ${esc(exePath || 'Kernel Protected')}</div>
       </div>
       <div class="soar-box">
         <h4>Telemetría de Socket L4</h4>
         <div>Local: <strong>${esc(localEp)}</strong></div>
-        <div>Remoto: <strong style="color:var(--sig-cyan)">${esc(remoteEp)}</strong></div>
-        <div>Riesgo Heurístico: <strong style="color:${risk >= 75 ? 'var(--sig-crimson)' : 'var(--sig-emerald)'}">${esc(risk)}%</strong></div>
+        <div>Remoto: <strong style="color:var(--sig-cyan-txt)">${esc(remoteEp)}</strong></div>
+        <div>Riesgo Heurístico: <strong style="color:${risk >= 75 ? 'var(--sig-crimson-txt)' : 'var(--sig-emerald-txt)'}">${esc(risk)}%</strong></div>
       </div>
       <div style="display:flex; gap:6px; flex-wrap:wrap;">
         <button type="button" class="btn btn-sm btn-red" onclick="blockIp('${esc((remoteEp||'').split(':')[0])}', 'Forensic Drawer Block'); closeForensicDrawer(false);">Bloquear IP</button>
@@ -1977,7 +2385,6 @@
   }
 
   const variantCtrl = initSegmentedPicker('variantPicker', 'data-variant', (val) => {
-    // Instant 0ms variant swap on root document
     document.documentElement.setAttribute('data-variant', val);
   });
 
@@ -1993,7 +2400,6 @@
     if (idx >= 0) stressCtrl.selectByIndex(idx);
   }
 
-  // Keyboard shortcuts 1-4 for Variants when not typing in an input
   window.addEventListener('keydown', (e) => {
     const tag = (e.target && e.target.tagName) || '';
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (e.target && e.target.isContentEditable)) return;
@@ -2013,7 +2419,7 @@
     if (!lastState && currentStressMode === 'live') return null;
     const base = lastState ? JSON.parse(JSON.stringify(lastState)) : {
       cpu: 14, gpu: 8, fps: 60, ramPct: 38, ramUsed: 12,
-      ctiTotalIndicators: 12732, totalEdrKills: 0, siemChainHash: '8F9B2D7C4A10',
+      ctiTotalIndicators: 15000, totalEdrKills: 0, siemChainHash: 'BF9D27674F69',
       activeConnections: [], fleetNodes: [], detectionRules: [], dnsAudits: [], siemEvents: [], avScans: [], blockedIps: [], quarantinedFiles: []
     };
 
@@ -2048,7 +2454,7 @@
     if (currentStressMode === 'extreme') {
       const longProc = 'enterprise_distributed_telemetry_collector_agent_service_worker_node_v4_9_2_x86_64_production_build';
       const longPath = 'C:\\ProgramData\\EnterpriseSecurityOperations\\DeepPacketInspection\\Subsystems\\AutonomousContainment\\QuarantineStaging\\' + longProc + '.exe';
-      const longDomain = 'c2-beacon-exfiltration-telemetry-tunnel-shard-0984127389127389123-eu-central-cluster-node.apt-Simulation-tracker.example.org';
+      const longDomain = 'c2-beacon-exfiltration-telemetry-tunnel-shard-0984127389127389123-eu-central-cluster-node.apt-simulation-tracker.example.org';
       base.activeConnections = [
         {
           pid: 98412,
@@ -2088,7 +2494,6 @@
      BACKEND API CALLS & RENDERERS
      ============================================================================ */
   let lastState = null;
-  let activeTab = 'all';
   let soarFormDirty = false;
 
   ['soarSyslogEn','soarSyslogHost','soarSyslogPort','soarFgEn','soarFgUrl','soarFgGroup','soarFgToken'].forEach(id => {
@@ -2096,39 +2501,6 @@
     if (el) el.addEventListener('input', () => { soarFormDirty = true; });
     if (el) el.addEventListener('change', () => { soarFormDirty = true; });
   });
-
-  function switchTab(tab, btn) {
-    activeTab = tab;
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    if (btn) btn.classList.add('active');
-
-    const secTcp = document.getElementById('secTcp');
-    const secFleetRules = document.getElementById('secFleetRules');
-    const secDnsSoar = document.getElementById('secDnsSoar');
-    const secSiemAv = document.getElementById('secSiemAv');
-    const panelSiem = document.getElementById('panelSiem');
-    const panelAv = document.getElementById('panelAv');
-    const secIpsQuar = document.getElementById('secIpsQuar');
-
-    [secTcp, secFleetRules, secDnsSoar, secSiemAv, panelSiem, panelAv, secIpsQuar].forEach(el => el.classList.remove('hidden'));
-    secSiemAv.style.gridTemplateColumns = '';
-
-    if (tab === 'tcp') {
-      [secFleetRules, secDnsSoar, secSiemAv, secIpsQuar].forEach(el => el.classList.add('hidden'));
-    } else if (tab === 'fleet') {
-      [secTcp, secDnsSoar, secSiemAv, secIpsQuar].forEach(el => el.classList.add('hidden'));
-    } else if (tab === 'dns') {
-      [secTcp, secFleetRules, secSiemAv, secIpsQuar].forEach(el => el.classList.add('hidden'));
-    } else if (tab === 'siem') {
-      [secTcp, secFleetRules, secDnsSoar, panelAv, secIpsQuar].forEach(el => el.classList.add('hidden'));
-      secSiemAv.style.gridTemplateColumns = '1fr';
-    } else if (tab === 'av') {
-      [secTcp, secFleetRules, secDnsSoar, panelSiem, secIpsQuar].forEach(el => el.classList.add('hidden'));
-      secSiemAv.style.gridTemplateColumns = '1fr';
-    } else if (tab === 'ips') {
-      [secTcp, secFleetRules, secDnsSoar, secSiemAv].forEach(el => el.classList.add('hidden'));
-    }
-  }
 
   async function apiPost(url, bodyObj, btnId) {
     const btn = btnId ? document.getElementById(btnId) : null;
@@ -2270,6 +2642,7 @@
       return;
     }
     document.getElementById('customScanPath').value = path;
+    selectSection('av');
     apiPost('/api/scan-file', { path: path });
   }
   async function uploadAndScanFile(input) {
@@ -2302,21 +2675,27 @@
              (c.signer || '').toLowerCase().includes(q);
     });
     document.getElementById('tabTcpCnt').textContent = pluralEs(rows.length, 'conexión', 'conexiones');
+    document.getElementById('navCntTcp').textContent = rows.length;
     const tb = document.getElementById('tcpBody');
     if (rows.length === 0) {
       tb.innerHTML = `<tr><td colspan="8"><div class="empty-state"><span>0 conexiones TCP activas coinciden con la vista actual.</span><button type="button" class="btn btn-sm btn-cyan" onclick="triggerAudit()">Ejecutar Auditoría TCP/PID</button></div></td></tr>`;
       return;
     }
     tb.innerHTML = rows.map(c => {
-      const sevClass = c.risk >= 75 ? 'b-crit' : (c.risk >= 45 ? 'b-high' : 'b-info');
+      const remIpOnly = (c.remoteEp || '').split(':')[0];
+      // Mutual Whitelist: Tailscale / office-pc C2 bridge (100.*) is trusted infrastructure
+      const isTrustedTailscaleC2 = remIpOnly.startsWith('100.');
+      const effRisk = isTrustedTailscaleC2 ? Math.min(c.risk || 6, 8) : c.risk;
+      const sevClass = effRisk >= 75 ? 'b-crit' : (effRisk >= 45 ? 'b-high' : 'b-info');
       const signBadge = c.isSigned
         ? `<span class="badge b-info">SIGNED</span> <span class="truncate-90" style="color:var(--txt-secondary);font-size:10.5px;" title="${esc(c.signer)}">${esc(c.signer)}</span>`
         : `<span class="badge b-crit">UNSIGNED</span>`;
-      const remIpOnly = (c.remoteEp || '').split(':')[0];
       const safePath = (c.exePath || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
       const safeSigner = (c.signer || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
       let ruleBadge = '';
-      if (c.isCtiMatch) {
+      if (isTrustedTailscaleC2) {
+        ruleBadge += ` <span class="badge b-info">WHITELIST C2/TAILSCALE</span>`;
+      } else if (c.isCtiMatch) {
         ruleBadge += ` <span class="badge b-crit">CTI IOC</span>`;
       } else if (c.matchedRule) {
         ruleBadge += ` <span class="badge b-high truncate-90" title="${esc(c.matchedRule)}">${esc(c.matchedRule)}</span>`;
@@ -2325,18 +2704,18 @@
         <td><strong>${c.pid}</strong></td>
         <td class="min-w-0">
           <div style="display:flex;align-items:center;gap:5px;">
-            <strong class="truncate-90" title="${esc(c.processName)}.exe" style="color:${c.isLolBin ? 'var(--sig-amber)' : 'var(--txt-primary)'}">${esc(c.processName)}.exe</strong>
-            ${c.isLolBin ? '<span class="badge b-high">LOLBIN</span>' : ''}
+            <strong class="truncate-90" title="${esc(c.processName)}.exe" style="color:${(c.isLolBin && !isTrustedTailscaleC2) ? 'var(--sig-amber-txt)' : 'var(--txt-primary)'}">${esc(c.processName)}.exe</strong>
+            ${(c.isLolBin && !isTrustedTailscaleC2) ? '<span class="badge b-high">LOLBIN</span>' : ''}
           </div>
           <div class="truncate-90" style="color:var(--txt-muted);font-size:10px;" title="${esc(c.exePath)}">${esc(c.exePath)}</div>
         </td>
         <td class="min-w-0">${signBadge}</td>
         <td>${esc(c.localEp)}</td>
-        <td><strong style="color:var(--sig-cyan)">${esc(c.remoteEp)}</strong></td>
+        <td><strong style="color:var(--sig-cyan-txt)">${esc(c.remoteEp)}</strong></td>
         <td><span class="truncate-90" title="${esc(c.proto)}">${esc(c.proto)}</span> <span style="color:var(--txt-muted)">[${esc(c.state)}]</span>${ruleBadge}</td>
-        <td><span class="badge ${sevClass}">${c.risk}%</span></td>
+        <td><span class="badge ${sevClass}">${effRisk}%</span></td>
         <td style="text-align:right; white-space:nowrap;">
-          <button type="button" class="btn btn-sm" onclick="openForensicDrawer(${c.pid}, '${esc(c.processName)}', '${esc(c.localEp)}', '${esc(c.remoteEp)}', '${safeSigner}', ${c.risk}, '${safePath}')">Inspect</button>
+          <button type="button" class="btn btn-sm" onclick="openForensicDrawer(${c.pid}, '${esc(c.processName)}', '${esc(c.localEp)}', '${esc(c.remoteEp)}', '${safeSigner}', ${effRisk}, '${safePath}')">Inspect</button>
           <button type="button" class="btn btn-sm btn-red" onclick="blockIp('${esc(remIpOnly)}', 'TCP Table Block (${esc(c.processName)})')">Bloquear IP</button>
           <button type="button" class="btn btn-sm btn-gold" onclick="scanProcessExe('${safePath}')">.exe</button>
           <button type="button" class="btn btn-sm btn-red" onclick="killPid(${c.pid}, '${esc(c.processName)}')">Kill PID</button>
@@ -2351,6 +2730,7 @@
     const fleet = st.fleetNodes || [];
     document.getElementById('tabFleetCnt').textContent = pluralEs(fleet.length, 'nodo', 'nodos');
     document.getElementById('kFleetCnt').textContent = pluralEs(fleet.length, 'nodo', 'nodos');
+    document.getElementById('navCntFleet').textContent = fleet.length;
     const fb = document.getElementById('fleetBody');
     if (fleet.length === 0) {
       fb.innerHTML = `<tr><td colspan="5"><div class="empty-state"><span>0 nodos registrados en la flota XDR.</span><button type="button" class="btn btn-sm btn-gold" onclick="simulateRemoteAgentHeartbeat()">Simular Sensor Remoto</button></div></td></tr>`;
@@ -2363,11 +2743,11 @@
           : `<button type="button" class="btn btn-sm btn-red" onclick="toggleHostIsolation('${esc(hId)}')">Aislar Host</button>`;
         return `<tr>
           <td>
-            <strong class="truncate-90" style="color:var(--sig-emerald)" title="${esc(n.hostname || n.hostName)}">${esc(n.hostname || n.hostName)}</strong>
+            <strong class="truncate-90" style="color:var(--sig-emerald-txt)" title="${esc(n.hostname || n.hostName)}">${esc(n.hostname || n.hostName)}</strong>
             <div class="truncate-90" style="color:var(--txt-muted);font-size:10px;">${esc(n.role)} · ${esc(n.lastSeen)}</div>
           </td>
           <td>
-            <strong style="color:var(--sig-cyan)">${esc(n.ip || n.ipAddress)}</strong>
+            <strong style="color:var(--sig-cyan-txt)">${esc(n.ip || n.ipAddress)}</strong>
             <div class="truncate-90" style="color:var(--txt-muted);font-size:10px;">${esc(n.os || n.osVersion)}</div>
           </td>
           <td>CPU <strong>${n.cpu}%</strong> · RAM <strong>${n.ramPct}%</strong> · TCP <strong>${n.tcpCount}</strong></td>
@@ -2382,6 +2762,7 @@
 
     const rules = st.detectionRules || [];
     document.getElementById('lblRulesCnt').textContent = pluralEs(rules.length, 'regla', 'reglas');
+    document.getElementById('navCntRules').textContent = rules.length;
     let totalRuleHits = 0;
     rules.forEach(r => { totalRuleHits += (r.hits || 0); });
     document.getElementById('lblRuleHits').textContent = totalRuleHits.toLocaleString();
@@ -2401,8 +2782,8 @@
             <span class="badge b-mitre">${esc(r.mitre)}</span><br>
             <span style="color:var(--txt-muted);font-size:10px;">${esc(r.targetField)}</span>
           </td>
-          <td><code class="truncate-90" style="color:var(--sig-amber);font-size:10.5px;" title="${esc(r.pattern)}">${esc(r.pattern)}</code></td>
-          <td><strong style="color:var(--sig-cyan)">${r.hits || 0}</strong></td>
+          <td><code class="truncate-90" style="color:var(--sig-amber-txt);font-size:10.5px;" title="${esc(r.pattern)}">${esc(r.pattern)}</code></td>
+          <td><strong style="color:var(--sig-cyan-txt)">${r.hits || 0}</strong></td>
           <td style="text-align:right; white-space:nowrap;">
             <button type="button" class="btn btn-sm" onclick="toggleEnterpriseRule('${esc(r.id)}', false)">${r.enabled ? 'Pausar' : 'Activar'}</button>
             <button type="button" class="btn btn-sm btn-red" onclick="toggleEnterpriseRule('${esc(r.id)}', true)">Borrar</button>
@@ -2423,6 +2804,7 @@
              (d.verdict || '').toLowerCase().includes(q);
     });
     document.getElementById('tabDnsCnt').textContent = pluralEs(rows.length, 'dominio', 'dominios');
+    document.getElementById('navCntDns').textContent = rows.length;
     const tb = document.getElementById('dnsBody');
     if (rows.length === 0) {
       tb.innerHTML = `<tr><td colspan="6"><div class="empty-state"><span>0 dominios DNS auditados en la vista actual.</span><button type="button" class="btn btn-sm btn-cyan" onclick="triggerDnsAudit()">Auditar Caché DNS Ahora</button></div></td></tr>`;
@@ -2434,8 +2816,8 @@
       const hasIp = d.resolvedIp && d.resolvedIp !== 'N/A' && /^\d+\./.test(d.resolvedIp);
       return `<tr>
         <td style="color:var(--txt-muted);white-space:nowrap;">${esc(d.timestamp)}</td>
-        <td><strong class="truncate-90" title="${esc(d.domain)}" style="color:${isSusp ? 'var(--sig-amber)' : 'var(--txt-primary)'}">${esc(d.domain)}</strong></td>
-        <td><code style="color:var(--sig-cyan)">${esc(d.resolvedIp)}</code></td>
+        <td><strong class="truncate-90" title="${esc(d.domain)}" style="color:${isSusp ? 'var(--sig-amber-txt)' : 'var(--txt-primary)'}">${esc(d.domain)}</strong></td>
+        <td><code style="color:var(--sig-cyan-txt)">${esc(d.resolvedIp)}</code></td>
         <td><strong>${d.entropy} bits/B</strong></td>
         <td>
           <span class="badge ${bCls} truncate-90" title="${esc(d.verdict)}">${esc(d.verdict)} (${d.risk}%)</span>
@@ -2463,6 +2845,7 @@
              (e.module || '').toLowerCase().includes(q);
     });
     document.getElementById('tabSiemCnt').textContent = pluralEs(rows.length, 'evento', 'eventos');
+    document.getElementById('navCntSiem').textContent = rows.length;
     const tb = document.getElementById('siemBody');
     if (rows.length === 0) {
       tb.innerHTML = `<tr><td colspan="5"><div class="empty-state">0 eventos SIEM coinciden con el filtro.</div></td></tr>`;
@@ -2492,10 +2875,10 @@
         </td>
         <td>
           <strong>${esc(e.agent)}</strong> <span style="color:var(--txt-muted)">// ${esc(e.module)}</span><br>
-          <span class="truncate-90" style="color:var(--sig-amber)" title="${esc(e.process)}">${esc(e.process)}</span>
+          <span class="truncate-90" style="color:var(--sig-amber-txt)" title="${esc(e.process)}">${esc(e.process)}</span>
         </td>
         <td class="min-w-0">
-          <div class="truncate-90" style="color:var(--sig-cyan);font-weight:600;" title="${esc(e.target)}">${esc(e.target)}</div>
+          <div class="truncate-90" style="color:var(--sig-cyan-txt);font-weight:600;" title="${esc(e.target)}">${esc(e.target)}</div>
           <div class="break-anywhere" style="color:var(--txt-secondary);font-size:11px;">${esc(e.summary)}</div>
         </td>
         <td style="text-align:right; white-space:nowrap;">${actBtn}</td>
@@ -2515,6 +2898,7 @@
              (r.fullPath || '').toLowerCase().includes(q);
     });
     document.getElementById('tabAvCnt').textContent = pluralEs(rows.length, 'análisis', 'análisis');
+    document.getElementById('navCntAv').textContent = rows.length;
     const tb = document.getElementById('avBody');
     if (rows.length === 0) {
       tb.innerHTML = `<tr><td colspan="5"><div class="empty-state">0 archivos analizados en la vista actual.</div></td></tr>`;
@@ -2531,7 +2915,7 @@
         </td>
         <td class="min-w-0">
           <strong class="truncate-90" title="${esc(r.fileName)}">${esc(r.fileName)}</strong> <span style="color:var(--txt-muted)">(${Number(r.sizeBytes || 0).toLocaleString()} B)</span>
-          <div class="break-anywhere" style="color:var(--sig-amber);font-size:11px;">${esc(r.detail)}</div>
+          <div class="break-anywhere" style="color:var(--sig-amber-txt);font-size:11px;">${esc(r.detail)}</div>
           <div class="truncate-90" style="color:var(--txt-muted);font-size:10px;" title="${esc(r.fullPath)}">${esc(r.fullPath)}</div>
         </td>
         <td>
@@ -2550,19 +2934,21 @@
     if (!st) return;
     const fwTb = document.getElementById('fwBody');
     const ips = st.blockedIps || [];
+    const qFiles = st.quarantinedFiles || [];
+    document.getElementById('navCntIps').textContent = ips.length + qFiles.length;
+
     if (ips.length === 0) {
       fwTb.innerHTML = `<tr><td colspan="4"><div class="empty-state">0 direcciones IP bloqueadas en Windows Firewall.</div></td></tr>`;
     } else {
       fwTb.innerHTML = ips.map(ip => `<tr>
         <td><code>PorygonIPS_Block_${esc(ip)}</code></td>
-        <td><strong style="color:var(--sig-crimson)">${esc(ip)}</strong></td>
+        <td><strong style="color:var(--sig-crimson-txt)">${esc(ip)}</strong></td>
         <td><span class="badge b-crit">BLOCKED IN/OUT</span></td>
         <td style="text-align:right;"><button type="button" class="btn btn-sm" onclick="unblockIp('${esc(ip)}')">Desbloquear</button></td>
       </tr>`).join('');
     }
 
     const qTb = document.getElementById('quarBody');
-    const qFiles = st.quarantinedFiles || [];
     if (qFiles.length === 0) {
       qTb.innerHTML = `<tr><td colspan="4"><div class="empty-state">0 archivos aislados en la Bóveda de Cuarentena.</div></td></tr>`;
     } else {
@@ -2571,7 +2957,7 @@
           <strong>${esc(q.id)}</strong>
           <div style="color:var(--txt-muted);font-size:10px;">${esc(q.timestamp)}</div>
         </td>
-        <td><strong class="truncate-90" style="color:var(--sig-amber)" title="${esc(q.fileName)}">${esc(q.fileName)}</strong></td>
+        <td><strong class="truncate-90" style="color:var(--sig-amber-txt)" title="${esc(q.fileName)}">${esc(q.fileName)}</strong></td>
         <td>
           <div class="truncate-90" style="font-size:11px;" title="${esc(q.originalPath)}">${esc(q.originalPath)}</div>
           <div style="color:var(--txt-muted);font-size:10px;">SHA256: ${esc((q.sha256 || '').substring(0, 20))}…</div>
@@ -2633,19 +3019,26 @@
         document.getElementById('ag2Name').textContent = `${a2.name} // GEN G${a2.gen} · LVL ${a2.lvl}`;
         document.getElementById('ag2Stats').innerHTML =
           `Acciones IPS: <strong>${st.totalIpsActions}</strong> · Firewall: <strong>${pluralEs((st.blockedIps||[]).length, 'IP', 'IPs')}</strong> · Cuarentena: <strong>${pluralEs((st.quarantinedFiles||[]).length, 'archivo', 'archivos')}</strong><br>` +
-          `Candidato Bloqueo IP: <strong style="color:var(--sig-crimson)">${esc(st.candidateBlockIp || 'Ninguna')}</strong> (${esc(st.candidateBlockProc || '-')})`;
+          `Candidato Bloqueo IP: <strong style="color:var(--sig-crimson-txt)">${esc(st.candidateBlockIp || 'Ninguna')}</strong> (${esc(st.candidateBlockProc || '-')})`;
       }
 
       if (st.officePc) {
         const ob = document.getElementById('officeBadge');
+        const sb = document.getElementById('sidebarBridgeBadge');
         if (st.officePc.online) {
           ob.textContent = 'ONLINE (:8002 + :5080)';
           ob.className = 'badge b-info';
+          sb.textContent = 'ONLINE';
+          sb.className = 'badge b-info';
         } else {
           ob.textContent = 'OFFLINE';
           ob.className = 'badge b-crit';
+          sb.textContent = 'OFFLINE';
+          sb.className = 'badge b-crit';
         }
-        document.getElementById('offOnlineAgents').textContent = pluralEs(st.officePc.onlineAgentsCount || 0, 'agente online', 'agentes online');
+        const onCnt = Number(st.officePc.onlineAgentsCount || 0);
+        document.getElementById('navCntBridge').textContent = onCnt + ' online';
+        document.getElementById('offOnlineAgents').textContent = pluralEs(onCnt, 'agente online', 'agentes online');
         document.getElementById('offTotalAgents').textContent = pluralEs(st.officePc.totalAgentsCount || 0, 'registrado', 'registrados');
         document.getElementById('offLogsRaw').textContent = Number(st.officePc.logsRaw || 0).toLocaleString();
         document.getElementById('offLogsDec').textContent = Number(st.officePc.logsDecrypted || 0).toLocaleString();
