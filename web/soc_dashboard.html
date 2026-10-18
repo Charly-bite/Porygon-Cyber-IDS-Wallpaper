@@ -1777,6 +1777,22 @@
           </button>
         </div>
 
+        <!-- 24-Slot Temporal Burst Histogram (Mini-Timeline Bar) -->
+        <div id="alertsTimelineWrap" style="padding:8px 14px; border-bottom:1px solid var(--border-subtle); background:var(--bg-surface-2); display:flex; flex-direction:column; gap:5px;">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;">
+            <div class="mono" style="font-size:10.5px; color:var(--txt-secondary); display:flex; align-items:center; gap:8px;">
+              <strong style="color:var(--txt-primary);">📊 Ráfagas de Alertas por Ventana Horaria (24 Slots · 00h–23h):</strong>
+              <span id="lblTimelineBurstSummary" style="color:var(--sig-cyan-txt);">Calculando distribución temporal...</span>
+            </div>
+            <div class="mono" style="font-size:10px; display:flex; align-items:center; gap:10px;">
+              <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#EF4444;margin-right:4px;"></span>CRITICAL</span>
+              <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#F59E0B;margin-right:4px;"></span>HIGH</span>
+              <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#10B981;margin-right:4px;"></span>INFO / RESUELTA</span>
+            </div>
+          </div>
+          <div id="alertsTimelineBar" style="display:grid; grid-template-columns:repeat(24, minmax(0, 1fr)); gap:3px; align-items:end; height:36px; padding-top:4px;"></div>
+        </div>
+
         <div class="toolbar" style="padding:10px 14px; border-bottom:1px solid var(--border-subtle); justify-content:space-between;">
           <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; flex:1;">
             <span style="font-size:11px; color:var(--txt-muted); font-weight:600;">Agente Resolutor:</span>
@@ -3876,6 +3892,9 @@
       }
     }
 
+    // Render 24-Slot Temporal Burst Histogram (00h - 23h)
+    renderAlertsTimelineHistogram(allAlerts);
+
     const agentF = (document.getElementById('alertAgentFilter') ? document.getElementById('alertAgentFilter').value : 'ALL');
     const q = (document.getElementById('alertResSearch') ? document.getElementById('alertResSearch').value : '').toLowerCase().trim();
 
@@ -3885,6 +3904,7 @@
       if (hostF !== 'ALL' && extractAlertOriginHostKey(a) !== hostF) return false;
       if (!q) return true;
       return (a.alertId || '').toLowerCase().includes(q) ||
+             (a.timestamp || '').toLowerCase().includes(q) ||
              (a.process || '').toLowerCase().includes(q) ||
              (a.target || '').toLowerCase().includes(q) ||
              (a.summary || '').toLowerCase().includes(q) ||
@@ -3984,6 +4004,91 @@
     }).join('');
   }
 
+  function renderAlertsTimelineHistogram(allAlerts) {
+    const barEl = document.getElementById('alertsTimelineBar');
+    const sumEl = document.getElementById('lblTimelineBurstSummary');
+    if (!barEl) return;
+
+    const slots = Array.from({ length: 24 }, (_, h) => ({
+      hour: h,
+      label: String(h).padStart(2, '0') + ':00',
+      prefix: String(h).padStart(2, '0') + ':',
+      total: 0,
+      crit: 0,
+      high: 0,
+      info: 0
+    }));
+
+    (allAlerts || []).forEach(a => {
+      const ts = String(a.timestamp || '').trim();
+      const m = ts.match(/^(\d{1,2}):/);
+      let h = m ? parseInt(m[1], 10) : new Date().getHours();
+      if (isNaN(h) || h < 0 || h > 23) h = 0;
+      slots[h].total++;
+      if (a.severity === 'CRITICAL') slots[h].crit++;
+      else if (a.severity === 'HIGH') slots[h].high++;
+      else slots[h].info++;
+    });
+
+    let maxSlot = 1;
+    let peakSlot = slots[0];
+    slots.forEach(s => {
+      if (s.total > maxSlot) maxSlot = s.total;
+      if (s.total > peakSlot.total) peakSlot = s;
+    });
+
+    if (sumEl) {
+      if (peakSlot.total > 0) {
+        sumEl.textContent = `Pico en ventana ${peakSlot.label} (${peakSlot.total} alertas: ${peakSlot.crit} CRIT / ${peakSlot.high} HIGH) · Clic en barra para filtrar hora`;
+      } else {
+        sumEl.textContent = '0 alertas registradas en las 24 ventanas horarias';
+      }
+    }
+
+    const curSearch = (document.getElementById('alertResSearch') ? document.getElementById('alertResSearch').value : '').trim();
+    barEl.innerHTML = slots.map(s => {
+      const heightPct = s.total === 0 ? 12 : Math.max(22, Math.round((s.total / maxSlot) * 100));
+      const color = s.total === 0
+        ? 'var(--border-hairline)'
+        : (s.crit > 0 ? '#EF4444' : (s.high > 0 ? '#F59E0B' : '#10B981'));
+      const isSelected = curSearch === s.prefix;
+      const tip = `${s.label} — ${s.total} alerta(s) [${s.crit} CRITICAL, ${s.high} HIGH, ${s.info} INFO]. Clic para filtrar.`;
+      return `<div onclick="filterAlertsByHourSlot('${s.prefix}')" title="${esc(tip)}" style="cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:2px;user-select:none;">
+        <div style="width:100%;height:${heightPct}%;background:${color};border-radius:2px 2px 0 0;opacity:${s.total === 0 ? '0.35' : (isSelected ? '1' : '0.88')};outline:${isSelected ? '2px solid var(--sig-cyan)' : 'none'};transition:height 160ms ease;"></div>
+        <span class="mono" style="font-size:8.5px;color:${isSelected ? 'var(--sig-cyan-txt)' : 'var(--txt-muted)'};font-weight:${isSelected || s.total > 0 ? '700' : '400'};line-height:1;">${String(s.hour).padStart(2, '0')}</span>
+      </div>`;
+    }).join('');
+  }
+
+  function filterAlertsByHourSlot(hourPrefix) {
+    const inp = document.getElementById('alertResSearch');
+    if (!inp) return;
+    if (inp.value.trim() === hourPrefix) {
+      inp.value = '';
+      showToast('Filtro horario restablecido (mostrando todas las horas).', false);
+    } else {
+      inp.value = hourPrefix;
+      showToast('Filtrando alertas en ventana horaria ' + hourPrefix + '00–' + hourPrefix + '59...', false);
+    }
+    renderAlertsResolutionPanel();
+  }
+
+  function probeHostFromDrawer(hostRaw) {
+    if (!hostRaw) return;
+    showToast('🧪 Lanzando sonda TCP/EDR en vivo sobre ' + hostRaw + '...', false);
+    apiPost('/api/probe-single-host', { host: hostRaw });
+  }
+
+  function propagateSoarFromDrawer(targetIp, hostRaw, alertId) {
+    if (!targetIp) return;
+    showToast('🛡️ Propagando bloqueo SOAR Tri-Capa (Firewall Local + FortiGate :5080 + Agente C2 :8002) para ' + targetIp + '...', false);
+    apiPost('/api/propagate-soar', {
+      target: targetIp,
+      host: hostRaw || '',
+      reason: 'Forensic Drawer SOAR (' + (alertId || 'MANUAL') + ')'
+    });
+  }
+
   function openAlertResolutionDrawer(idx) {
     const a = currentRenderedAlerts[idx];
     if (!a) return;
@@ -3991,6 +4096,10 @@
     dr.removeAttribute('data-kb-instant');
     document.getElementById('inspTitle').textContent = `${a.alertId} // Resuelta por ${a.resolvedBy}`;
     const safeKey = (a.alertId || a.chainHash || '').replace(/'/g, "\\'");
+    const hostKey = extractAlertOriginHostKey(a);
+    const safeHostKey = hostKey.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    const safeProc = String(a.process || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    const safeTarget = String(a.target || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     document.getElementById('inspBody').innerHTML = `
       <div class="soar-box">
         <h4>Identificación Criptográfica & Origen C2/XDR</h4>
@@ -4001,7 +4110,8 @@
       </div>
       <div class="soar-box">
         <h4>Objetivo & Evidencia Detectada</h4>
-        <div>Host / Proceso: <strong style="color:var(--sig-amber-txt)">${esc(a.process)}</strong></div>
+        <div>Host de Origen Atribuido: <strong style="color:var(--sig-emerald-txt)">${esc(hostKey)}</strong></div>
+        <div>Host / Proceso Raw: <strong style="color:var(--sig-amber-txt)">${esc(a.process)}</strong></div>
         <div class="break-anywhere">Target / IOC: <strong style="color:var(--sig-cyan-txt)">${esc(a.target)}</strong></div>
         <div class="break-anywhere" style="margin-top:4px;color:var(--txt-secondary);">${esc(a.summary)}</div>
       </div>
@@ -4012,6 +4122,20 @@
         <div style="margin-top:4px;">Acción Registrada: <strong>${esc(a.action)}</strong></div>
         <div class="break-anywhere" style="margin-top:8px;padding:8px;background:var(--bg-void);border-radius:6px;border-left:3px solid var(--sig-emerald);color:var(--txt-primary);line-height:1.5;">
           ${esc(a.resolutionDetail)}
+        </div>
+      </div>
+      <div class="soar-box">
+        <h4>Acciones Tácticas por Host & Propagación SOAR Tri-Capa</h4>
+        <div style="display:flex; flex-direction:column; gap:6px; margin-top:4px;">
+          <button type="button" class="btn btn-sm btn-cyan" style="justify-content:flex-start;" onclick="setAlertHostFilter('${safeHostKey}'); closeForensicDrawer(false);">
+            🔍 Filtrar todas las alertas de este Host (${esc(hostKey)})
+          </button>
+          <button type="button" class="btn btn-sm btn-gold" style="justify-content:flex-start;" onclick="probeHostFromDrawer('${safeProc}')">
+            🧪 Lanzar Sonda TCP/EDR en este Host (:8002 / Local)
+          </button>
+          <button type="button" class="btn btn-sm btn-red" style="justify-content:flex-start;" onclick="propagateSoarFromDrawer('${safeTarget}', '${safeProc}', '${safeKey}')">
+            🛡️ Propagar Bloqueo SOAR (FortiGate :5080 + Agente C2 :8002)
+          </button>
         </div>
       </div>
       <div style="display:flex; gap:6px; flex-wrap:wrap;">

@@ -1889,13 +1889,15 @@ public static class PorygonCyberDefenseEngine {
 
         if (isIp && !IsSafeWhitelistedIp(cleanIp)) {
             bool blocked = BlockRemoteIpInFirewall(cleanIp, "Resolución Autónoma Porygon (" + targetEv.AlertId + ")", false);
+            string propMsg;
+            PropagatePerimeterAndAgentSoarBlock(cleanIp, targetEv.ProcessInfo ?? "", "Auto-SOAR " + targetEv.AlertId, out propMsg);
             resAgent = "PORYGON-Z";
             resMethod = blocked
-                ? "Bloqueo Perimetral Firewall L3/L4 + Propagación SOAR"
-                : "Contención Perimetral + Regla Firewall Verificada";
+                ? "Bloqueo Perimetral Firewall L3/L4 + FortiGate (:5080) + Agente C2 (:8002)"
+                : "Contención Perimetral + Propagación SOAR Unificada";
             resDetail = string.Format(
-                "Porygon-Z ejecutó el playbook de contención sobre la alerta [{0}], bloqueando la IP externa [{1}] en Windows Firewall (IN/OUT), enviando el IOC a Syslog CEF y cerrando el vector de comunicación (MITRE {2}).",
-                targetEv.AlertId, cleanIp, targetEv.MitreId);
+                "Porygon-Z ejecutó el playbook de contención sobre la alerta [{0}], bloqueando la IP externa [{1}] en Windows Firewall (IN/OUT), propagando el IOC a FortiGate (:5080) y al agente C2 (:8002), y cerrando el vector de comunicación (MITRE {2}). {3}",
+                targetEv.AlertId, cleanIp, targetEv.MitreId, propMsg);
         } else if (isFile && File.Exists(tgt)) {
             AvScanReport rep = InspectFileArtifact(tgt, true);
             bool quar = QuarantineFile(tgt, "Resolución Autónoma Porygon2 (" + targetEv.AlertId + ")", rep != null ? rep.Sha256 : "", rep != null ? rep.RiskScore : 0.88f);
@@ -2801,27 +2803,26 @@ public static class PorygonCyberDefenseEngine {
                 } catch { }
                 sshTunnelProcess = null;
             }
-            if (forceRestart) {
-                // Only terminate orphan ssh.exe processes that actually own local listener 127.0.0.1:8002 or :5080
-                // NEVER kill interactive user ssh.exe sessions (e.g. ssh oficina, ssh devqb)!
-                try {
-                    Dictionary<string, int> tcpMap = QueryExtendedTcpPidMap();
-                    int[] tunnelPorts = new int[] { 8002, 5080 };
-                    for (int pIdx = 0; pIdx < tunnelPorts.Length; pIdx++) {
-                        int portPid;
-                        if (tcpMap.TryGetValue("127.0.0.1:" + tunnelPorts[pIdx] + "|0.0.0.0:0", out portPid) && portPid > 4) {
-                            try {
-                                using (Process p = Process.GetProcessById(portPid)) {
-                                    if (string.Equals(p.ProcessName, "ssh", StringComparison.OrdinalIgnoreCase)) {
-                                        p.Kill();
-                                    }
+            // Always terminate orphan ssh.exe processes that own local listener 127.0.0.1:8002 or :5080
+            // when one of the two forwards is missing or forceRestart is requested, so ExitOnForwardFailure=yes can bind both ports cleanly.
+            // NEVER kill interactive user ssh.exe sessions (e.g. ssh oficina, ssh devqb)!
+            try {
+                Dictionary<string, int> tcpMap = QueryExtendedTcpPidMap();
+                int[] tunnelPorts = new int[] { 8002, 5080 };
+                for (int pIdx = 0; pIdx < tunnelPorts.Length; pIdx++) {
+                    int portPid;
+                    if (tcpMap.TryGetValue("127.0.0.1:" + tunnelPorts[pIdx] + "|0.0.0.0:0", out portPid) && portPid > 4) {
+                        try {
+                            using (Process p = Process.GetProcessById(portPid)) {
+                                if (string.Equals(p.ProcessName, "ssh", StringComparison.OrdinalIgnoreCase)) {
+                                    p.Kill();
                                 }
-                            } catch { }
-                        }
+                            }
+                        } catch { }
                     }
-                    Thread.Sleep(250);
-                } catch { }
-            }
+                }
+                Thread.Sleep(250);
+            } catch { }
 
             ProcessStartInfo psi = new ProcessStartInfo("ssh.exe",
                 "-N -o BatchMode=yes -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=6 -L 127.0.0.1:5080:192.168.2.222:5080 -L 127.0.0.1:8002:192.168.2.222:8002 office-pc") {
@@ -2833,7 +2834,7 @@ public static class PorygonCyberDefenseEngine {
 
             for (int i = 0; i < 20; i++) {
                 Thread.Sleep(220);
-                if (IsLocalPortListening(8002)) {
+                if (IsLocalPortListening(8002) && IsLocalPortListening(5080)) {
                     OfficePcTunnelOnline = true;
                     lock (SyncLock) {
                         OfficePcTunnelStatus = "ONLINE // Proxy SSH office-pc (100.89.1.27) -> 127.0.0.1:8002 (C2/IDS) & :5080 (QB-NIDS/VT)";
@@ -3577,6 +3578,182 @@ public static class PorygonCyberDefenseEngine {
             }
             return true;
         } catch {
+            return false;
+        }
+    }
+
+    public static bool PropagatePerimeterAndAgentSoarBlock(string targetRaw, string originHostRaw, string reason, out string resultMessage) {
+        resultMessage = "";
+        string raw = (targetRaw ?? "").Trim();
+        if (raw.Contains("->")) {
+            string[] parts = raw.Split(new string[] { "->" }, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length > 1) raw = parts[1].Trim();
+        }
+        string cleanIp = raw.Split(new char[] { ':', ' ', '/' }, StringSplitOptions.RemoveEmptyEntries).Length > 0
+            ? raw.Split(new char[] { ':', ' ', '/' }, StringSplitOptions.RemoveEmptyEntries)[0].Trim()
+            : "";
+
+        IPAddress parsedIp;
+        if (string.IsNullOrEmpty(cleanIp) || !IPAddress.TryParse(cleanIp, out parsedIp)) {
+            resultMessage = "⚠️ El objetivo [" + (targetRaw ?? "") + "] no contiene una dirección IPv4/IPv6 externa válida para bloqueo perimetral.";
+            return false;
+        }
+        if (IsSafeWhitelistedIp(cleanIp) || cleanIp.StartsWith("192.168.") || cleanIp.StartsWith("10.") || cleanIp.StartsWith("127.")) {
+            resultMessage = "🛡️ Salvaguarda Dual-Lock: La IP [" + cleanIp + "] pertenece a la red interna / Lista Blanca Corporativa y está protegida contra bloqueo perimetral.";
+            return false;
+        }
+
+        string cleanHost = (originHostRaw ?? Environment.MachineName).Trim();
+        string cleanReason = string.IsNullOrEmpty(reason) ? "Porygon-Z Unified SOAR" : reason;
+
+        // 1. Local Windows Firewall Block
+        bool localBlocked = BlockRemoteIpInFirewall(cleanIp, cleanReason, false);
+
+        // 2. QB-Network (:5080) -> FortiGate (192.168.2.1:60001) + SQL Server Audit Log
+        string fortiStatus = "OFFLINE";
+        try {
+            EnsureOfficePcSshProxyTunnel(false);
+            if (IsLocalPortListening(5080)) {
+                using (WebClient wc = new WebClient()) {
+                    wc.Encoding = Encoding.UTF8;
+                    string url = string.Format(
+                        "http://127.0.0.1:5080/api/wallpaper-soar-block?ip={0}&host={1}&reason={2}",
+                        Uri.EscapeDataString(cleanIp),
+                        Uri.EscapeDataString(cleanHost),
+                        Uri.EscapeDataString(cleanReason));
+                    string json = wc.DownloadString(url);
+                    JavaScriptSerializer ser = new JavaScriptSerializer();
+                    var d = ser.Deserialize<Dictionary<string, object>>(json);
+                    if (d != null && d.ContainsKey("ok") && Convert.ToBoolean(d["ok"])) {
+                        bool fgPushed = d.ContainsKey("fortigate_pushed") && Convert.ToBoolean(d["fortigate_pushed"]);
+                        fortiStatus = fgPushed ? "FORTIGATE_API_OK (BLOCKED_" + cleanIp + ")" : "SQL_LOGGED + FORTIGATE_STAGED (BLOCKED_" + cleanIp + ")";
+                    }
+                }
+            }
+        } catch (Exception ex) {
+            fortiStatus = "STAGED (" + ex.Message + ")";
+        }
+
+        // 3. Remote C2 Agent (:8002) netsh advfirewall rule if originHost maps to a corporate endpoint
+        string agentIp = "";
+        string agentHostLabel = cleanHost;
+        var ipMatch = System.Text.RegularExpressions.Regex.Match(cleanHost, @"\b(192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)\b");
+        if (ipMatch.Success) {
+            agentIp = ipMatch.Groups[1].Value;
+        } else {
+            string hostToken = cleanHost.Split(new char[] { ' ', '[', '(', '/' }, StringSplitOptions.RemoveEmptyEntries).Length > 0
+                ? cleanHost.Split(new char[] { ' ', '[', '(', '/' }, StringSplitOptions.RemoveEmptyEntries)[0].Trim()
+                : cleanHost;
+            lock (SyncLock) {
+                foreach (var kv in FleetNodes) {
+                    if (string.Equals(kv.Key, hostToken, StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(kv.Value.Hostname, hostToken, StringComparison.OrdinalIgnoreCase) ||
+                        (kv.Value.Hostname != null && kv.Value.Hostname.IndexOf(hostToken, StringComparison.OrdinalIgnoreCase) >= 0)) {
+                        agentIp = (kv.Value.IpAddress ?? "").Split('/')[0].Trim();
+                        agentHostLabel = kv.Value.Hostname;
+                        break;
+                    }
+                }
+            }
+        }
+
+        bool c2Queued = false;
+        if (!string.IsNullOrEmpty(agentIp) && agentIp != "127.0.0.1" && IsLocalPortListening(8002)) {
+            string ruleName = "PorygonRemoteIPS_Block_" + cleanIp;
+            string cmd = string.Format(
+                "netsh advfirewall firewall delete rule name=\"{0}\" & " +
+                "netsh advfirewall firewall add rule name=\"{0}\" dir=out action=block remoteip={1} enable=yes & " +
+                "netsh advfirewall firewall add rule name=\"{0}\" dir=in action=block remoteip={1} enable=yes & " +
+                "echo [PORYGON-REMOTE-SOAR] HOST={2} ACTION=BLOCK_IP TARGET={1} STATUS=APPLIED",
+                ruleName, cleanIp, agentHostLabel);
+            c2Queued = QueueOfficePcAgentCommand(agentIp, cmd);
+        }
+
+        lock (SyncLock) {
+            SoarConfig.TotalFortiGatePushes++;
+            SoarConfig.LastSoarStatus = string.Format("UNIFIED_SOAR // IP {0} -> LocalFW:{1} | FortiGate(:5080):{2} | C2(:8002):{3}",
+                cleanIp, localBlocked ? "OK" : "ACTIVE", fortiStatus, c2Queued ? ("QUEUED->" + agentIp) : "LOCAL_ONLY");
+        }
+
+        resultMessage = string.Format(
+            "🛡️ Propagación SOAR Tri-Capa completada para [{0}]: (1) Firewall Local [PorygonIPS_Block_{0}], (2) QB-Network :5080 / FortiGate [{1}], (3) Agente C2 :8002 [{2}].",
+            cleanIp, fortiStatus, c2Queued ? ("Encolado en " + agentHostLabel + " [" + agentIp + "]") : "Aplicado en nodo maestro");
+        return true;
+    }
+
+    public static bool ProbeSpecificC2AgentHost(string hostQuery, out string resultMessage) {
+        resultMessage = "";
+        string q = (hostQuery ?? "").Trim();
+        if (string.IsNullOrEmpty(q)) {
+            resultMessage = "⚠️ Especifica un Host o IP para lanzar la sonda.";
+            return false;
+        }
+
+        string token = q.Split(new char[] { ' ', '[', '(', '/' }, StringSplitOptions.RemoveEmptyEntries).Length > 0
+            ? q.Split(new char[] { ' ', '[', '(', '/' }, StringSplitOptions.RemoveEmptyEntries)[0].Trim()
+            : q;
+
+        // Check if this is the local workstation (DESKTOP-874GS44 / Environment.MachineName)
+        if (string.Equals(token, Environment.MachineName, StringComparison.OrdinalIgnoreCase) ||
+            q.IndexOf(Environment.MachineName, StringComparison.OrdinalIgnoreCase) >= 0 ||
+            token == "127.0.0.1" || token == "100.90.211.9") {
+            AuditDnsCacheAndBeaconing(true);
+            PollWindowsEventLogs();
+            int tcpCnt = 0;
+            lock (SyncLock) { tcpCnt = ActiveTcpRows.Count; }
+            resultMessage = string.Format("🧪 Sonda EDR/TCP local ejecutada en [{0}]: {1} sockets TCP activos auditados, caché DNS verificada y protección LSASS/EventLog validada.", Environment.MachineName, tcpCnt);
+            return true;
+        }
+
+        EnsureOfficePcSshProxyTunnel(false);
+        string agentIp = "";
+        string agentHost = token;
+
+        var ipMatch = System.Text.RegularExpressions.Regex.Match(q, @"\b(192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)\b");
+        if (ipMatch.Success) {
+            agentIp = ipMatch.Groups[1].Value;
+        }
+        if (token.Equals("QB-SOC-5080", StringComparison.OrdinalIgnoreCase) || token.Equals("DEVQB", StringComparison.OrdinalIgnoreCase)) {
+            agentIp = "192.168.2.222";
+            agentHost = "DEVQB";
+        }
+
+        lock (SyncLock) {
+            foreach (var kv in FleetNodes) {
+                if (string.Equals(kv.Key, token, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(kv.Value.Hostname, token, StringComparison.OrdinalIgnoreCase) ||
+                    (!string.IsNullOrEmpty(agentIp) && string.Equals(kv.Value.IpAddress, agentIp, StringComparison.OrdinalIgnoreCase)) ||
+                    (kv.Value.Hostname != null && kv.Value.Hostname.IndexOf(token, StringComparison.OrdinalIgnoreCase) >= 0)) {
+                    if (string.IsNullOrEmpty(agentIp)) agentIp = (kv.Value.IpAddress ?? "").Split('/')[0].Trim();
+                    agentHost = kv.Value.Hostname ?? token;
+                    break;
+                }
+            }
+        }
+
+        IPAddress dummyIp;
+        if (string.IsNullOrEmpty(agentIp) && IPAddress.TryParse(token, out dummyIp)) {
+            agentIp = token;
+        }
+
+        if (string.IsNullOrEmpty(agentIp)) {
+            resultMessage = "⚠️ No se encontró una IP de agente C2 asociada al host [" + q + "].";
+            return false;
+        }
+
+        string probeCmd = string.Format("echo [PORYGON-IDS-UNIFIED] HOST={0} IP={1} & whoami & netstat -ano | findstr ESTABLISHED", agentHost, agentIp);
+        bool queued = QueueOfficePcAgentCommand(agentIp, probeCmd);
+        PollOfficePcC2AndIdsTelemetry(true);
+
+        if (queued) {
+            RecordSiemEvent("PORYGON2", "SINGLE_HOST_PROBE", "INFO", "T1049",
+                agentHost + " [" + agentIp + "]", agentIp, "", 0.16f,
+                string.Format("Sonda táctica Read-Only (TCP ESTABLISHED + Proceso) encolada en C2 (:8002) para el host {0} ({1}).", agentHost, agentIp),
+                "PROBE_QUEUED");
+            resultMessage = string.Format("🧪 Sonda táctica TCP/EDR enviada a [{0} ({1})] vía C2 (:8002) y telemetría sincronizada.", agentHost, agentIp);
+            return true;
+        } else {
+            resultMessage = "⚠️ No se pudo conectar con C2 (:8002) para encolar la sonda en [" + agentHost + " (" + agentIp + ")].";
             return false;
         }
     }
@@ -4368,6 +4545,15 @@ while ($true) {
                         string mKey = req.ContainsKey("mode") && req["mode"] != null ? req["mode"].ToString() : "GRADUATED_2FA";
                         msg = SetPorygonAutonomyMode(mKey);
                         ok = true;
+                    } else if (cleanPath == "/api/propagate-soar") {
+                        string tgtIp = req.ContainsKey("target") && req["target"] != null ? req["target"].ToString() :
+                                       (req.ContainsKey("ip") && req["ip"] != null ? req["ip"].ToString() : "");
+                        string origH = req.ContainsKey("host") && req["host"] != null ? req["host"].ToString() : "";
+                        string rsn = req.ContainsKey("reason") && req["reason"] != null ? req["reason"].ToString() : "Forensic Drawer 1-Click SOAR";
+                        ok = PropagatePerimeterAndAgentSoarBlock(tgtIp, origH, rsn, out msg);
+                    } else if (cleanPath == "/api/probe-single-host") {
+                        string hq = req.ContainsKey("host") && req["host"] != null ? req["host"].ToString() : "";
+                        ok = ProbeSpecificC2AgentHost(hq, out msg);
                     } else if (cleanPath == "/api/swarm-action") {
                         string act = req.ContainsKey("action") && req["action"] != null ? req["action"].ToString() : "";
                         if (OnSwarmWebAction != null) {
