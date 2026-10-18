@@ -1,377 +1,756 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" class="dark" data-variant="snappy" data-stress="live">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PORYGON ENTERPRISE XDR / IDS / IPS SOC v3.0 // SIEM · EDR · CTI · YARA/Sigma · Fleet · SOAR</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
+<title>PORYGON ENTERPRISE XDR // C2-IDS CONSOLE — Obsidian Sentinel (Emil Craft)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
+  /* ============================================================================
+     1. OBSIDIAN SENTINEL DESIGN TOKENS (STITCH MCP + EMIL KOWALSKI CRAFT)
+     - Zero AI Slop: No purple gradients, no heavy glows, hairline 1px borders
+     - Easing: ease-in FORBIDDEN. Mandatory cubic-bezier(0.23, 1, 0.32, 1)
+     ============================================================================ */
   :root {
-    --bg-deep: #060b0e;
-    --bg-panel: #0c141b;
-    --bg-card: #101b24;
-    --bg-hover: #152430;
-    --border-teal: rgba(52, 168, 138, 0.42);
-    --border-gold: rgba(245, 202, 78, 0.45);
-    --border-red: rgba(248, 113, 113, 0.5);
-    --teal: #34d399;
-    --teal-dim: #2ca882;
-    --cyan: #38bdf8;
-    --gold: #facc15;
-    --amber: #f59e0b;
-    --red: #f87171;
-    --txt-main: #e2e8f0;
-    --txt-sub: #94a3b8;
-    --font-mono: 'Consolas', 'JetBrains Mono', 'Courier New', monospace;
-    --font-sans: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+
+    /* Duration Budgets (emil-design-eng) */
+    --dur-instant: 0ms;
+    --dur-press: 120ms;
+    --dur-popover-in: 180ms;
+    --dur-popover-out: 150ms;
+    --dur-drawer-in: 220ms;
+    --dur-drawer-out: 160ms;
+    --dur-toast: 400ms;
+
+    /* Surface Elevation Hierarchy (Obsidian Sentinel) */
+    --bg-canvas: #090B0E;
+    --bg-surface-1: #0D1117;
+    --bg-surface-2: #151B23;
+    --bg-surface-3: #1C2430;
+    --bg-active: #242E3D;
+
+    /* Subtle Semi-Transparent Hairline Infrastructure */
+    --border-subtle: rgba(255, 255, 255, 0.04);
+    --border-hairline: rgba(255, 255, 255, 0.07);
+    --border-elevated: rgba(255, 255, 255, 0.12);
+    --border-focus: rgba(16, 185, 129, 0.45);
+
+    /* Typography & Contrast Tokens */
+    --txt-primary: #F3F4F6;
+    --txt-secondary: #9CA3AF;
+    --txt-muted: #6B7280;
+
+    /* Semantic Signal Tokens */
+    --sig-emerald: #10B981;
+    --sig-emerald-bg: rgba(16, 185, 129, 0.10);
+    --sig-emerald-bd: rgba(16, 185, 129, 0.25);
+
+    --sig-cyan: #06B6D4;
+    --sig-cyan-bg: rgba(6, 182, 212, 0.10);
+    --sig-cyan-bd: rgba(6, 182, 212, 0.25);
+
+    --sig-amber: #F59E0B;
+    --sig-amber-bg: rgba(245, 158, 11, 0.10);
+    --sig-amber-bd: rgba(245, 158, 11, 0.25);
+
+    --sig-crimson: #EF4444;
+    --sig-crimson-bg: rgba(239, 68, 68, 0.12);
+    --sig-crimson-bd: rgba(239, 68, 68, 0.28);
+
+    /* Geometry Tokens (Mutated by Prototype Variants) */
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 8px;
+    --radius-pill: 9999px;
+
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-mono: 'JetBrains Mono', 'Consolas', monospace;
+
+    /* Level 3 Floating Shadow (Restricted to Overlays Only) */
+    --shadow-overlay: 0 4px 12px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08);
   }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    background: radial-gradient(circle at 50% 0%, #0d1d22 0%, var(--bg-deep) 75%);
-    color: var(--txt-main);
+
+  /* ============================================================================
+     PROTOTYPE PERSONALITY VARIANTS (Instant 0ms content swap via data-variant)
+     1. Quiet  — Ultra-muted hairlines, whisper-quiet visual weight
+     2. Paper  — Editorial warm carbon slate with crisp paper contrast
+     3. Round  — Tactile softer geometry (10px-14px radii)
+     4. Snappy — Default Linear/Raycast Obsidian Sentinel (4px razor geometry)
+     ============================================================================ */
+  html[data-variant="quiet"] {
+    --bg-canvas: #08090B;
+    --bg-surface-1: #0B0D10;
+    --bg-surface-2: #101318;
+    --bg-surface-3: #161A21;
+    --border-hairline: rgba(255, 255, 255, 0.045);
+    --border-subtle: rgba(255, 255, 255, 0.025);
+    --txt-primary: #E5E7EB;
+    --txt-secondary: #8B929E;
+    --radius-sm: 3px;
+    --radius-md: 4px;
+  }
+  html[data-variant="paper"] {
+    --bg-canvas: #121110;
+    --bg-surface-1: #181715;
+    --bg-surface-2: #201E1B;
+    --bg-surface-3: #282521;
+    --border-hairline: rgba(245, 240, 230, 0.09);
+    --border-subtle: rgba(245, 240, 230, 0.05);
+    --txt-primary: #F5F2EB;
+    --txt-secondary: #B5AFA4;
+    --txt-muted: #7D776D;
+    --radius-sm: 2px;
+    --radius-md: 3px;
+    --radius-lg: 4px;
+  }
+  html[data-variant="round"] {
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --border-hairline: rgba(255, 255, 255, 0.085);
+  }
+
+  /* ============================================================================
+     BASE RESET & MOBILE-NATIVE POLISH (mobile-native skill)
+     ============================================================================ */
+  *, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html, body {
+    background-color: var(--bg-canvas);
+    color: var(--txt-primary);
     font-family: var(--font-sans);
-    min-height: 100vh;
-    padding-bottom: 45px;
+    font-size: 13px;
+    line-height: 1.45;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-font-smoothing: antialiased;
+    overscroll-behavior: none;
+    min-height: 100dvh;
   }
-  /* TOP NAVBAR */
+
+  body {
+    padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+    overflow-x: hidden;
+  }
+
+  /* Tabular numerals for all telemetry metrics, sockets, PIDs, hashes */
+  .tabular-nums, code, .mono, table td, table th, .pill-metric, .badge {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "zero", "tnum";
+  }
+
+  /* Break-UI: Prevent long strings (90+ chars) from breaking flex/grid layouts */
+  .min-w-0 { min-width: 0; }
+  .shrink-0 { flex-shrink: 0; }
+  .truncate-90 {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 34ch;
+    display: inline-block;
+    vertical-align: bottom;
+  }
+  .break-anywhere {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  /* Custom subtle scrollbar */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: var(--bg-canvas); }
+  ::-webkit-scrollbar-thumb { background: #262B33; border-radius: 3px; }
+
+  /* ============================================================================
+     TOP COMMAND BAR (Level 1 Surface #0D1117, 1px hairline border)
+     ============================================================================ */
   .topbar {
-    background: rgba(9, 16, 22, 0.95);
-    border-bottom: 1px solid var(--border-teal);
-    padding: 12px 24px;
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
     position: sticky;
     top: 0;
-    z-index: 100;
-    backdrop-filter: blur(8px);
-  }
-  .brand {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-  .brand-badge {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    background: var(--teal);
-    box-shadow: 0 0 10px var(--teal);
-    animation: pulse 2s infinite;
-  }
-  @keyframes pulse {
-    0%, 100% { transform: scale(1); opacity: 1; }
-    50% { transform: scale(1.25); opacity: 0.65; }
-  }
-  .brand-title {
-    font-family: var(--font-mono);
-    font-size: 15.5px;
-    font-weight: 700;
-    color: var(--teal);
-    letter-spacing: 0.4px;
-  }
-  .brand-sub {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--txt-sub);
-  }
-  .sys-pills {
+    z-index: 90;
+    background: rgba(13, 17, 23, 0.92);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border-hairline);
+    padding: 8px 16px;
     display: flex;
     flex-wrap: wrap;
-    gap: 7px;
     align-items: center;
-  }
-  .pill {
-    font-family: var(--font-mono);
-    font-size: 11.5px;
-    background: var(--bg-card);
-    border: 1px solid rgba(52, 168, 138, 0.3);
-    padding: 4px 9px;
-    border-radius: 4px;
-    color: var(--txt-main);
-  }
-  .pill strong { color: var(--teal); }
-  .pill.gold strong { color: var(--gold); }
-  .pill.cyan strong { color: var(--cyan); }
-  .pill.red strong { color: var(--red); }
-
-  .container {
-    max-width: 1600px;
-    margin: 0 auto;
-    padding: 16px 22px;
-  }
-
-  /* LIVE BANNER */
-  .action-banner {
-    background: linear-gradient(90deg, rgba(16, 36, 32, 0.92), rgba(14, 24, 34, 0.92));
-    border: 1px solid var(--border-teal);
-    border-left: 4px solid var(--gold);
-    border-radius: 6px;
-    padding: 9px 15px;
-    margin-bottom: 14px;
-    display: flex;
-    flex-wrap: wrap;
     justify-content: space-between;
+    gap: 10px;
+  }
+
+  .brand-cluster {
+    display: flex;
     align-items: center;
     gap: 10px;
-    font-family: var(--font-mono);
-    font-size: 12px;
+    min-width: 0;
   }
-  .action-banner .status-text { color: var(--gold); font-weight: 600; }
-  .action-banner .log-path { color: var(--txt-sub); font-size: 11px; }
 
-  /* ACTION TOOLBAR */
-  .toolbar {
+  .brand-shield {
+    width: 24px;
+    height: 24px;
+    border-radius: var(--radius-sm);
+    background: var(--sig-emerald-bg);
+    border: 1px solid var(--sig-emerald-bd);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--sig-emerald);
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 11px;
+    flex-shrink: 0;
+  }
+
+  .status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--sig-emerald);
+    display: inline-block;
+    flex-shrink: 0;
+  }
+
+  .brand-title {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--txt-primary);
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+  }
+
+  .brand-crumb {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--txt-muted);
+    padding: 2px 6px;
+    background: var(--bg-surface-2);
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-sm);
+    white-space: nowrap;
+  }
+
+  .telemetry-strip {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 16px;
     align-items: center;
+    gap: 6px;
   }
-  .btn {
-    font-family: var(--font-sans);
-    font-size: 12px;
-    font-weight: 600;
-    padding: 7px 12px;
-    border-radius: 5px;
-    cursor: pointer;
-    border: 1px solid var(--border-teal);
-    background: #122822;
-    color: #6ee7b7;
-    transition: all 0.15s ease;
+
+  .pill-metric {
+    font-size: 11px;
+    background: var(--bg-surface-2);
+    border: 1px solid var(--border-hairline);
+    padding: 3px 8px;
+    border-radius: var(--radius-sm);
+    color: var(--txt-secondary);
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    text-decoration: none;
+    white-space: nowrap;
   }
-  .btn:hover { background: #193830; transform: translateY(-1px); }
-  .btn:active { transform: translateY(0); }
-  .btn-cyan { background: #122436; border-color: rgba(56, 189, 248, 0.45); color: #7dd3fc; }
-  .btn-cyan:hover { background: #19334d; }
-  .btn-gold { background: #282210; border-color: var(--border-gold); color: var(--gold); }
-  .btn-gold:hover { background: #383016; }
-  .btn-red { background: #32161b; border-color: var(--border-red); color: #fca5a5; }
-  .btn-red:hover { background: #451d24; }
-  .btn-sm { padding: 4px 8px; font-size: 11px; font-family: var(--font-mono); }
+  .pill-metric strong { color: var(--txt-primary); font-weight: 600; }
+  .pill-metric.emerald strong { color: var(--sig-emerald); }
+  .pill-metric.cyan strong { color: var(--sig-cyan); }
+  .pill-metric.amber strong { color: var(--sig-amber); }
+  .pill-metric.crimson strong { color: var(--sig-crimson); }
 
-  /* TRIAD CARDS */
-  .triad-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 14px;
-    margin-bottom: 16px;
-  }
-  @media (max-width: 1100px) { .triad-grid { grid-template-columns: 1fr; } }
-  .agent-card {
-    background: var(--bg-panel);
-    border: 1px solid var(--border-teal);
-    border-radius: 7px;
-    padding: 12px 15px;
-    position: relative;
-    overflow: hidden;
-  }
-  .agent-card::before {
-    content: '';
-    position: absolute;
-    left: 0; top: 0; bottom: 0;
-    width: 4px;
-    background: var(--teal);
-  }
-  .agent-card.p2::before { background: var(--gold); }
-  .agent-card.pz::before { background: var(--red); }
-  .agent-header {
+  .topbar-actions {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    margin-bottom: 5px;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  /* Raycast / Linear Command-K Trigger */
+  .cmdk-trigger {
+    height: 28px;
+    padding: 0 10px;
+    background: var(--bg-surface-2);
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-sm);
+    color: var(--txt-secondary);
+    font-family: var(--font-sans);
+    font-size: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+    touch-action: manipulation;
+    transition: transform var(--dur-press) var(--ease-out), opacity var(--dur-press) var(--ease-out);
+  }
+  .cmdk-trigger:active {
+    transform: scale(0.97);
+  }
+  .cmdk-kbd {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: var(--bg-surface-3);
+    border: 1px solid var(--border-elevated);
+    color: var(--txt-primary);
+  }
+
+  /* ============================================================================
+     BUTTONS & TACTILE PRESS FEEDBACK (scale(0.97) on :active, GPU-only transition)
+     ============================================================================ */
+  .btn {
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-weight: 500;
+    height: 28px;
+    padding: 0 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-hairline);
+    background: var(--bg-surface-2);
+    color: var(--txt-primary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    cursor: pointer;
+    text-decoration: none;
+    white-space: nowrap;
+    flex-shrink: 0;
+    user-select: none;
+    touch-action: manipulation;
+    /* ONLY GPU-composited properties in transition */
+    transition: transform var(--dur-press) var(--ease-out), opacity var(--dur-press) var(--ease-out);
+  }
+  .btn:active {
+    transform: scale(0.97);
+  }
+  .btn-sm {
+    height: 24px;
+    padding: 0 8px;
+    font-size: 11px;
     font-family: var(--font-mono);
   }
-  .agent-name { font-size: 13.5px; font-weight: 700; color: var(--teal); }
-  .agent-card.p2 .agent-name { color: var(--gold); }
-  .agent-card.pz .agent-name { color: var(--red); }
-  .agent-role {
-    font-size: 10.5px;
-    padding: 2px 7px;
-    border-radius: 4px;
-    background: rgba(255,255,255,0.06);
-    color: var(--txt-main);
+  .btn-primary {
+    background: var(--sig-emerald);
+    border-color: rgba(16, 185, 129, 0.4);
+    color: #06110C;
+    font-weight: 600;
   }
+  .btn-cyan {
+    background: var(--sig-cyan-bg);
+    border-color: var(--sig-cyan-bd);
+    color: #67E8F9;
+  }
+  .btn-gold {
+    background: var(--sig-amber-bg);
+    border-color: var(--sig-amber-bd);
+    color: #FCD34D;
+  }
+  .btn-red {
+    background: var(--sig-crimson-bg);
+    border-color: var(--sig-crimson-bd);
+    color: #FCA5A5;
+  }
+
+  /* Gate ALL :hover rules inside @media (hover: hover) and (pointer: fine) */
+  @media (hover: hover) and (pointer: fine) {
+    .btn:hover { background: var(--bg-surface-3); border-color: var(--border-elevated); }
+    .btn-primary:hover { opacity: 0.92; background: var(--sig-emerald); }
+    .btn-cyan:hover { background: rgba(6, 182, 212, 0.18); }
+    .btn-gold:hover { background: rgba(245, 158, 11, 0.18); }
+    .btn-red:hover { background: rgba(239, 68, 68, 0.20); }
+    .cmdk-trigger:hover { border-color: var(--border-elevated); color: var(--txt-primary); }
+    tbody tr:hover td { background: rgba(255, 255, 255, 0.025); }
+    .tab-btn:hover { color: var(--txt-primary); background: var(--bg-surface-2); }
+    .cmdk-item:hover { background: var(--bg-surface-3); }
+    .popover-item:hover { background: var(--bg-surface-3); color: var(--txt-primary); }
+    .drop-zone:hover { background: rgba(245, 158, 11, 0.12); }
+  }
+
+  /* Fast high-velocity spinner (emil-design-eng: fast rotation reduces perceived wait) */
+  @keyframes emilSpin {
+    to { transform: rotate(360deg); }
+  }
+  .spinner {
+    width: 12px;
+    height: 12px;
+    border: 1.5px solid rgba(255, 255, 255, 0.22);
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: emilSpin 550ms linear infinite;
+    display: none;
+    flex-shrink: 0;
+  }
+  .is-loading .spinner { display: inline-block; }
+
+  /* ============================================================================
+     WORKSPACE CONTAINER & BANNERS
+     ============================================================================ */
+  .container {
+    max-width: 1640px;
+    margin: 0 auto;
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .bridge-banner {
+    background: var(--bg-surface-1);
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-md);
+    padding: 10px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .bridge-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .bridge-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--txt-secondary);
+    min-width: 0;
+  }
+  .bridge-meta strong { color: var(--txt-primary); }
+
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* ============================================================================
+     EVOLUTIONARY PORYGON AI MODULES (3-Column Technical Grid)
+     ============================================================================ */
+  .triad-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+  @media (max-width: 1100px) {
+    .triad-grid { grid-template-columns: 1fr; }
+  }
+
+  .agent-card {
+    background: var(--bg-surface-1);
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-md);
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .agent-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .agent-name {
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--txt-primary);
+    letter-spacing: -0.01em;
+  }
+  .agent-card.p1 .agent-name { color: var(--sig-emerald); }
+  .agent-card.p2 .agent-name { color: var(--sig-amber); }
+  .agent-card.pz .agent-name { color: var(--sig-crimson); }
+
+  .agent-role {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-surface-2);
+    border: 1px solid var(--border-hairline);
+    color: var(--txt-secondary);
+    flex-shrink: 0;
+  }
+
   .agent-stats {
     font-family: var(--font-mono);
     font-size: 11.5px;
-    color: var(--txt-sub);
+    color: var(--txt-secondary);
     line-height: 1.55;
+    background: var(--bg-surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 8px 10px;
   }
-  .agent-stats strong { color: var(--txt-main); }
+  .agent-stats strong { color: var(--txt-primary); font-weight: 600; }
 
-  /* TABS */
+  /* ============================================================================
+     TABS & DATA PANELS (Level 1 & Level 2 Surfaces)
+     ============================================================================ */
   .tabs {
     display: flex;
-    gap: 7px;
-    margin-bottom: 15px;
-    border-bottom: 1px solid rgba(52, 168, 138, 0.25);
-    padding-bottom: 8px;
     flex-wrap: wrap;
+    gap: 4px;
+    border-bottom: 1px solid var(--border-hairline);
+    padding-bottom: 6px;
   }
+
   .tab-btn {
     font-family: var(--font-mono);
-    font-size: 12px;
-    font-weight: 700;
-    padding: 7px 13px;
-    border-radius: 5px;
+    font-size: 11.5px;
+    font-weight: 500;
+    height: 28px;
+    padding: 0 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--txt-secondary);
     cursor: pointer;
-    background: var(--bg-panel);
-    color: var(--txt-sub);
-    border: 1px solid rgba(255,255,255,0.08);
-    transition: all 0.15s;
+    user-select: none;
+    touch-action: manipulation;
+    transition: transform var(--dur-press) var(--ease-out), opacity var(--dur-press) var(--ease-out);
   }
-  .tab-btn:hover { color: var(--txt-main); background: var(--bg-hover); }
+  .tab-btn:active { transform: scale(0.97); }
   .tab-btn.active {
-    background: rgba(52, 168, 138, 0.18);
-    color: var(--teal);
-    border-color: var(--teal);
+    background: var(--bg-surface-2);
+    color: var(--sig-emerald);
+    border-color: var(--border-elevated);
+    font-weight: 600;
   }
 
-  /* PANELS & TABLES */
   .grid-2 {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-    margin-bottom: 16px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
   }
-  @media (max-width: 1180px) { .grid-2 { grid-template-columns: 1fr; } }
+  @media (max-width: 1180px) {
+    .grid-2 { grid-template-columns: 1fr; }
+  }
 
   .panel {
-    background: var(--bg-panel);
-    border: 1px solid var(--border-teal);
-    border-radius: 7px;
+    background: var(--bg-surface-1);
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-md);
     display: flex;
     flex-direction: column;
+    min-width: 0;
     overflow: hidden;
   }
+
   .panel-header {
-    padding: 10px 14px;
-    background: rgba(16, 29, 38, 0.88);
-    border-bottom: 1px solid rgba(52, 168, 138, 0.25);
+    padding: 8px 12px;
+    background: var(--bg-surface-2);
+    border-bottom: 1px solid var(--border-hairline);
     display: flex;
     flex-wrap: wrap;
-    justify-content: space-between;
     align-items: center;
-    gap: 10px;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
   }
+
   .panel-title {
     font-family: var(--font-mono);
-    font-size: 12.5px;
-    font-weight: 700;
-    color: var(--teal);
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--txt-primary);
+    letter-spacing: 0.01em;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
   }
-  .panel-title.gold { color: var(--gold); }
-  .panel-title.red { color: var(--red); }
-  .panel-title.cyan { color: var(--cyan); }
+  .panel-title.emerald { color: var(--sig-emerald); }
+  .panel-title.cyan { color: var(--sig-cyan); }
+  .panel-title.gold { color: var(--sig-amber); }
+  .panel-title.red { color: var(--sig-crimson); }
 
   .panel-controls {
     display: flex;
-    gap: 7px;
-    align-items: center;
     flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
   }
+
   .input-txt {
-    background: #081016;
-    border: 1px solid rgba(52, 168, 138, 0.4);
-    color: var(--txt-main);
+    background: var(--bg-canvas);
+    border: 1px solid var(--border-hairline);
+    color: var(--txt-primary);
     font-family: var(--font-mono);
-    font-size: 11.5px;
-    padding: 5px 9px;
-    border-radius: 4px;
+    font-size: 12px;
+    height: 28px;
+    padding: 0 9px;
+    border-radius: var(--radius-sm);
     outline: none;
   }
-  .input-txt:focus { border-color: var(--teal); }
-
-  .table-wrap {
-    max-height: 360px;
-    overflow-y: auto;
+  .input-txt:focus {
+    border-color: var(--sig-emerald);
+    box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.25);
   }
+
+  /* MOBILE-NATIVE: Prevent iOS Safari auto-zoom on input focus (>=16px on mobile/touch) */
+  @media (max-width: 768px), (pointer: coarse) {
+    input, textarea, select, .input-txt, .cmdk-input {
+      font-size: 16px !important;
+      min-height: 36px;
+    }
+  }
+
+  .scan-bar {
+    padding: 8px 12px;
+    background: var(--bg-surface-1);
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .drop-zone {
+    border: 1px dashed var(--sig-amber-bd);
+    background: var(--sig-amber-bg);
+    color: #FCD34D;
+    height: 28px;
+    padding: 0 10px;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  /* ============================================================================
+     TECHNICAL DATA TABLES & PILL BADGES
+     ============================================================================ */
+  .table-wrap {
+    max-height: 340px;
+    overflow-y: auto;
+    overflow-x: auto;
+  }
+
   table {
     width: 100%;
     border-collapse: collapse;
     font-family: var(--font-mono);
     font-size: 11.5px;
   }
+
   th {
     position: sticky;
     top: 0;
-    background: #0d1821;
-    color: var(--txt-sub);
-    text-align: left;
-    padding: 7px 9px;
-    border-bottom: 1px solid rgba(52, 168, 138, 0.3);
-    font-weight: 700;
     z-index: 2;
+    background: var(--bg-surface-1);
+    color: var(--txt-muted);
+    text-align: left;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border-hairline);
+    font-size: 10.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
   }
+
   td {
-    padding: 6px 9px;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
-    vertical-align: top;
-    word-break: break-word;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border-subtle);
+    vertical-align: middle;
+    color: var(--txt-primary);
   }
-  tr:hover td { background: rgba(52, 168, 138, 0.06); }
 
-  /* BADGES */
   .badge {
-    display: inline-block;
-    padding: 2px 6px;
-    border-radius: 3px;
-    font-size: 10px;
-    font-weight: 700;
-    font-family: var(--font-mono);
-  }
-  .b-crit { background: rgba(248, 113, 113, 0.2); color: #fca5a5; border: 1px solid rgba(248, 113, 113, 0.5); }
-  .b-high { background: rgba(250, 204, 21, 0.18); color: #fde047; border: 1px solid rgba(250, 204, 21, 0.45); }
-  .b-info { background: rgba(52, 211, 153, 0.15); color: #6ee7b7; border: 1px solid rgba(52, 211, 153, 0.35); }
-  .b-mitre { background: rgba(56, 189, 248, 0.15); color: #7dd3fc; border: 1px solid rgba(56, 189, 248, 0.35); }
-
-  /* DROPZONE & SUBBARS */
-  .scan-bar {
-    padding: 10px 14px;
-    background: rgba(12, 22, 30, 0.92);
-    border-bottom: 1px solid rgba(255,255,255,0.06);
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
+    display: inline-flex;
     align-items: center;
+    gap: 4px;
+    height: 19px;
+    padding: 0 6px;
+    border-radius: var(--radius-sm);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
-  .drop-zone {
-    border: 1px dashed var(--gold);
-    background: rgba(250, 204, 21, 0.05);
-    color: var(--gold);
-    padding: 5px 11px;
-    border-radius: 4px;
+  .b-crit {
+    background: var(--sig-crimson-bg);
+    color: #FCA5A5;
+    border: 1px solid var(--sig-crimson-bd);
+  }
+  .b-high {
+    background: var(--sig-amber-bg);
+    color: #FCD34D;
+    border: 1px solid var(--sig-amber-bd);
+  }
+  .b-info {
+    background: var(--sig-emerald-bg);
+    color: #6EE7B7;
+    border: 1px solid var(--sig-emerald-bd);
+  }
+  .b-mitre {
+    background: var(--sig-cyan-bg);
+    color: #67E8F9;
+    border: 1px solid var(--sig-cyan-bd);
+  }
+
+  .empty-state {
+    padding: 24px 16px;
+    text-align: center;
+    color: var(--txt-secondary);
     font-family: var(--font-mono);
-    font-size: 11px;
-    cursor: pointer;
+    font-size: 11.5px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
   }
-  .drop-zone:hover { background: rgba(250, 204, 21, 0.12); }
 
   .soar-grid {
-    padding: 14px;
+    padding: 12px;
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
     font-family: var(--font-mono);
     font-size: 11.5px;
   }
   @media (max-width: 780px) { .soar-grid { grid-template-columns: 1fr; } }
+
   .soar-box {
-    background: rgba(8, 15, 22, 0.75);
-    border: 1px solid rgba(52, 168, 138, 0.25);
-    border-radius: 6px;
-    padding: 11px 13px;
+    background: var(--bg-canvas);
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
   }
   .soar-box h4 {
-    color: var(--cyan);
+    color: var(--sig-cyan);
     margin-bottom: 8px;
-    font-size: 12px;
+    font-size: 11.5px;
+    font-weight: 600;
   }
   .form-row {
     display: flex;
@@ -379,106 +758,535 @@
     gap: 4px;
     margin-bottom: 8px;
   }
-  .form-row label { color: var(--txt-sub); font-size: 10.5px; }
+  .form-row label { color: var(--txt-secondary); font-size: 10.5px; }
 
-  /* TOAST */
-  #toast {
+  /* ============================================================================
+     ORIGIN-AWARE POPOVER MENU (180ms entry / 150ms exit, scale(0.95), 0ms Escape)
+     ============================================================================ */
+  .origin-popover {
     position: fixed;
-    bottom: 22px;
-    right: 22px;
-    background: #0d1f1c;
-    border: 1px solid var(--teal);
-    border-left: 5px solid var(--teal);
-    color: var(--txt-main);
-    padding: 12px 18px;
-    border-radius: 6px;
-    font-family: var(--font-mono);
-    font-size: 12.5px;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.65);
-    display: none;
-    z-index: 999;
-    max-width: 520px;
+    z-index: 200;
+    width: 250px;
+    background: var(--bg-surface-3);
+    border: 1px solid var(--border-elevated);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-overlay);
+    padding: 5px;
+    transform-origin: var(--transform-origin, top right);
+    opacity: 0;
+    transform: scale(0.95) translateY(-2px);
+    pointer-events: none;
+    transition:
+      transform var(--dur-popover-out) var(--ease-out),
+      opacity var(--dur-popover-out) var(--ease-out);
   }
+  .origin-popover[data-open="true"] {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+    pointer-events: auto;
+    transition:
+      transform var(--dur-popover-in) var(--ease-out),
+      opacity var(--dur-popover-in) var(--ease-out);
+  }
+  /* 100+/day Keyboard Rule: 0ms instant open/close when triggered by keyboard */
+  .origin-popover[data-kb-instant="true"] {
+    transition: none !important;
+  }
+
+  .popover-header {
+    padding: 5px 8px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--txt-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid var(--border-subtle);
+    margin-bottom: 3px;
+  }
+  .popover-item {
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: none;
+    color: var(--txt-secondary);
+    font-family: var(--font-sans);
+    font-size: 12px;
+    padding: 6px 8px;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    transition: transform var(--dur-press) var(--ease-out), opacity var(--dur-press) var(--ease-out);
+  }
+  .popover-item:active { transform: scale(0.97); }
+  .popover-item kbd {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--txt-muted);
+  }
+
+  /* ============================================================================
+     COMMAND PALETTE (⌘K — 0ms instant on keyboard, 180ms on pointer click)
+     ============================================================================ */
+  .cmdk-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 300;
+    background: rgba(5, 7, 10, 0.65);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 11vh;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--dur-popover-out) var(--ease-out);
+  }
+  .cmdk-backdrop[data-open="true"] {
+    opacity: 1;
+    pointer-events: auto;
+    transition: opacity var(--dur-popover-in) var(--ease-out);
+  }
+  .cmdk-backdrop[data-kb-instant="true"],
+  .cmdk-backdrop[data-kb-instant="true"] .cmdk-dialog {
+    transition: none !important;
+  }
+
+  .cmdk-dialog {
+    width: min(580px, 92vw);
+    background: var(--bg-surface-2);
+    border: 1px solid var(--border-elevated);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-overlay);
+    overflow: hidden;
+    transform-origin: top center;
+    transform: scale(0.95);
+    opacity: 0;
+    transition:
+      transform var(--dur-popover-out) var(--ease-out),
+      opacity var(--dur-popover-out) var(--ease-out);
+  }
+  .cmdk-backdrop[data-open="true"] .cmdk-dialog {
+    transform: scale(1);
+    opacity: 1;
+    transition:
+      transform var(--dur-popover-in) var(--ease-out),
+      opacity var(--dur-popover-in) var(--ease-out);
+  }
+
+  .cmdk-input-wrap {
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    border-bottom: 1px solid var(--border-hairline);
+    background: var(--bg-surface-1);
+  }
+  .cmdk-input {
+    width: 100%;
+    height: 42px;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--txt-primary);
+    font-family: var(--font-sans);
+    font-size: 13.5px;
+  }
+  .cmdk-list {
+    max-height: 300px;
+    overflow-y: auto;
+    padding: 6px;
+  }
+  .cmdk-item {
+    width: 100%;
+    padding: 7px 10px;
+    border-radius: var(--radius-sm);
+    border: none;
+    background: transparent;
+    color: var(--txt-secondary);
+    font-family: var(--font-sans);
+    font-size: 12.5px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    cursor: pointer;
+    text-align: left;
+    /* 0ms instant highlight for keyboard navigation */
+    transition: none;
+  }
+  .cmdk-item[data-active="true"] {
+    background: var(--bg-surface-3);
+    color: var(--txt-primary);
+  }
+  .cmdk-item kbd {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    padding: 2px 5px;
+    border-radius: 3px;
+    background: var(--bg-surface-1);
+    border: 1px solid var(--border-hairline);
+    color: var(--txt-muted);
+  }
+
+  /* ============================================================================
+     CONTEXTUAL FORENSIC SOCKET INSPECTOR DRAWER (220ms entry / 160ms exit / 0ms Esc)
+     ============================================================================ */
+  .forensic-drawer {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(420px, 92vw);
+    z-index: 250;
+    background: var(--bg-surface-2);
+    border-left: 1px solid var(--border-elevated);
+    box-shadow: var(--shadow-overlay);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transform: translateX(100%);
+    opacity: 0;
+    pointer-events: none;
+    transition:
+      transform var(--dur-drawer-out) var(--ease-out),
+      opacity var(--dur-drawer-out) var(--ease-out);
+  }
+  .forensic-drawer[data-open="true"] {
+    transform: translateX(0);
+    opacity: 1;
+    pointer-events: auto;
+    transition:
+      transform var(--dur-drawer-in) var(--ease-out),
+      opacity var(--dur-drawer-in) var(--ease-out);
+  }
+  .forensic-drawer[data-kb-instant="true"] {
+    transition: none !important;
+  }
+
+  /* ============================================================================
+     SONNER-STYLE STACKED TOAST NOTIFICATIONS (400ms ease deliberate rhythm)
+     ============================================================================ */
+  .sonner-toaster {
+    position: fixed;
+    bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+    right: 20px;
+    z-index: 400;
+    width: min(350px, calc(100vw - 32px));
+    pointer-events: none;
+  }
+  .sonner-toast {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 100%;
+    background: var(--bg-surface-3);
+    border: 1px solid var(--border-elevated);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-overlay);
+    padding: 10px 12px;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--txt-primary);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    pointer-events: auto;
+    transform-origin: bottom center;
+    /* Deliberate 400ms ease rhythm per Sonner / Emil specification */
+    transition: transform var(--dur-toast) ease, opacity var(--dur-toast) ease;
+  }
+  .sonner-toast[data-alert="true"] {
+    border-color: var(--sig-crimson-bd);
+    color: #FCA5A5;
+  }
+
+  /* ============================================================================
+     VERBATIM PROTOTYPE PICKER (prototype/PICKER.md) + BREAK-UI STRESS BAR
+     ============================================================================ */
+  .proto-dock {
+    position: fixed;
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2147483647;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    max-width: 96vw;
+  }
+
+  .proto-picker {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 4px;
+    border-radius: 9999px;
+    background: rgba(15, 16, 18, 0.85);
+    backdrop-filter: blur(12px) saturate(180%);
+    -webkit-backdrop-filter: blur(12px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow:
+      0 10px 30px -5px rgba(0, 0, 0, 0.5),
+      0 2px 6px rgba(0, 0, 0, 0.3);
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", system-ui, sans-serif;
+    font-size: 12px;
+    line-height: 1;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .proto-picker-label {
+    padding: 0 8px 0 10px;
+    color: rgba(255, 255, 255, 0.45);
+    font-weight: 500;
+    letter-spacing: -0.01em;
+  }
+
+  .proto-picker-options {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .proto-picker-highlight {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.12);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    pointer-events: none;
+  }
+
+  .proto-picker[data-ready] .proto-picker-highlight {
+    transition:
+      transform 250ms cubic-bezier(0.23, 1, 0.32, 1),
+      width 250ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  .proto-picker-btn {
+    position: relative;
+    z-index: 1;
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.6);
+    padding: 6px 11px;
+    border-radius: 9999px;
+    font: inherit;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    cursor: pointer;
+    transition: color 150ms ease, transform 120ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  .proto-picker-btn:active {
+    transform: scale(0.97);
+  }
+  .proto-picker-btn[aria-selected="true"] {
+    color: #fff;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .proto-picker-btn:hover {
+      color: rgba(255, 255, 255, 0.9);
+    }
+  }
+
+  /* ============================================================================
+     ACCESSIBILITY: PREFERS-REDUCED-MOTION (emil-design-eng Section 2.D)
+     Eliminate spatial movement (translate/scale) while keeping a gentle 150ms
+     opacity fade. Never abruptly disable everything to none.
+     ============================================================================ */
+  @media (prefers-reduced-motion: reduce) {
+    .origin-popover,
+    .origin-popover[data-open="true"],
+    .cmdk-dialog,
+    .cmdk-backdrop[data-open="true"] .cmdk-dialog,
+    .forensic-drawer,
+    .forensic-drawer[data-open="true"],
+    .sonner-toast {
+      transform: none !important;
+      transition: opacity 150ms ease !important;
+    }
+    .btn:active,
+    .tab-btn:active,
+    .cmdk-trigger:active,
+    .proto-picker-btn:active {
+      transform: none !important;
+    }
+    .proto-picker[data-ready] .proto-picker-highlight {
+      transition: opacity 150ms ease !important;
+    }
+    .spinner {
+      animation-duration: 1200ms;
+    }
+  }
+
   .hidden { display: none !important; }
 </style>
 </head>
 <body>
 
-  <!-- TOP BAR -->
+  <!-- ==========================================================================
+       1. TOP COMMAND BAR (Obsidian Sentinel Level 1)
+       ========================================================================== -->
   <header class="topbar">
-    <div class="brand">
-      <div class="brand-badge" id="connDot"></div>
-      <div>
-        <div class="brand-title">🛡️ PORYGON ENTERPRISE XDR / IDS / IPS SOC v3.0</div>
-        <div class="brand-sub" id="subStatus">SIEM ChainHash SHA-256 · CTI Threat Feeds · YARA/Sigma · Multi-Host Fleet · SOAR CEF/FortiGate</div>
+    <div class="brand-cluster">
+      <div class="brand-shield" title="Obsidian Sentinel XDR">XDR</div>
+      <span class="status-dot" id="connDot"></span>
+      <div class="min-w-0">
+        <div class="brand-title">PORYGON // C2-IDS CONSOLE</div>
+      </div>
+      <span class="brand-crumb" id="subStatus">SOC-OFFICE-PC · SHA-256 LEDGER</span>
+    </div>
+
+    <div class="telemetry-strip">
+      <div class="pill-metric emerald">CPU <strong id="kCpu">--%</strong></div>
+      <div class="pill-metric amber">GPU <strong id="kGpu">--%</strong> (<span id="kFps">--</span> FPS)</div>
+      <div class="pill-metric">RAM <strong id="kRam">--%</strong></div>
+      <div class="pill-metric cyan">CTI <strong id="kCtiCnt">0 IOCs</strong></div>
+      <div class="pill-metric amber">Flota <strong id="kFleetCnt">1 nodo</strong></div>
+      <div class="pill-metric crimson">Kills EDR <strong id="kKillCnt">0</strong></div>
+      <div class="pill-metric cyan" title="Último eslabón SHA-256 de la cadena forense SIEM">
+        ChainHash <strong id="kChainHash">GENESIS</strong>
       </div>
     </div>
-    <div class="sys-pills">
-      <div class="pill">CPU: <strong id="kCpu">--%</strong></div>
-      <div class="pill gold">GPU: <strong id="kGpu">--%</strong> (<span id="kFps">--</span> FPS)</div>
-      <div class="pill">RAM: <strong id="kRam">--%</strong></div>
-      <div class="pill cyan">CTI IOCs: <strong id="kCtiCnt">0</strong></div>
-      <div class="pill gold">Flota: <strong id="kFleetCnt">1</strong> Hosts</div>
-      <div class="pill red">Kills EDR: <strong id="kKillCnt">0</strong></div>
-      <div class="pill cyan" title="Último eslabón SHA-256 de la cadena forense SIEM">ChainHash: <strong id="kChainHash">GENESIS</strong></div>
+
+    <div class="topbar-actions">
+      <button type="button" class="cmdk-trigger" id="cmdkTriggerBtn" onclick="openCommandPalette(false, event)" title="Abrir Command Palette (⌘K / Ctrl+K — 0ms por teclado)">
+        <span>Buscar o ejecutar acción...</span>
+        <kbd class="cmdk-kbd">⌘K</kbd>
+      </button>
+      <button type="button" class="btn btn-primary" id="playbookTriggerBtn" onclick="togglePlaybookPopover(event)">
+        <span>Playbooks</span>
+        <span style="font-size:10px;">▾</span>
+      </button>
     </div>
   </header>
 
+  <!-- ORIGIN-AWARE QUICK PLAYBOOK POPOVER -->
+  <div class="origin-popover" id="playbookPopover" data-open="false" role="menu" aria-label="Playbooks SOAR">
+    <div class="popover-header">SOAR // Playbooks Tácticos</div>
+    <button type="button" class="popover-item" onclick="probeOnlineC2Agents(); closePlaybookPopover(false);">
+      <span>Probar Agentes C2 Online (Read-Only)</span>
+      <kbd>P</kbd>
+    </button>
+    <button type="button" class="popover-item" onclick="syncOfficePcC2(false); closePlaybookPopover(false);">
+      <span>Sincronizar Túnel SSH office-pc</span>
+      <kbd>S</kbd>
+    </button>
+    <button type="button" class="popover-item" onclick="triggerAudit(); closePlaybookPopover(false);">
+      <span>Auditoría Completa TCP/PID + Startup</span>
+      <kbd>A</kbd>
+    </button>
+    <button type="button" class="popover-item" onclick="triggerDnsAudit(); closePlaybookPopover(false);">
+      <span>Auditar Caché DNS / Entropía DGA</span>
+      <kbd>D</kbd>
+    </button>
+    <button type="button" class="popover-item" onclick="syncCtiFeeds(); closePlaybookPopover(false);">
+      <span>Actualizar Feeds CTI (Feodo/CINS)</span>
+      <kbd>C</kbd>
+    </button>
+  </div>
+
+  <!-- ==========================================================================
+       MAIN WORKSPACE CONTAINER
+       ========================================================================== -->
   <main class="container">
-    <!-- STATUS BANNER -->
-    <div class="action-banner">
-      <div>⚡ ESTADO SOC EMPRESARIAL: <span class="status-text" id="bannerText">CONECTANDO CON PORYGON ENTERPRISE XDR ENGINE...</span></div>
-      <div class="log-path">SIEM JSONL: <span id="jsonlPath">C:\Users\Admin\Porygon-Cyber-IDS-Wallpaper\logs\siem_security_events.jsonl</span></div>
+
+    <!-- LIVE ENGINE BANNER -->
+    <div class="bridge-banner" style="padding: 7px 12px;">
+      <div class="bridge-row">
+        <div class="bridge-meta">
+          <span class="badge b-info">LIVE ENGINE</span>
+          <strong id="bannerText" class="break-anywhere">CONECTANDO CON PORYGON ENTERPRISE XDR ENGINE...</strong>
+        </div>
+        <div class="bridge-meta">
+          <span>SIEM Ledger:</span>
+          <code id="jsonlPath" class="truncate-90" title="C:\Users\Admin\Porygon-Cyber-IDS-Wallpaper\logs\siem_security_events.jsonl">C:\Users\Admin\Porygon-Cyber-IDS-Wallpaper\logs\siem_security_events.jsonl</code>
+        </div>
+      </div>
     </div>
 
-    <!-- OFFICE-PC SSH PROXY C2 / IDS TELEMETRY BRIDGE BANNER -->
-    <div class="action-banner" style="border-left-color:var(--cyan); margin-bottom:14px; flex-direction:column; align-items:stretch; gap:8px;">
-      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-        <div>
-          🔗 <strong>PROXY SSH UNIFICADO OFFICE-PC (100.89.1.27 -> :8002 C2/IDS & :5080 QB-NIDS/VT):</strong>
-          <span class="badge b-info" id="officeBadge">CONECTANDO...</span>
-          <span class="badge b-info" style="background:rgba(52,211,153,0.16);color:#34d399;border:1px solid #34d399;margin-left:4px;">🛡️ LISTA BLANCA MUTUA PORYGON ↔ C2 ACTIVA</span>
-          <span style="margin-left:8px;color:var(--txt-main);">
-            Agentes C2 Online: <strong style="color:#34d399" id="offOnlineAgents">0</strong>/<span id="offTotalAgents">0</span> |
-            Logs C2: <strong style="color:var(--gold)" id="offLogsRaw">0</strong> (<span id="offLogsDec">0</span> descifrados) |
-            Creds: <strong style="color:var(--cyan)" id="offCreds">0</strong> |
-            Screenshots: <strong style="color:var(--teal)" id="offScreens">0</strong> |
-            Alertas IDS: <strong style="color:var(--red)" id="offIdsAlerts">0</strong> |
-            Hosts LAN: <strong style="color:var(--gold)" id="offLanHosts">0</strong>
+    <!-- ========================================================================
+         2. UNIFIED SSH PROXY BRIDGE BANNER (office-pc :8002 C2/IDS & :5080 NIDS)
+         ======================================================================== -->
+    <section class="bridge-banner">
+      <div class="bridge-row">
+        <div class="bridge-meta">
+          <span class="status-dot"></span>
+          <strong>SSH PROXY BRIDGE // office-pc (100.89.1.27 → :8002 C2/IDS & :5080 NIDS/VT)</strong>
+          <span class="badge b-info" id="officeBadge">ONLINE</span>
+          <span class="badge b-info">MUTUAL WHITELIST PORYGON ↔ C2</span>
+          <span>
+            Flota C2: <strong style="color:var(--sig-emerald)" id="offOnlineAgents">2 agentes online</strong> / <span id="offTotalAgents">40 registrados</span> ·
+            Logs C2: <strong id="offLogsRaw">0</strong> (<span id="offLogsDec">0</span> dec) ·
+            Creds: <strong id="offCreds">0</strong> ·
+            Capturas: <strong id="offScreens">0</strong> ·
+            Alertas IDS: <strong style="color:var(--sig-crimson)" id="offIdsAlerts">0 alertas</strong> ·
+            LAN: <strong id="offLanHosts">0 hosts</strong>
           </span>
         </div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;">
-          <button class="btn btn-sm btn-gold" onclick="probeOnlineC2Agents()" title="Ejecutar sonda IDS de solo lectura en los agentes actualmente online sin modificar binarios">🧪 Probar Agentes Online (Solo Lectura)</button>
-          <button class="btn btn-sm btn-cyan" onclick="syncOfficePcC2(false)">🔄 Sincronizar C2/IDS</button>
-          <button class="btn btn-sm btn-gold" onclick="triggerOfficeIdsScan()">🔎 Escanear Logs IDS (:8002)</button>
-          <button class="btn btn-sm" onclick="syncOfficePcC2(true)" title="Reiniciar túnel SSH local 127.0.0.1:8002 y :5080">🔌 Reconectar Túnel SSH</button>
+        <div class="toolbar">
+          <button type="button" class="btn btn-sm btn-gold" id="btnProbeOnline" onclick="probeOnlineC2Agents()" title="Sonda IDS unificada de solo lectura sobre los agentes C2 online">
+            <span class="spinner"></span>
+            <span>Probar Agentes Online (Read-Only)</span>
+          </button>
+          <button type="button" class="btn btn-sm btn-cyan" id="btnSyncBridge" onclick="syncOfficePcC2(false)">
+            <span class="spinner"></span>
+            <span>Sincronizar C2/IDS</span>
+          </button>
+          <button type="button" class="btn btn-sm btn-gold" onclick="triggerOfficeIdsScan()">
+            <span>Escanear Logs IDS (:8002)</span>
+          </button>
+          <button type="button" class="btn btn-sm" onclick="syncOfficePcC2(true)" title="Reiniciar túnel SSH local 127.0.0.1:8002 y :5080">
+            <span>Reconectar SSH</span>
+          </button>
         </div>
       </div>
-      <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; font-size:11px; color:var(--txt-sub); border-top:1px solid rgba(52,168,138,0.2); padding-top:6px;">
-        <div>🟢 <strong>Dispositivos C2 con Heartbeat en Vivo:</strong> <span id="offOnlineList" style="color:var(--cyan)">Detectando...</span></div>
-        <div id="offProbeReport" style="color:var(--gold);">Listo para probar agentes online (Solo lectura, sin actualizar binarios)</div>
+      <div class="bridge-row" style="border-top: 1px solid var(--border-subtle); padding-top: 6px; font-size: 11px;">
+        <div class="bridge-meta">
+          <span>Heartbeats Activos:</span>
+          <strong id="offOnlineList" style="color:var(--sig-cyan)" class="break-anywhere">Detectando agentes C2 online...</strong>
+        </div>
+        <div id="offProbeReport" class="mono break-anywhere" style="color:var(--sig-amber); font-size:11px;">
+          Listo para probar agentes online (Solo lectura, sin modificar binarios)
+        </div>
       </div>
-    </div>
+    </section>
 
-    <!-- GLOBAL ENTERPRISE ACTION TOOLBAR -->
+    <!-- GLOBAL TACTICAL ACTION BAR -->
     <div class="toolbar">
-      <button class="btn" onclick="triggerAudit()">🔍 Auditar Red TCP/PID + Registro + Startup</button>
-      <button class="btn btn-cyan" onclick="syncCtiFeeds()">🌐 Sincronizar Feeds CTI (Feodo C2 / CINS)</button>
-      <button class="btn btn-cyan" onclick="triggerDnsAudit()">🔎 Auditar DNS / DGA / C2 Beaconing</button>
-      <a class="btn btn-gold" href="/api/report" target="_blank">📊 Reporte Forense Ejecutivo (HTML / PDF)</a>
-      <a class="btn btn-cyan" href="/api/agent-script" target="_blank">📥 Descargar Agente Remoto (Porygon-Sensor.ps1)</a>
-      <button class="btn btn-gold" onclick="swarmAction('force_evo')">🧬 Cruce Generacional (+1 Gen)</button>
-      <button class="btn btn-cyan" onclick="swarmAction('cycle_scene')">🌲 Escena 3D (<span id="lblScene">1/3</span>)</button>
-      <button class="btn" id="btnGamer" onclick="swarmAction('toggle_gamer')">🎮 Modo Gamer 0% GPU</button>
-      <a class="btn" href="/api/siem-jsonl" target="_blank">📄 SIEM JSONL</a>
+      <button type="button" class="btn" id="btnAuditAll" onclick="triggerAudit()">
+        <span class="spinner"></span>
+        <span>Auditar Red TCP/PID + Startup</span>
+      </button>
+      <button type="button" class="btn btn-cyan" onclick="syncCtiFeeds()">Sincronizar Feeds CTI</button>
+      <button type="button" class="btn btn-cyan" onclick="triggerDnsAudit()">Auditar DNS / DGA</button>
+      <a class="btn btn-gold" href="/api/report" target="_blank">Reporte Ejecutivo</a>
+      <a class="btn btn-cyan" href="/api/agent-script" target="_blank">Descargar Porygon-Sensor.ps1</a>
+      <button type="button" class="btn btn-gold" onclick="swarmAction('force_evo')">Evolución (+1 Gen)</button>
+      <button type="button" class="btn btn-cyan" onclick="swarmAction('cycle_scene')">Escena 3D (<span id="lblScene">1/3</span>)</button>
+      <button type="button" class="btn" id="btnGamer" onclick="swarmAction('toggle_gamer')">Modo Gamer 0% GPU</button>
+      <a class="btn" href="/api/siem-jsonl" target="_blank">SIEM JSONL</a>
     </div>
 
-    <!-- 3 PORYGON EVOLUTION CARDS -->
-    <div class="triad-grid">
+    <!-- ========================================================================
+         3. EVOLUTIONARY PORYGON AI DEFENSE MODULES (3-Column Grid)
+         ======================================================================== -->
+    <section class="triad-grid">
       <div class="agent-card p1">
         <div class="agent-header">
           <span class="agent-name" id="ag0Name">PORYGON // GEN G1</span>
-          <span class="agent-role">NIDS + PID + CTI + DNS AUDITOR</span>
+          <span class="agent-role">NIDS · PID · CTI · DNS</span>
         </div>
         <div class="agent-stats" id="ag0Stats">
           Procesos TCP Auditados: <strong id="kPidCnt">0</strong> | Alertas SIEM: <strong id="kSiemCnt">0</strong><br>
@@ -489,44 +1297,48 @@
       <div class="agent-card p2">
         <div class="agent-header">
           <span class="agent-name" id="ag1Name">PORYGON2 // GEN G1</span>
-          <span class="agent-role">EDR + YARA/SIGMA + KILL PROCESS</span>
+          <span class="agent-role">KERNEL EDR · YARA/SIGMA</span>
         </div>
         <div class="agent-stats" id="ag1Stats">
           Archivos Analizados (SHA-256 + YARA): <strong id="kAvCnt">0</strong><br>
-          Candidato Cuarentena: <strong id="kCandFile">Ninguno</strong>
+          Candidato Cuarentena: <strong id="kCandFile" class="truncate-90">Ninguno</strong>
         </div>
       </div>
 
       <div class="agent-card pz">
         <div class="agent-header">
           <span class="agent-name" id="ag2Name">PORYGON-Z // GEN G1</span>
-          <span class="agent-role">ACTIVE IPS + SOAR + HOST ISOLATION</span>
+          <span class="agent-role">ACTIVE IPS · SOAR · ISOLATION</span>
         </div>
         <div class="agent-stats" id="ag2Stats">
-          Acciones IPS: <strong id="kIpsCnt">0</strong> | IPs Bloqueadas: <strong id="kFwCnt">0</strong> | Cuarentena: <strong id="kQuarCnt">0</strong><br>
+          Acciones IPS: <strong id="kIpsCnt">0</strong> | Bloqueos FW: <strong id="kFwCnt">0</strong> | Cuarentena: <strong id="kQuarCnt">0</strong><br>
           Candidato Bloqueo IP: <strong id="kCandIp">Ninguna</strong>
         </div>
       </div>
-    </div>
+    </section>
 
-    <!-- VIEW TABS -->
-    <div class="tabs">
-      <button class="tab-btn active" onclick="switchTab('all', this)">🛡️ Vista Unificada Enterprise SOC (8 Consolas)</button>
-      <button class="tab-btn" onclick="switchTab('tcp', this)">🌐 TCP ↔ PID / Authenticode / Kill PID (<span id="tabTcpCnt">0</span>)</button>
-      <button class="tab-btn" onclick="switchTab('fleet', this)">🖥️ Flota Multi-Host & Reglas YARA/Sigma (<span id="tabFleetCnt">1</span>)</button>
-      <button class="tab-btn" onclick="switchTab('dns', this)">🔎 Inspector DNS / DGA & SOAR Perimetral (<span id="tabDnsCnt">0</span>)</button>
-      <button class="tab-btn" onclick="switchTab('siem', this)">📡 SIEM + ChainHash SHA-256 (<span id="tabSiemCnt">0</span>)</button>
-      <button class="tab-btn" onclick="switchTab('av', this)">🧬 Antivirus / EDR (<span id="tabAvCnt">0</span>)</button>
-      <button class="tab-btn" onclick="switchTab('ips', this)">🔥 Firewall IPS & Cuarentena</button>
-    </div>
+    <!-- ========================================================================
+         4. MULTI-TAB FORENSIC DATA WORKSPACE
+         ======================================================================== -->
+    <nav class="tabs" aria-label="Vistas de consola SOC">
+      <button type="button" class="tab-btn active" onclick="switchTab('all', this)">Vista Unificada (8 Consolas)</button>
+      <button type="button" class="tab-btn" onclick="switchTab('tcp', this)">Sockets TCP ↔ PID (<span id="tabTcpCnt">0 conexiones</span>)</button>
+      <button type="button" class="tab-btn" onclick="switchTab('fleet', this)">Flota C2/XDR & YARA (<span id="tabFleetCnt">1 nodo</span>)</button>
+      <button type="button" class="tab-btn" onclick="switchTab('dns', this)">DNS / DGA & SOAR (<span id="tabDnsCnt">0 dominios</span>)</button>
+      <button type="button" class="tab-btn" onclick="switchTab('siem', this)">SIEM Ledger SHA-256 (<span id="tabSiemCnt">0 eventos</span>)</button>
+      <button type="button" class="tab-btn" onclick="switchTab('av', this)">Antivirus / EDR (<span id="tabAvCnt">0 análisis</span>)</button>
+      <button type="button" class="tab-btn" onclick="switchTab('ips', this)">Firewall IPS & Cuarentena</button>
+    </nav>
 
     <!-- SECTION 1: LIVE TCP <-> PID / AUTHENTICODE / CTI / KILL PID TABLE -->
-    <section id="secTcp" class="panel" style="margin-bottom: 16px;">
+    <section id="secTcp" class="panel">
       <div class="panel-header">
-        <div class="panel-title cyan">🌐 CONEXIONES TCP ACTIVAS ↔ PROCESO / PID / AUTHENTICODE / FEEDS CTI / EDR KILL PID</div>
+        <div class="panel-title cyan">
+          <span>ACTIVE TCP SOCKETS ↔ PROCESO / PID / AUTHENTICODE / CTI / KILL PID</span>
+        </div>
         <div class="panel-controls">
-          <input type="text" id="tcpFilter" class="input-txt" placeholder="Filtrar proceso, PID, IP, CTI o regla Sigma..." oninput="renderTcpTable()" style="width:260px;">
-          <button class="btn btn-sm btn-cyan" onclick="fetchState()">🔄 Actualizar</button>
+          <input type="text" id="tcpFilter" class="input-txt" placeholder="Filtrar proceso, PID, socket, firma..." oninput="renderTcpTable()" style="width:250px;">
+          <button type="button" class="btn btn-sm btn-cyan" onclick="fetchState()">Actualizar</button>
         </div>
       </div>
       <div class="table-wrap">
@@ -534,47 +1346,46 @@
           <thead>
             <tr>
               <th>PID</th>
-              <th>Proceso (.exe)</th>
+              <th>Proceso / Ruta</th>
               <th>Firma Authenticode</th>
               <th>Socket Local</th>
-              <th>IP Remota : Puerto</th>
-              <th>Protocolo / Regla CTI-Sigma</th>
+              <th>Socket Remoto</th>
+              <th>Protocolo / Regla</th>
               <th>Riesgo</th>
-              <th>Acciones EDR / IPS 1-Click</th>
+              <th style="text-align:right;">Acciones Tácticas</th>
             </tr>
           </thead>
           <tbody id="tcpBody">
-            <tr><td colspan="8" style="color:var(--txt-sub);">Cargando tabla extendida TCP/PID del kernel...</td></tr>
+            <tr><td colspan="8"><div class="empty-state">Cargando telemetría de sockets TCP del kernel...</div></td></tr>
           </tbody>
         </table>
       </div>
     </section>
 
-    <!-- SECTION 2 (ENTERPRISE): MULTI-HOST FLEET MANAGEMENT & YARA/SIGMA RULE ENGINE -->
+    <!-- SECTION 2: MULTI-HOST FLEET MANAGEMENT & YARA/SIGMA RULE ENGINE -->
     <div class="grid-2" id="secFleetRules">
-      <!-- PANEL 5: MULTI-HOST FLEET MANAGEMENT -->
       <section class="panel">
         <div class="panel-header">
-          <div class="panel-title">🖥️ GESTIÓN DE FLOTA MULTI-HOST (XDR FLEET SENSORS)</div>
+          <div class="panel-title emerald">FLOTA MULTI-HOST UNIFICADA (C2 + XDR SENSORS)</div>
           <div class="panel-controls">
-            <button class="btn btn-sm btn-gold" onclick="simulateRemoteAgentHeartbeat()">🧪 Simular Sensor Remoto</button>
-            <a class="btn btn-sm btn-cyan" href="/api/agent-script" target="_blank">📥 Descargar Porygon-Sensor.ps1</a>
+            <button type="button" class="btn btn-sm btn-gold" onclick="simulateRemoteAgentHeartbeat()">Simular Sensor</button>
+            <a class="btn btn-sm btn-cyan" href="/api/agent-script" target="_blank">Porygon-Sensor.ps1</a>
           </div>
         </div>
         <div class="scan-bar" style="justify-content:space-between;">
-          <span style="font-family:var(--font-mono);font-size:11px;color:var(--txt-sub);">
-            Despliega <code>Porygon-Sensor.ps1 -SocMasterUrl "http://IP_SOC:5090"</code> en otros PCs/servidores de tu LAN para centralizar telemetría.
+          <span class="mono" style="font-size:11px; color:var(--txt-secondary);">
+            Lista blanca mutua activa entre agentes C2 (<code>office-pc:8002</code>) y sensores Porygon XDR.
           </span>
         </div>
-        <div class="table-wrap" style="max-height:290px;">
+        <div class="table-wrap" style="max-height:280px;">
           <table>
             <thead>
               <tr>
                 <th>Host / Rol</th>
                 <th>IP Local / OS</th>
-                <th>CPU / RAM / TCP</th>
+                <th>Telemetría</th>
                 <th>Estado / Riesgo</th>
-                <th>Contención EDR</th>
+                <th style="text-align:right;">Contención</th>
               </tr>
             </thead>
             <tbody id="fleetBody"></tbody>
@@ -582,39 +1393,37 @@
         </div>
       </section>
 
-      <!-- PANEL 6: YARA & SIGMA DETECTION RULES ENGINE -->
       <section class="panel">
         <div class="panel-header">
-          <div class="panel-title gold">📜 MOTOR DE REGLAS YARA & SIGMA EDITABLES EN VIVO (<span id="lblRulesCnt">0</span>)</div>
+          <div class="panel-title gold">MOTOR YARA & SIGMA EN VIVO (<span id="lblRulesCnt">0 reglas</span>)</div>
           <div class="panel-controls">
-            <span style="font-family:var(--font-mono);font-size:11px;color:var(--txt-sub);">Hits Totales: <strong id="lblRuleHits" style="color:var(--gold)">0</strong></span>
+            <span class="mono" style="font-size:11px; color:var(--txt-secondary);">Hits: <strong id="lblRuleHits" style="color:var(--sig-amber)">0</strong></span>
           </div>
         </div>
-        <!-- ADD NEW YARA/SIGMA RULE BAR -->
         <div class="scan-bar">
-          <input type="text" id="ruleId" class="input-txt" placeholder="ID (ej. YARA_CUSTOM_RAT)" style="width:155px;">
+          <input type="text" id="ruleId" class="input-txt" placeholder="ID (ej. YARA_COBALT_BEACON)" style="width:155px;">
           <select id="ruleType" class="input-txt">
-            <option value="YARA">YARA (Archivo/Memoria)</option>
-            <option value="SIGMA">SIGMA (Red/Proceso/DNS)</option>
+            <option value="YARA">YARA (Archivo/Mem)</option>
+            <option value="SIGMA">SIGMA (Red/Proc/DNS)</option>
           </select>
-          <input type="text" id="ruleMitre" class="input-txt" placeholder="MITRE (T1059)" style="width:90px;" value="T1059">
+          <input type="text" id="ruleMitre" class="input-txt" placeholder="MITRE" style="width:76px;" value="T1059">
           <select id="ruleTarget" class="input-txt">
-            <option value="FILE_CONTENT">Contenido Archivo</option>
-            <option value="PROCESS_NET">Proceso / Red</option>
+            <option value="FILE_CONTENT">Archivo</option>
+            <option value="PROCESS_NET">Proceso/Red</option>
             <option value="DNS_DOMAIN">Dominio DNS</option>
           </select>
-          <input type="text" id="rulePattern" class="input-txt" placeholder="Patrones separados por | (ej. payload|rat.exe)" style="flex:1;min-width:160px;">
-          <button class="btn btn-sm btn-gold" onclick="addEnterpriseRule()">➕ Añadir Regla</button>
+          <input type="text" id="rulePattern" class="input-txt" placeholder="Patrón (ej. payload|beacon.dll)" style="flex:1; min-width:140px;">
+          <button type="button" class="btn btn-sm btn-gold" onclick="addEnterpriseRule()">Añadir Regla</button>
         </div>
-        <div class="table-wrap" style="max-height:290px;">
+        <div class="table-wrap" style="max-height:280px;">
           <table>
             <thead>
               <tr>
-                <th>Regla ID / Tipo</th>
-                <th>MITRE / Severidad</th>
-                <th>Patrón de Detección</th>
+                <th>Regla / Tipo</th>
+                <th>MITRE / Campo</th>
+                <th>Patrón</th>
                 <th>Hits</th>
-                <th>Acción</th>
+                <th style="text-align:right;">Acción</th>
               </tr>
             </thead>
             <tbody id="rulesBody"></tbody>
@@ -623,27 +1432,26 @@
       </section>
     </div>
 
-    <!-- SECTION 3 (ENTERPRISE): DNS / DGA / C2 BEACONING & SOAR PERIMETER INTEGRATION -->
+    <!-- SECTION 3: DNS / DGA INSPECTOR & SOAR PERIMETER -->
     <div class="grid-2" id="secDnsSoar">
-      <!-- PANEL 7: DNS CACHE / DGA / C2 BEACONING INSPECTOR -->
       <section class="panel">
         <div class="panel-header">
-          <div class="panel-title cyan">🔎 INSPECTOR DNS CACHE, ENTROPÍA DGA & C2 BEACONING</div>
+          <div class="panel-title cyan">INSPECTOR DNS CACHE, ENTROPÍA DGA & C2 BEACONING</div>
           <div class="panel-controls">
             <input type="text" id="dnsFilter" class="input-txt" placeholder="Filtrar dominio o IP..." oninput="renderDnsTable()">
-            <button class="btn btn-sm btn-cyan" onclick="triggerDnsAudit()">🔎 Auditar DNS Ahora</button>
+            <button type="button" class="btn btn-sm btn-cyan" onclick="triggerDnsAudit()">Auditar DNS</button>
           </div>
         </div>
-        <div class="table-wrap" style="max-height:285px;">
+        <div class="table-wrap" style="max-height:280px;">
           <table>
             <thead>
               <tr>
                 <th>Hora</th>
                 <th>Dominio Consultado</th>
                 <th>IP Resuelta</th>
-                <th>Entropía DGA</th>
+                <th>Entropía</th>
                 <th>Veredicto / MITRE</th>
-                <th>Acción</th>
+                <th style="text-align:right;">Acción</th>
               </tr>
             </thead>
             <tbody id="dnsBody"></tbody>
@@ -651,68 +1459,66 @@
         </div>
       </section>
 
-      <!-- PANEL 8: SOAR PERIMETER (FORTIGATE WEBHOOK + SYSLOG CEF RFC 5424 UDP 514) -->
       <section class="panel">
         <div class="panel-header">
-          <div class="panel-title red">🔗 INTEGRACIÓN SOAR PERIMETRAL (FORTIGATE WEBHOOK & SYSLOG CEF UDP 514)</div>
+          <div class="panel-title red">CONECTOR SOAR PERIMETRAL (FORTIGATE & SYSLOG CEF UDP 514)</div>
           <div class="panel-controls">
-            <span class="badge b-info">CEF Enviados: <span id="kCefSent">0</span></span>
-            <span class="badge b-high">Pushes FortiGate: <span id="kFgSent">0</span></span>
+            <span class="badge b-info">CEF: <span id="kCefSent">0</span></span>
+            <span class="badge b-high">FortiGate: <span id="kFgSent">0</span></span>
           </div>
         </div>
         <div class="soar-grid">
           <div class="soar-box">
-            <h4>📡 Exportador SIEM Syslog CEF (RFC 5424 UDP)</h4>
+            <h4>Syslog CEF (RFC 5424 UDP)</h4>
             <div class="form-row">
-              <label><input type="checkbox" id="soarSyslogEn"> Activar reenvío automático CEF en tiempo real</label>
+              <label><input type="checkbox" id="soarSyslogEn"> Reenvío automático CEF en tiempo real</label>
             </div>
             <div class="form-row">
-              <label>Servidor Collector SIEM (Wazuh / QRadar / Splunk / FortiSIEM):</label>
-              <input type="text" id="soarSyslogHost" class="input-txt" value="127.0.0.1" placeholder="192.168.1.200">
+              <label>Collector SIEM (Wazuh / QRadar / Splunk):</label>
+              <input type="text" id="soarSyslogHost" class="input-txt" value="127.0.0.1">
             </div>
             <div class="form-row">
-              <label>Puerto UDP Syslog:</label>
+              <label>Puerto UDP:</label>
               <input type="number" id="soarSyslogPort" class="input-txt" value="514">
             </div>
           </div>
 
           <div class="soar-box">
-            <h4>🔥 Conector Perimetral FortiGate / Firewall Webhook</h4>
+            <h4>FortiGate Automation Webhook</h4>
             <div class="form-row">
-              <label><input type="checkbox" id="soarFgEn"> Propagar bloqueos IPS automáticamente a FortiGate</label>
+              <label><input type="checkbox" id="soarFgEn"> Propagar bloqueos IPS a FortiGate</label>
             </div>
             <div class="form-row">
-              <label>FortiOS Automation Webhook URL:</label>
-              <input type="text" id="soarFgUrl" class="input-txt" placeholder="https://192.168.1.1/api/v2/monitor/system/automation-stitch/webhook/porygon">
+              <label>Webhook URL:</label>
+              <input type="text" id="soarFgUrl" class="input-txt" placeholder="https://192.168.1.1/api/v2/monitor/.../porygon">
             </div>
             <div class="form-row">
-              <label>Grupo de Direcciones FortiGate & API Bearer Token:</label>
-              <div style="display:flex;gap:6px;">
+              <label>Address Group & Bearer Token:</label>
+              <div style="display:flex; gap:6px;">
                 <input type="text" id="soarFgGroup" class="input-txt" value="PORYGON_IPS_BLOCKLIST" style="width:50%;">
-                <input type="password" id="soarFgToken" class="input-txt" placeholder="Bearer Token (opcional)" style="width:50%;">
+                <input type="password" id="soarFgToken" class="input-txt" placeholder="Token" style="width:50%;">
               </div>
             </div>
           </div>
         </div>
         <div class="scan-bar" style="justify-content:space-between;">
-          <span style="font-family:var(--font-mono);font-size:11px;color:var(--gold);" id="soarStatusTxt">Estado SOAR: STANDBY</span>
-          <div style="display:flex;gap:8px;">
-            <button class="btn btn-sm" onclick="saveSoarConfig(false)">💾 Guardar Config SOAR</button>
-            <button class="btn btn-sm btn-gold" onclick="saveSoarConfig(true)">⚡ Guardar y Enviar Prueba CEF / Webhook</button>
+          <span class="mono" style="font-size:11px; color:var(--sig-amber);" id="soarStatusTxt">Estado SOAR: STANDBY</span>
+          <div style="display:flex; gap:6px;">
+            <button type="button" class="btn btn-sm" onclick="saveSoarConfig(false)">Guardar SOAR</button>
+            <button type="button" class="btn btn-sm btn-gold" onclick="saveSoarConfig(true)">Probar CEF / Webhook</button>
           </div>
         </div>
       </section>
     </div>
 
-    <!-- SECTION 4: SIEM EVENTS (WITH SHA-256 CHAINHASH) & ANTIVIRUS / EDR -->
+    <!-- SECTION 4: SIEM EVENTS (SHA-256 CHAINHASH) & ANTIVIRUS / EDR -->
     <div class="grid-2" id="secSiemAv">
-      <!-- PANEL 1: SIEM -->
       <section class="panel" id="panelSiem">
         <div class="panel-header">
-          <div class="panel-title">📡 EVENTOS SIEM + CADENA FORENSE INMUTABLE SHA-256</div>
+          <div class="panel-title emerald">SIEM LEDGER + CADENA FORENSE SHA-256</div>
           <div class="panel-controls">
             <select id="siemSevFilter" class="input-txt" onchange="renderSiemTable()">
-              <option value="ALL">Todas las Severidades</option>
+              <option value="ALL">Todas</option>
               <option value="CRITICAL">CRITICAL</option>
               <option value="HIGH">HIGH</option>
               <option value="INFO">INFO</option>
@@ -727,8 +1533,8 @@
                 <th>Hora / ChainHash</th>
                 <th>Sev / MITRE</th>
                 <th>Agente / Proceso</th>
-                <th>Objetivo & Detalle</th>
-                <th>Acción</th>
+                <th>Objetivo & Resumen</th>
+                <th style="text-align:right;">Acción</th>
               </tr>
             </thead>
             <tbody id="siemBody"></tbody>
@@ -736,20 +1542,18 @@
         </div>
       </section>
 
-      <!-- PANEL 2: ANTIVIRUS / EDR -->
       <section class="panel" id="panelAv">
         <div class="panel-header">
-          <div class="panel-title gold">🧬 ANTIVIRUS / EDR EN TIEMPO REAL — PORYGON2 (SHA-256 + YARA + Entropía)</div>
+          <div class="panel-title gold">ANTIVIRUS / EDR — PORYGON2 (SHA-256 + YARA + ENTROPÍA)</div>
           <div class="panel-controls">
             <input type="text" id="avSearch" class="input-txt" placeholder="Filtrar archivo o SHA-256..." oninput="renderAvTable()">
           </div>
         </div>
-        <!-- ON-DEMAND FILE SCANNER FROM BROWSER -->
         <div class="scan-bar">
-          <input type="text" id="customScanPath" class="input-txt" style="flex:1; min-width:210px;" placeholder="Ruta local a escanear (ej. C:\Users\Admin\Downloads\archivo.exe)">
-          <button class="btn btn-sm btn-gold" onclick="scanLocalPath()">🔍 Escanear Ruta</button>
+          <input type="text" id="customScanPath" class="input-txt" style="flex:1; min-width:180px;" placeholder="Ruta local (ej. C:\Users\Admin\Downloads\sample.exe)">
+          <button type="button" class="btn btn-sm btn-gold" onclick="scanLocalPath()">Escanear Ruta</button>
           <label class="drop-zone">
-            📂 Subir / Analizar Archivo
+            <span>Subir Archivo</span>
             <input type="file" id="fileUploadInput" style="display:none" onchange="uploadAndScanFile(this)">
           </label>
         </div>
@@ -758,10 +1562,10 @@
             <thead>
               <tr>
                 <th>Hora</th>
-                <th>Veredicto / Riesgo</th>
-                <th>Archivo & Reglas YARA</th>
+                <th>Veredicto</th>
+                <th>Archivo & Detalle YARA</th>
                 <th>Entropía / SHA-256</th>
-                <th>Acción</th>
+                <th style="text-align:right;">Acción</th>
               </tr>
             </thead>
             <tbody id="avBody"></tbody>
@@ -772,24 +1576,23 @@
 
     <!-- SECTION 5: FIREWALL IPS & QUARANTINE VAULT -->
     <div class="grid-2" id="secIpsQuar">
-      <!-- PANEL 3: FIREWALL IPS -->
       <section class="panel">
         <div class="panel-header">
-          <div class="panel-title red">🔥 IPS ACTIVO // REGLAS DE BLOQUEO EN WINDOWS FIREWALL (PORYGON-Z)</div>
+          <div class="panel-title red">ACTIVE IPS // REGLAS WINDOWS FIREWALL (PORYGON-Z)</div>
           <div class="panel-controls">
-            <input type="text" id="manualBlockIp" class="input-txt" placeholder="IP a bloquear (ej. 217.20.155.41)" style="width:175px;">
-            <button class="btn btn-sm btn-red" onclick="blockIpManual()">🔥 Bloquear IP</button>
-            <button class="btn btn-sm btn-gold" onclick="blockCandidateIp()">⚡ Bloquear Candidata</button>
+            <input type="text" id="manualBlockIp" class="input-txt" placeholder="IP a bloquear (ej. 185.220.101.4)" style="width:180px;">
+            <button type="button" class="btn btn-sm btn-red" onclick="blockIpManual()">Bloquear IP</button>
+            <button type="button" class="btn btn-sm btn-gold" onclick="blockCandidateIp()">Bloquear Candidata</button>
           </div>
         </div>
-        <div class="table-wrap" style="max-height:250px;">
+        <div class="table-wrap" style="max-height:240px;">
           <table>
             <thead>
               <tr>
-                <th>Regla Windows Firewall</th>
-                <th>Dirección IP Remota Bloqueada</th>
+                <th>Regla Firewall</th>
+                <th>IP Remota Bloqueada</th>
                 <th>Estado</th>
-                <th>Acción 1-Click</th>
+                <th style="text-align:right;">Acción</th>
               </tr>
             </thead>
             <tbody id="fwBody"></tbody>
@@ -797,22 +1600,21 @@
         </div>
       </section>
 
-      <!-- PANEL 4: QUARANTINE VAULT -->
       <section class="panel">
         <div class="panel-header">
-          <div class="panel-title gold">☣️ BÓVEDA DE CUARENTENA AV (.qz) — PORYGON2 / PORYGON-Z</div>
+          <div class="panel-title gold">BÓVEDA DE CUARENTENA (.qz) — PORYGON2 / PORYGON-Z</div>
           <div class="panel-controls">
-            <button class="btn btn-sm btn-gold" onclick="quarantineCandidateFile()">☣️ Aislar Último Archivo Sospechoso</button>
+            <button type="button" class="btn btn-sm btn-gold" onclick="quarantineCandidateFile()">Aislar Candidato</button>
           </div>
         </div>
-        <div class="table-wrap" style="max-height:250px;">
+        <div class="table-wrap" style="max-height:240px;">
           <table>
             <thead>
               <tr>
-                <th>ID / Fecha</th>
+                <th>ID / Hora</th>
                 <th>Archivo</th>
                 <th>Ruta Original & SHA-256</th>
-                <th>Acción 1-Click</th>
+                <th style="text-align:right;">Acción</th>
               </tr>
             </thead>
             <tbody id="quarBody"></tbody>
@@ -820,11 +1622,471 @@
         </div>
       </section>
     </div>
+
   </main>
 
-  <div id="toast"></div>
+  <!-- ==========================================================================
+       COMMAND PALETTE MODAL (⌘K / Ctrl+K — 0ms instant on keyboard)
+       ========================================================================== -->
+  <div class="cmdk-backdrop" id="cmdPaletteBackdrop" data-open="false" onclick="if(event.target===this) closeCommandPalette(false)">
+    <div class="cmdk-dialog" role="dialog" aria-modal="true" aria-label="Command Palette">
+      <div class="cmdk-input-wrap">
+        <input type="text" class="cmdk-input" id="cmdkSearchInput" placeholder="Ejecutar comando táctico, filtrar host o cambiar variante..." oninput="renderCmdkItems()" autocomplete="off">
+        <kbd class="cmdk-kbd">ESC</kbd>
+      </div>
+      <div class="cmdk-list" id="cmdkList"></div>
+    </div>
+  </div>
+
+  <!-- ==========================================================================
+       CONTEXTUAL FORENSIC SOCKET INSPECTOR DRAWER (220ms entry / 0ms Esc)
+       ========================================================================== -->
+  <aside class="forensic-drawer" id="forensicDrawer" data-open="false" aria-label="Inspector Forense de Socket">
+    <div style="display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border-hairline); padding-bottom:10px;">
+      <div>
+        <div class="mono" style="font-size:10px; color:var(--sig-cyan); text-transform:uppercase;">Forensic Socket Telemetry</div>
+        <div class="mono" style="font-size:13px; font-weight:600;" id="inspTitle">svchost.exe [PID 0]</div>
+      </div>
+      <button type="button" class="btn btn-sm" onclick="closeForensicDrawer(false)">Cerrar (ESC)</button>
+    </div>
+    <div id="inspBody" class="mono" style="font-size:11.5px; color:var(--txt-secondary); display:flex; flex-direction:column; gap:10px; overflow-y:auto;"></div>
+  </aside>
+
+  <!-- ==========================================================================
+       SONNER-STYLE STACKED TOASTER (Bottom-Right, 400ms ease)
+       ========================================================================== -->
+  <div class="sonner-toaster" id="sonnerToaster" aria-live="polite"></div>
+
+  <!-- ==========================================================================
+       5. BOTTOM FLOATING PROTOTYPE PICKER (PICKER.md) + BREAK-UI STRESS-TEST
+       ========================================================================== -->
+  <div class="proto-dock">
+    <!-- Verbatim .proto-picker from prototype/PICKER.md -->
+    <div class="proto-picker" role="tablist" aria-label="Prototype variants" id="variantPicker">
+      <span class="proto-picker-label">Variant</span>
+      <div class="proto-picker-options">
+        <span class="proto-picker-highlight" aria-hidden="true"></span>
+        <button type="button" role="tab" class="proto-picker-btn" data-variant="quiet" aria-selected="false">Quiet</button>
+        <button type="button" role="tab" class="proto-picker-btn" data-variant="paper" aria-selected="false">Paper</button>
+        <button type="button" role="tab" class="proto-picker-btn" data-variant="round" aria-selected="false">Round</button>
+        <button type="button" role="tab" class="proto-picker-btn" data-variant="snappy" aria-selected="true">Snappy</button>
+      </div>
+    </div>
+
+    <!-- Companion break-ui Data Stress-Test Picker -->
+    <div class="proto-picker" role="tablist" aria-label="Data stress test modes" id="stressPicker">
+      <span class="proto-picker-label">Stress</span>
+      <div class="proto-picker-options">
+        <span class="proto-picker-highlight" aria-hidden="true"></span>
+        <button type="button" role="tab" class="proto-picker-btn" data-stress="live" aria-selected="true">Live</button>
+        <button type="button" role="tab" class="proto-picker-btn" data-stress="extreme" aria-selected="false" title="Textos de 90+ caracteres sin romper contenedores">90+ Chars</button>
+        <button type="button" role="tab" class="proto-picker-btn" data-stress="empty" aria-selected="false" title="Estado vacío (0 elementos)">Empty (0)</button>
+        <button type="button" role="tab" class="proto-picker-btn" data-stress="single" aria-selected="false" title="Gramática singular (1 elemento)">Single (1)</button>
+      </div>
+    </div>
+  </div>
 
 <script>
+  /* ============================================================================
+     GRAMMAR HELPER (break-ui: Singular vs Plural strict correctness)
+     ============================================================================ */
+  function pluralEs(count, singular, plural) {
+    const n = Number(count || 0);
+    return `${n.toLocaleString()} ${n === 1 ? singular : plural}`;
+  }
+
+  function esc(s) {
+    if (s === null || s === undefined) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  /* ============================================================================
+     SONNER-STYLE STACKED TOAST ENGINE (400ms ease, multi-toast physics stack)
+     ============================================================================ */
+  const activeToasts = [];
+  function showToast(msg, isAlert) {
+    const container = document.getElementById('sonnerToaster');
+    const el = document.createElement('div');
+    el.className = 'sonner-toast';
+    if (isAlert) el.setAttribute('data-alert', 'true');
+    el.innerHTML = `<span class="break-anywhere">${msg}</span><span style="opacity:0.45;font-size:10px;flex-shrink:0;">SOC</span>`;
+    el.style.opacity = '0';
+    el.style.transform = 'translateY(14px) scale(0.95)';
+    container.appendChild(el);
+
+    activeToasts.unshift(el);
+    while (activeToasts.length > 3) {
+      const old = activeToasts.pop();
+      if (old && old.parentNode) old.parentNode.removeChild(old);
+    }
+
+    requestAnimationFrame(() => {
+      layoutToasts();
+    });
+
+    setTimeout(() => {
+      const idx = activeToasts.indexOf(el);
+      if (idx !== -1) {
+        activeToasts.splice(idx, 1);
+        el.style.opacity = '0';
+        el.style.transform = 'translateY(10px) scale(0.95)';
+        setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 400);
+        layoutToasts();
+      }
+    }, 3600);
+  }
+
+  function layoutToasts() {
+    activeToasts.forEach((t, i) => {
+      const yOffset = i * -10;
+      const scale = 1 - i * 0.04;
+      t.style.zIndex = String(400 - i);
+      t.style.opacity = i === 0 ? '1' : String(Math.max(0.4, 0.85 - i * 0.2));
+      t.style.transform = `translateY(${yOffset}px) scale(${scale})`;
+    });
+  }
+
+  /* ============================================================================
+     ORIGIN-AWARE PLAYBOOK POPOVER (180ms entry / 150ms exit / 0ms on Escape)
+     ============================================================================ */
+  function togglePlaybookPopover(evt) {
+    const pop = document.getElementById('playbookPopover');
+    const isOpen = pop.getAttribute('data-open') === 'true';
+    if (isOpen) {
+      closePlaybookPopover(false);
+      return;
+    }
+    const btn = evt ? evt.currentTarget : document.getElementById('playbookTriggerBtn');
+    const rect = btn.getBoundingClientRect();
+    pop.style.top = (rect.bottom + 6) + 'px';
+    pop.style.right = Math.max(12, window.innerWidth - rect.right) + 'px';
+    pop.style.setProperty('--transform-origin', 'top right');
+    pop.removeAttribute('data-kb-instant');
+    pop.setAttribute('data-open', 'true');
+  }
+
+  function closePlaybookPopover(instantKeyboard) {
+    const pop = document.getElementById('playbookPopover');
+    if (instantKeyboard) {
+      pop.setAttribute('data-kb-instant', 'true');
+    } else {
+      pop.removeAttribute('data-kb-instant');
+    }
+    pop.setAttribute('data-open', 'false');
+  }
+
+  document.addEventListener('pointerdown', (e) => {
+    const pop = document.getElementById('playbookPopover');
+    const btn = document.getElementById('playbookTriggerBtn');
+    if (pop.getAttribute('data-open') === 'true' && !pop.contains(e.target) && !btn.contains(e.target)) {
+      closePlaybookPopover(false);
+    }
+  });
+
+  /* ============================================================================
+     COMMAND PALETTE (⌘K — 0ms instant on keyboard, 180ms on pointer click)
+     ============================================================================ */
+  const CMDK_COMMANDS = [
+    { label: 'Probar Agentes C2 Online (Sonda IDS Solo Lectura)', kbd: '↵ Probe', run: () => probeOnlineC2Agents() },
+    { label: 'Sincronizar Proxy SSH office-pc (:8002 C2/IDS & :5080 NIDS)', kbd: '↵ Sync', run: () => syncOfficePcC2(false) },
+    { label: 'Auditar Red TCP/PID + Registro Run + Startup', kbd: '↵ Audit', run: () => triggerAudit() },
+    { label: 'Auditar Caché DNS / Entropía DGA / C2 Beaconing', kbd: '↵ DNS', run: () => triggerDnsAudit() },
+    { label: 'Sincronizar Feeds CTI (Feodo Tracker + CINS Army)', kbd: '↵ CTI', run: () => syncCtiFeeds() },
+    { label: 'Stress Test: Textos Extremos de 90+ Caracteres (break-ui)', kbd: 'Stress', run: () => setStressMode('extreme') },
+    { label: 'Stress Test: Estado Vacío 0 Elementos (break-ui)', kbd: 'Empty', run: () => setStressMode('empty') },
+    { label: 'Stress Test: Singular 1 Elemento (break-ui)', kbd: 'Single', run: () => setStressMode('single') },
+    { label: 'Restaurar Telemetría en Vivo (Live Data)', kbd: 'Live', run: () => setStressMode('live') },
+    { label: 'Alternar Modo Gamer 0% GPU', kbd: 'GPU', run: () => swarmAction('toggle_gamer') }
+  ];
+  let cmdkActiveIndex = 0;
+
+  function openCommandPalette(fromKeyboard, evt) {
+    const bd = document.getElementById('cmdPaletteBackdrop');
+    if (fromKeyboard) {
+      bd.setAttribute('data-kb-instant', 'true');
+    } else {
+      bd.removeAttribute('data-kb-instant');
+    }
+    bd.setAttribute('data-open', 'true');
+    const inp = document.getElementById('cmdkSearchInput');
+    inp.value = '';
+    cmdkActiveIndex = 0;
+    renderCmdkItems();
+    inp.focus();
+  }
+
+  function closeCommandPalette(fromKeyboard) {
+    const bd = document.getElementById('cmdPaletteBackdrop');
+    if (fromKeyboard) {
+      bd.setAttribute('data-kb-instant', 'true');
+    } else {
+      bd.removeAttribute('data-kb-instant');
+    }
+    bd.setAttribute('data-open', 'false');
+  }
+
+  function getFilteredCmdk() {
+    const q = (document.getElementById('cmdkSearchInput').value || '').toLowerCase();
+    return CMDK_COMMANDS.filter(c => !q || c.label.toLowerCase().includes(q));
+  }
+
+  function renderCmdkItems() {
+    const list = document.getElementById('cmdkList');
+    const items = getFilteredCmdk();
+    if (cmdkActiveIndex >= items.length) cmdkActiveIndex = 0;
+    if (items.length === 0) {
+      list.innerHTML = `<div class="empty-state">0 comandos coinciden con la búsqueda</div>`;
+      return;
+    }
+    list.innerHTML = items.map((c, idx) => `
+      <button type="button" class="cmdk-item" data-active="${idx === cmdkActiveIndex}" onmouseenter="cmdkActiveIndex=${idx}; renderCmdkItems();" onclick="executeCmdkItem(${idx})">
+        <span>${esc(c.label)}</span>
+        <kbd>${esc(c.kbd)}</kbd>
+      </button>
+    `).join('');
+  }
+
+  function executeCmdkItem(idx) {
+    const items = getFilteredCmdk();
+    const item = items[idx];
+    closeCommandPalette(true);
+    if (item && item.run) item.run();
+  }
+
+  /* ============================================================================
+     CONTEXTUAL FORENSIC SOCKET DRAWER (220ms pointer / 0ms Escape)
+     ============================================================================ */
+  function openForensicDrawer(pid, procName, localEp, remoteEp, signer, risk, exePath) {
+    const dr = document.getElementById('forensicDrawer');
+    dr.removeAttribute('data-kb-instant');
+    document.getElementById('inspTitle').textContent = `${procName}.exe [PID ${pid}]`;
+    document.getElementById('inspBody').innerHTML = `
+      <div class="soar-box">
+        <h4>Identidad de Proceso & Firma</h4>
+        <div>Proceso: <strong style="color:var(--txt-primary)">${esc(procName)}.exe</strong></div>
+        <div>PID Kernel: <strong style="color:var(--sig-cyan)">${esc(pid)}</strong></div>
+        <div>Authenticode: <strong style="color:var(--sig-emerald)">${esc(signer || 'UNSIGNED')}</strong></div>
+        <div class="break-anywhere" style="margin-top:4px;color:var(--txt-muted);">Ruta: ${esc(exePath || 'Kernel Protected')}</div>
+      </div>
+      <div class="soar-box">
+        <h4>Telemetría de Socket L4</h4>
+        <div>Local: <strong>${esc(localEp)}</strong></div>
+        <div>Remoto: <strong style="color:var(--sig-cyan)">${esc(remoteEp)}</strong></div>
+        <div>Riesgo Heurístico: <strong style="color:${risk >= 75 ? 'var(--sig-crimson)' : 'var(--sig-emerald)'}">${esc(risk)}%</strong></div>
+      </div>
+      <div style="display:flex; gap:6px; flex-wrap:wrap;">
+        <button type="button" class="btn btn-sm btn-red" onclick="blockIp('${esc((remoteEp||'').split(':')[0])}', 'Forensic Drawer Block'); closeForensicDrawer(false);">Bloquear IP</button>
+        <button type="button" class="btn btn-sm btn-red" onclick="killPid(${Number(pid)||0}, '${esc(procName)}'); closeForensicDrawer(false);">Kill PID</button>
+      </div>
+    `;
+    dr.setAttribute('data-open', 'true');
+  }
+
+  function closeForensicDrawer(fromKeyboard) {
+    const dr = document.getElementById('forensicDrawer');
+    if (fromKeyboard) {
+      dr.setAttribute('data-kb-instant', 'true');
+    } else {
+      dr.removeAttribute('data-kb-instant');
+    }
+    dr.setAttribute('data-open', 'false');
+  }
+
+  /* ============================================================================
+     GLOBAL KEYBOARD HANDLER (emil-design-eng: 0ms instant for ⌘K, Esc, Arrows)
+     ============================================================================ */
+  document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+      e.preventDefault();
+      const bd = document.getElementById('cmdPaletteBackdrop');
+      if (bd.getAttribute('data-open') === 'true') {
+        closeCommandPalette(true);
+      } else {
+        openCommandPalette(true);
+      }
+      return;
+    }
+
+    if (e.key === 'Escape') {
+      closeCommandPalette(true);
+      closePlaybookPopover(true);
+      closeForensicDrawer(true);
+      return;
+    }
+
+    const bd = document.getElementById('cmdPaletteBackdrop');
+    if (bd.getAttribute('data-open') === 'true') {
+      const items = getFilteredCmdk();
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        cmdkActiveIndex = (cmdkActiveIndex + 1) % Math.max(1, items.length);
+        renderCmdkItems();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        cmdkActiveIndex = (cmdkActiveIndex - 1 + Math.max(1, items.length)) % Math.max(1, items.length);
+        renderCmdkItems();
+      } else if (e.key === 'Enter' && items.length > 0) {
+        e.preventDefault();
+        executeCmdkItem(cmdkActiveIndex);
+      }
+    }
+  });
+
+  /* ============================================================================
+     PROTOTYPE PICKER & BREAK-UI STRESS-TEST CONTROLLER (prototype/PICKER.md)
+     ============================================================================ */
+  let currentStressMode = 'live';
+
+  function initSegmentedPicker(pickerId, attrName, onSelect) {
+    const picker = document.getElementById(pickerId);
+    if (!picker) return;
+    const buttons = Array.from(picker.querySelectorAll('.proto-picker-btn'));
+    const highlight = picker.querySelector('.proto-picker-highlight');
+
+    function syncHighlight(btn) {
+      const rect = btn.getBoundingClientRect();
+      const parentRect = btn.parentElement.getBoundingClientRect();
+      highlight.style.width = `${rect.width}px`;
+      highlight.style.transform = `translateX(${rect.left - parentRect.left}px)`;
+    }
+
+    function selectByIndex(nextIndex) {
+      const bounded = (nextIndex + buttons.length) % buttons.length;
+      const target = buttons[bounded];
+      buttons.forEach((b, i) => b.setAttribute('aria-selected', String(i === bounded)));
+      syncHighlight(target);
+      onSelect(target.getAttribute(attrName));
+    }
+
+    buttons.forEach((btn, i) => {
+      btn.addEventListener('click', () => selectByIndex(i));
+    });
+
+    const initial = buttons.findIndex(b => b.getAttribute('aria-selected') === 'true');
+    syncHighlight(buttons[Math.max(0, initial)]);
+    requestAnimationFrame(() => {
+      picker.setAttribute('data-ready', '');
+    });
+
+    window.addEventListener('resize', () => {
+      const cur = buttons.findIndex(b => b.getAttribute('aria-selected') === 'true');
+      if (cur >= 0) syncHighlight(buttons[cur]);
+    });
+
+    return { selectByIndex, buttons };
+  }
+
+  const variantCtrl = initSegmentedPicker('variantPicker', 'data-variant', (val) => {
+    // Instant 0ms variant swap on root document
+    document.documentElement.setAttribute('data-variant', val);
+  });
+
+  const stressCtrl = initSegmentedPicker('stressPicker', 'data-stress', (val) => {
+    currentStressMode = val;
+    document.documentElement.setAttribute('data-stress', val);
+    renderAllViews();
+  });
+
+  function setStressMode(mode) {
+    if (!stressCtrl) return;
+    const idx = stressCtrl.buttons.findIndex(b => b.getAttribute('data-stress') === mode);
+    if (idx >= 0) stressCtrl.selectByIndex(idx);
+  }
+
+  // Keyboard shortcuts 1-4 for Variants when not typing in an input
+  window.addEventListener('keydown', (e) => {
+    const tag = (e.target && e.target.tagName) || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (e.target && e.target.isContentEditable)) return;
+    if (document.getElementById('cmdPaletteBackdrop').getAttribute('data-open') === 'true') return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+    if (e.key >= '1' && e.key <= '4' && variantCtrl) {
+      const idx = Number(e.key) - 1;
+      if (idx < variantCtrl.buttons.length) variantCtrl.selectByIndex(idx);
+    }
+  });
+
+  /* ============================================================================
+     BREAK-UI STRESS DATASETS (90+ chars extreme, Empty 0, Single 1)
+     ============================================================================ */
+  function getEffectiveState() {
+    if (!lastState && currentStressMode === 'live') return null;
+    const base = lastState ? JSON.parse(JSON.stringify(lastState)) : {
+      cpu: 14, gpu: 8, fps: 60, ramPct: 38, ramUsed: 12,
+      ctiTotalIndicators: 12732, totalEdrKills: 0, siemChainHash: '8F9B2D7C4A10',
+      activeConnections: [], fleetNodes: [], detectionRules: [], dnsAudits: [], siemEvents: [], avScans: [], blockedIps: [], quarantinedFiles: []
+    };
+
+    if (currentStressMode === 'empty') {
+      base.activeConnections = [];
+      base.fleetNodes = [];
+      base.detectionRules = [];
+      base.dnsAudits = [];
+      base.siemEvents = [];
+      base.avScans = [];
+      base.blockedIps = [];
+      base.quarantinedFiles = [];
+      return base;
+    }
+
+    if (currentStressMode === 'single') {
+      base.activeConnections = (base.activeConnections || []).slice(0, 1);
+      base.fleetNodes = (base.fleetNodes || []).slice(0, 1);
+      base.detectionRules = (base.detectionRules || []).slice(0, 1);
+      base.dnsAudits = (base.dnsAudits || []).slice(0, 1);
+      base.siemEvents = (base.siemEvents || []).slice(0, 1);
+      base.avScans = (base.avScans || []).slice(0, 1);
+      base.blockedIps = ['185.220.101.4'];
+      base.quarantinedFiles = [{
+        id: 'QZ-001', timestamp: '18:00:01', fileName: 'single_artifact_beacon.dll.qz',
+        originalPath: 'C:\\Users\\Admin\\AppData\\Local\\Temp\\single_artifact_beacon.dll',
+        sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+      }];
+      return base;
+    }
+
+    if (currentStressMode === 'extreme') {
+      const longProc = 'enterprise_distributed_telemetry_collector_agent_service_worker_node_v4_9_2_x86_64_production_build';
+      const longPath = 'C:\\ProgramData\\EnterpriseSecurityOperations\\DeepPacketInspection\\Subsystems\\AutonomousContainment\\QuarantineStaging\\' + longProc + '.exe';
+      const longDomain = 'c2-beacon-exfiltration-telemetry-tunnel-shard-0984127389127389123-eu-central-cluster-node.apt-Simulation-tracker.example.org';
+      base.activeConnections = [
+        {
+          pid: 98412,
+          processName: longProc,
+          exePath: longPath,
+          isSigned: false,
+          signer: 'UNSIGNED_ANOMALOUS_CERTIFICATE_AUTHORITY_CHAIN_LONG_IDENTIFIER_90_PLUS_CHARS_TEST',
+          localEp: '192.168.2.231:59412',
+          remoteEp: '134.209.87.235:8080',
+          proto: 'HTTP/2-MUX-C2-LONG-PROTOCOL-IDENTIFIER',
+          state: 'ESTABLISHED',
+          matchedRule: 'SIGMA_APT_EXTREME_LONG_RULE_NAME_OVER_NINETY_CHARACTERS_FOR_LAYOUT_STRESS_VERIFICATION_2026',
+          risk: 96,
+          isLolBin: true,
+          isCtiMatch: true
+        }
+      ].concat((base.activeConnections || []).slice(0, 5));
+
+      base.dnsAudits = [
+        {
+          timestamp: '18:04:12',
+          domain: longDomain,
+          resolvedIp: '134.209.87.235',
+          entropy: 4.92,
+          verdict: 'DGA_HIGH_ENTROPY_BEACON_CANDIDATE_EXTREME_LABEL_90_CHARS',
+          risk: 94,
+          mitre: 'T1568.002'
+        }
+      ].concat((base.dnsAudits || []).slice(0, 4));
+      return base;
+    }
+
+    return base;
+  }
+
+  /* ============================================================================
+     BACKEND API CALLS & RENDERERS
+     ============================================================================ */
   let lastState = null;
   let activeTab = 'all';
   let soarFormDirty = false;
@@ -834,16 +2096,6 @@
     if (el) el.addEventListener('input', () => { soarFormDirty = true; });
     if (el) el.addEventListener('change', () => { soarFormDirty = true; });
   });
-
-  function showToast(msg, isAlert) {
-    const t = document.getElementById('toast');
-    t.style.borderColor = isAlert ? 'var(--red)' : 'var(--teal)';
-    t.style.borderLeftColor = isAlert ? 'var(--red)' : 'var(--gold)';
-    t.innerHTML = msg;
-    t.style.display = 'block';
-    clearTimeout(window._toastTimer);
-    window._toastTimer = setTimeout(() => { t.style.display = 'none'; }, 3800);
-  }
 
   function switchTab(tab, btn) {
     activeTab = tab;
@@ -859,7 +2111,7 @@
     const secIpsQuar = document.getElementById('secIpsQuar');
 
     [secTcp, secFleetRules, secDnsSoar, secSiemAv, panelSiem, panelAv, secIpsQuar].forEach(el => el.classList.remove('hidden'));
-    secSiemAv.style.gridTemplateColumns = '1fr 1fr';
+    secSiemAv.style.gridTemplateColumns = '';
 
     if (tab === 'tcp') {
       [secFleetRules, secDnsSoar, secSiemAv, secIpsQuar].forEach(el => el.classList.add('hidden'));
@@ -878,7 +2130,9 @@
     }
   }
 
-  async function apiPost(url, bodyObj) {
+  async function apiPost(url, bodyObj, btnId) {
+    const btn = btnId ? document.getElementById(btnId) : null;
+    if (btn) btn.classList.add('is-loading');
     try {
       const res = await fetch(url, {
         method: 'POST',
@@ -893,39 +2147,35 @@
       return data;
     } catch (e) {
       showToast('Error comunicando con el servicio SOC: ' + e.message, true);
+    } finally {
+      if (btn) btn.classList.remove('is-loading');
     }
   }
 
   function triggerAudit() {
-    showToast('🔍 Ejecutando auditoría completa TCP/PID + Registro Run + Startup + Downloads + DNS...', false);
-    apiPost('/api/audit', {});
+    showToast('Ejecutando auditoría completa TCP/PID + Registro Run + Startup...', false);
+    apiPost('/api/audit', {}, 'btnAuditAll');
   }
-
   function syncCtiFeeds() {
-    showToast('🌐 Descargando Feeds CTI en vivo (Feodo Tracker C2 Botnet + CINS Army)...', false);
+    showToast('Descargando Feeds CTI en vivo (Feodo Tracker + CINS Army)...', false);
     apiPost('/api/sync-cti', {});
   }
-
   function syncOfficePcC2(restartTunnel) {
-    showToast('🔗 Sincronizando proxy SSH office-pc (100.89.1.27 -> :8002 C2/IDS & :5080 QB-NIDS/VT)...', false);
-    apiPost('/api/sync-office-c2', { restartTunnel: !!restartTunnel });
+    showToast('Sincronizando proxy SSH office-pc (:8002 C2/IDS & :5080 NIDS/VT)...', false);
+    apiPost('/api/sync-office-c2', { restartTunnel: !!restartTunnel }, 'btnSyncBridge');
   }
-
   function triggerOfficeIdsScan() {
-    showToast('🔎 Ejecutando escaneo IDS remoto sobre los logs C2 de office-pc (:8002)...', false);
+    showToast('Ejecutando escaneo IDS remoto sobre los logs C2 de office-pc (:8002)...', false);
     apiPost('/api/trigger-office-ids-scan', {});
   }
-
   function probeOnlineC2Agents() {
-    showToast('🧪 Ejecutando prueba IDS unificada (solo lectura, sin tocar binarios) sobre los agentes C2 actualmente online...', false);
-    apiPost('/api/probe-online-c2-agents', {});
+    showToast('Ejecutando sonda IDS unificada (solo lectura) en agentes C2 online...', false);
+    apiPost('/api/probe-online-c2-agents', {}, 'btnProbeOnline');
   }
-
   function triggerDnsAudit() {
-    showToast('🔎 Auditando caché DNS de Windows, entropía DGA y patrones C2 Beaconing...', false);
+    showToast('Auditando caché DNS, entropía DGA y patrones C2 Beaconing...', false);
     apiPost('/api/dns-audit', {});
   }
-
   function killPid(pid, procName) {
     if (!pid || pid <= 4) {
       showToast('PID de sistema protegido por el kernel.', true);
@@ -933,11 +2183,9 @@
     }
     apiPost('/api/kill-pid', { pid: pid, reason: 'Terminación EDR desde Web SOC (' + procName + ')' });
   }
-
   function toggleHostIsolation(hostId) {
     apiPost('/api/host-isolate', { hostId: hostId });
   }
-
   function simulateRemoteAgentHeartbeat() {
     const num = Math.floor(10 + Math.random() * 80);
     apiPost('/api/agent-heartbeat', {
@@ -951,7 +2199,6 @@
       risk: 78
     });
   }
-
   function addEnterpriseRule() {
     const name = document.getElementById('ruleId').value.trim();
     const ruleType = document.getElementById('ruleType').value;
@@ -959,25 +2206,16 @@
     const targetField = document.getElementById('ruleTarget').value;
     const pattern = document.getElementById('rulePattern').value.trim();
     if (!name || !pattern) {
-      showToast('Especifica un nombre/ID y un patrón de detección para la regla YARA/Sigma.', true);
+      showToast('Especifica un ID y un patrón de detección para la regla YARA/Sigma.', true);
       return;
     }
-    apiPost('/api/rules-add', {
-      name: name,
-      ruleType: ruleType,
-      mitre: mitre,
-      risk: 92,
-      targetField: targetField,
-      pattern: pattern
-    });
+    apiPost('/api/rules-add', { name, ruleType, mitre, risk: 92, targetField, pattern });
     document.getElementById('ruleId').value = '';
     document.getElementById('rulePattern').value = '';
   }
-
   function toggleEnterpriseRule(id, del) {
     apiPost('/api/rules-toggle', { id: id, delete: !!del });
   }
-
   function saveSoarConfig(testEvent) {
     soarFormDirty = false;
     apiPost('/api/soar-config', {
@@ -991,22 +2229,16 @@
       testEvent: !!testEvent
     });
   }
-
-  function swarmAction(act) {
-    apiPost('/api/swarm-action', { action: act });
-  }
-
+  function swarmAction(act) { apiPost('/api/swarm-action', { action: act }); }
   function blockIp(ip, reason) {
     if (!ip) return;
     apiPost('/api/block-ip', { ip: ip, reason: reason || 'Web SOC 1-Click Block' });
   }
-
   function blockIpManual() {
     const ip = document.getElementById('manualBlockIp').value.trim();
     if (!ip) { showToast('Escribe una dirección IP para bloquear.', true); return; }
     blockIp(ip, 'Bloqueo manual desde Web SOC');
   }
-
   function blockCandidateIp() {
     if (!lastState || !lastState.candidateBlockIp) {
       showToast('No hay ninguna IP sospechosa candidata pendiente.', true);
@@ -1014,16 +2246,11 @@
     }
     blockIp(lastState.candidateBlockIp, '1-Click Web SOC Candidate Block');
   }
-
-  function unblockIp(ip) {
-    apiPost('/api/unblock-ip', { ip: ip });
-  }
-
+  function unblockIp(ip) { apiPost('/api/unblock-ip', { ip: ip }); }
   function quarantinePath(path) {
     if (!path) return;
     apiPost('/api/quarantine-file', { path: path });
   }
-
   function quarantineCandidateFile() {
     if (!lastState || !lastState.candidateQuarantineFile) {
       showToast('No hay ningún archivo sospechoso candidato pendiente.', true);
@@ -1031,17 +2258,12 @@
     }
     quarantinePath(lastState.candidateQuarantineFile);
   }
-
-  function restoreQuarantine(id) {
-    apiPost('/api/restore-quarantine', { id: id });
-  }
-
+  function restoreQuarantine(id) { apiPost('/api/restore-quarantine', { id: id }); }
   function scanLocalPath() {
     const p = document.getElementById('customScanPath').value.trim();
     if (!p) { showToast('Introduce la ruta completa del archivo local a escanear.', true); return; }
     apiPost('/api/scan-file', { path: p });
   }
-
   function scanProcessExe(path) {
     if (!path || path.indexOf(':') < 0) {
       showToast('Ruta de proceso protegida por el kernel de Windows.', true);
@@ -1050,11 +2272,10 @@
     document.getElementById('customScanPath').value = path;
     apiPost('/api/scan-file', { path: path });
   }
-
   async function uploadAndScanFile(input) {
     if (!input.files || !input.files[0]) return;
     const file = input.files[0];
-    showToast('🧬 Analizando ' + file.name + ' con Porygon2 (SHA-256 + YARA + Entropía)...', false);
+    showToast('Analizando ' + file.name + ' con Porygon2 (SHA-256 + YARA + Entropía)...', false);
     const reader = new FileReader();
     reader.onload = async function(evt) {
       const base64 = evt.target.result.split(',')[1] || '';
@@ -1064,15 +2285,14 @@
     reader.readAsDataURL(file);
   }
 
-  function esc(s) {
-    if (s === null || s === undefined) return '';
-    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  }
-
+  /* ============================================================================
+     TABLE RENDERERS (With break-ui truncation, empty states & singular/plural)
+     ============================================================================ */
   function renderTcpTable() {
-    if (!lastState || !lastState.activeConnections) return;
+    const st = getEffectiveState();
+    if (!st) return;
     const q = (document.getElementById('tcpFilter').value || '').toLowerCase();
-    const rows = lastState.activeConnections.filter(c => {
+    const rows = (st.activeConnections || []).filter(c => {
       if (!q) return true;
       return (c.processName || '').toLowerCase().includes(q) ||
              String(c.pid).includes(q) ||
@@ -1081,123 +2301,131 @@
              (c.matchedRule || '').toLowerCase().includes(q) ||
              (c.signer || '').toLowerCase().includes(q);
     });
-    document.getElementById('tabTcpCnt').textContent = rows.length;
+    document.getElementById('tabTcpCnt').textContent = pluralEs(rows.length, 'conexión', 'conexiones');
     const tb = document.getElementById('tcpBody');
     if (rows.length === 0) {
-      tb.innerHTML = '<tr><td colspan="8" style="color:var(--txt-sub);">Ninguna conexión coincide con el filtro.</td></tr>';
+      tb.innerHTML = `<tr><td colspan="8"><div class="empty-state"><span>0 conexiones TCP activas coinciden con la vista actual.</span><button type="button" class="btn btn-sm btn-cyan" onclick="triggerAudit()">Ejecutar Auditoría TCP/PID</button></div></td></tr>`;
       return;
     }
     tb.innerHTML = rows.map(c => {
       const sevClass = c.risk >= 75 ? 'b-crit' : (c.risk >= 45 ? 'b-high' : 'b-info');
       const signBadge = c.isSigned
-        ? `<span class="badge b-info">✔ SIGNED</span> <span style="color:var(--txt-sub);font-size:10.5px;">${esc(c.signer)}</span>`
-        : `<span class="badge b-crit">⚠ UNSIGNED</span>`;
+        ? `<span class="badge b-info">SIGNED</span> <span class="truncate-90" style="color:var(--txt-secondary);font-size:10.5px;" title="${esc(c.signer)}">${esc(c.signer)}</span>`
+        : `<span class="badge b-crit">UNSIGNED</span>`;
       const remIpOnly = (c.remoteEp || '').split(':')[0];
       const safePath = (c.exePath || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      const safeSigner = (c.signer || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
       let ruleBadge = '';
       if (c.isCtiMatch) {
-        ruleBadge += ` <span class="badge b-crit">🌐 CTI BOTNET IOC</span>`;
+        ruleBadge += ` <span class="badge b-crit">CTI IOC</span>`;
       } else if (c.matchedRule) {
-        ruleBadge += ` <span class="badge b-high">📜 ${esc(c.matchedRule)}</span>`;
+        ruleBadge += ` <span class="badge b-high truncate-90" title="${esc(c.matchedRule)}">${esc(c.matchedRule)}</span>`;
       }
       return `<tr>
         <td><strong>${c.pid}</strong></td>
-        <td>
-          <strong style="color:${c.isLolBin ? 'var(--gold)' : 'var(--txt-main)'}">${esc(c.processName)}.exe</strong>
-          ${c.isLolBin ? '<span class="badge b-high">LOLBIN</span>' : ''}
-          <div style="color:var(--txt-sub);font-size:10px;">${esc(c.exePath)}</div>
+        <td class="min-w-0">
+          <div style="display:flex;align-items:center;gap:5px;">
+            <strong class="truncate-90" title="${esc(c.processName)}.exe" style="color:${c.isLolBin ? 'var(--sig-amber)' : 'var(--txt-primary)'}">${esc(c.processName)}.exe</strong>
+            ${c.isLolBin ? '<span class="badge b-high">LOLBIN</span>' : ''}
+          </div>
+          <div class="truncate-90" style="color:var(--txt-muted);font-size:10px;" title="${esc(c.exePath)}">${esc(c.exePath)}</div>
         </td>
-        <td>${signBadge}</td>
+        <td class="min-w-0">${signBadge}</td>
         <td>${esc(c.localEp)}</td>
-        <td><strong style="color:var(--cyan)">${esc(c.remoteEp)}</strong></td>
-        <td>${esc(c.proto)} <span style="color:var(--txt-sub)">[${esc(c.state)}]</span>${ruleBadge}</td>
+        <td><strong style="color:var(--sig-cyan)">${esc(c.remoteEp)}</strong></td>
+        <td><span class="truncate-90" title="${esc(c.proto)}">${esc(c.proto)}</span> <span style="color:var(--txt-muted)">[${esc(c.state)}]</span>${ruleBadge}</td>
         <td><span class="badge ${sevClass}">${c.risk}%</span></td>
-        <td style="white-space:nowrap;">
-          <button class="btn btn-sm btn-red" onclick="blockIp('${esc(remIpOnly)}', 'TCP Table Block (${esc(c.processName)})')">🔥 Bloquear IP</button>
-          <button class="btn btn-sm btn-gold" onclick="scanProcessExe('${safePath}')">🔍 .exe</button>
-          <button class="btn btn-sm btn-red" onclick="killPid(${c.pid}, '${esc(c.processName)}')" title="Terminar proceso en memoria (EDR Kill Process)">💀 Kill PID</button>
+        <td style="text-align:right; white-space:nowrap;">
+          <button type="button" class="btn btn-sm" onclick="openForensicDrawer(${c.pid}, '${esc(c.processName)}', '${esc(c.localEp)}', '${esc(c.remoteEp)}', '${safeSigner}', ${c.risk}, '${safePath}')">Inspect</button>
+          <button type="button" class="btn btn-sm btn-red" onclick="blockIp('${esc(remIpOnly)}', 'TCP Table Block (${esc(c.processName)})')">Bloquear IP</button>
+          <button type="button" class="btn btn-sm btn-gold" onclick="scanProcessExe('${safePath}')">.exe</button>
+          <button type="button" class="btn btn-sm btn-red" onclick="killPid(${c.pid}, '${esc(c.processName)}')">Kill PID</button>
         </td>
       </tr>`;
     }).join('');
   }
 
   function renderFleetAndRules() {
-    if (!lastState) return;
-    const fleet = lastState.fleetNodes || [];
-    document.getElementById('tabFleetCnt').textContent = fleet.length;
-    document.getElementById('kFleetCnt').textContent = fleet.length;
+    const st = getEffectiveState();
+    if (!st) return;
+    const fleet = st.fleetNodes || [];
+    document.getElementById('tabFleetCnt').textContent = pluralEs(fleet.length, 'nodo', 'nodos');
+    document.getElementById('kFleetCnt').textContent = pluralEs(fleet.length, 'nodo', 'nodos');
     const fb = document.getElementById('fleetBody');
     if (fleet.length === 0) {
-      fb.innerHTML = '<tr><td colspan="5" style="color:var(--txt-sub);">Sin nodos registrados.</td></tr>';
+      fb.innerHTML = `<tr><td colspan="5"><div class="empty-state"><span>0 nodos registrados en la flota XDR.</span><button type="button" class="btn btn-sm btn-gold" onclick="simulateRemoteAgentHeartbeat()">Simular Sensor Remoto</button></div></td></tr>`;
     } else {
       fb.innerHTML = fleet.map(n => {
         const hId = n.hostId || n.hostname || n.hostName;
         const stCls = (n.status === 'ISOLATED' || n.isIsolated) ? 'b-crit' : (n.risk >= 75 ? 'b-high' : 'b-info');
         const isoBtn = (n.status === 'ISOLATED' || n.isIsolated)
-          ? `<button class="btn btn-sm" onclick="toggleHostIsolation('${esc(hId)}')">🔓 Levantar Aislamiento</button>`
-          : `<button class="btn btn-sm btn-red" onclick="toggleHostIsolation('${esc(hId)}')">🔒 Aislar Host</button>`;
+          ? `<button type="button" class="btn btn-sm" onclick="toggleHostIsolation('${esc(hId)}')">Levantar</button>`
+          : `<button type="button" class="btn btn-sm btn-red" onclick="toggleHostIsolation('${esc(hId)}')">Aislar Host</button>`;
         return `<tr>
           <td>
-            <strong style="color:var(--teal)">${esc(n.hostname || n.hostName)}</strong>
-            <div style="color:var(--txt-sub);font-size:10px;">${esc(n.role)} // Visto: ${esc(n.lastSeen)}</div>
+            <strong class="truncate-90" style="color:var(--sig-emerald)" title="${esc(n.hostname || n.hostName)}">${esc(n.hostname || n.hostName)}</strong>
+            <div class="truncate-90" style="color:var(--txt-muted);font-size:10px;">${esc(n.role)} · ${esc(n.lastSeen)}</div>
           </td>
           <td>
-            <strong style="color:var(--cyan)">${esc(n.ip || n.ipAddress)}</strong>
-            <div style="color:var(--txt-sub);font-size:10px;">${esc(n.os || n.osVersion)}</div>
+            <strong style="color:var(--sig-cyan)">${esc(n.ip || n.ipAddress)}</strong>
+            <div class="truncate-90" style="color:var(--txt-muted);font-size:10px;">${esc(n.os || n.osVersion)}</div>
           </td>
-          <td>CPU: <strong>${n.cpu}%</strong> | RAM: <strong>${n.ramPct}%</strong> | TCP: <strong>${n.tcpCount}</strong></td>
+          <td>CPU <strong>${n.cpu}%</strong> · RAM <strong>${n.ramPct}%</strong> · TCP <strong>${n.tcpCount}</strong></td>
           <td>
             <span class="badge ${stCls}">${esc(n.status)}</span>
-            <span class="badge b-mitre">Riesgo ${n.risk}%</span>
+            <span class="badge b-mitre">${n.risk}%</span>
           </td>
-          <td>${isoBtn}</td>
+          <td style="text-align:right;">${isoBtn}</td>
         </tr>`;
       }).join('');
     }
 
-    const rules = lastState.detectionRules || [];
-    document.getElementById('lblRulesCnt').textContent = rules.length;
+    const rules = st.detectionRules || [];
+    document.getElementById('lblRulesCnt').textContent = pluralEs(rules.length, 'regla', 'reglas');
     let totalRuleHits = 0;
     rules.forEach(r => { totalRuleHits += (r.hits || 0); });
-    document.getElementById('lblRuleHits').textContent = totalRuleHits;
+    document.getElementById('lblRuleHits').textContent = totalRuleHits.toLocaleString();
     const rb = document.getElementById('rulesBody');
-    rb.innerHTML = rules.map(r => {
-      const tCls = r.ruleType === 'YARA' ? 'b-high' : 'b-mitre';
-      const enBadge = r.enabled ? '<span class="badge b-info">ACTIVA</span>' : '<span class="badge b-crit">PAUSADA</span>';
-      return `<tr>
-        <td>
-          <strong>${esc(r.name || r.id)}</strong><br>
-          <span class="badge ${tCls}">${esc(r.ruleType)}</span> ${enBadge}
-        </td>
-        <td>
-          <span class="badge b-mitre">${esc(r.mitre)}</span><br>
-          <span style="color:var(--txt-sub);font-size:10px;">${esc(r.targetField)}</span>
-        </td>
-        <td>
-          <code style="color:var(--gold);font-size:10.5px;">${esc(r.pattern)}</code>
-        </td>
-        <td><strong style="color:var(--cyan)">${r.hits || 0}</strong></td>
-        <td style="white-space:nowrap;">
-          <button class="btn btn-sm" onclick="toggleEnterpriseRule('${esc(r.id)}', false)">${r.enabled ? '⏸' : '▶'}</button>
-          <button class="btn btn-sm btn-red" onclick="toggleEnterpriseRule('${esc(r.id)}', true)">🗑️</button>
-        </td>
-      </tr>`;
-    }).join('');
+    if (rules.length === 0) {
+      rb.innerHTML = `<tr><td colspan="5"><div class="empty-state">0 reglas YARA/Sigma cargadas.</div></td></tr>`;
+    } else {
+      rb.innerHTML = rules.map(r => {
+        const tCls = r.ruleType === 'YARA' ? 'b-high' : 'b-mitre';
+        const enBadge = r.enabled ? '<span class="badge b-info">ACTIVA</span>' : '<span class="badge b-crit">PAUSADA</span>';
+        return `<tr>
+          <td>
+            <strong class="truncate-90" title="${esc(r.name || r.id)}">${esc(r.name || r.id)}</strong><br>
+            <span class="badge ${tCls}">${esc(r.ruleType)}</span> ${enBadge}
+          </td>
+          <td>
+            <span class="badge b-mitre">${esc(r.mitre)}</span><br>
+            <span style="color:var(--txt-muted);font-size:10px;">${esc(r.targetField)}</span>
+          </td>
+          <td><code class="truncate-90" style="color:var(--sig-amber);font-size:10.5px;" title="${esc(r.pattern)}">${esc(r.pattern)}</code></td>
+          <td><strong style="color:var(--sig-cyan)">${r.hits || 0}</strong></td>
+          <td style="text-align:right; white-space:nowrap;">
+            <button type="button" class="btn btn-sm" onclick="toggleEnterpriseRule('${esc(r.id)}', false)">${r.enabled ? 'Pausar' : 'Activar'}</button>
+            <button type="button" class="btn btn-sm btn-red" onclick="toggleEnterpriseRule('${esc(r.id)}', true)">Borrar</button>
+          </td>
+        </tr>`;
+      }).join('');
+    }
   }
 
   function renderDnsTable() {
-    if (!lastState || !lastState.dnsAudits) return;
+    const st = getEffectiveState();
+    if (!st) return;
     const q = (document.getElementById('dnsFilter').value || '').toLowerCase();
-    const rows = lastState.dnsAudits.filter(d => {
+    const rows = (st.dnsAudits || []).filter(d => {
       if (!q) return true;
       return (d.domain || '').toLowerCase().includes(q) ||
              (d.resolvedIp || '').toLowerCase().includes(q) ||
              (d.verdict || '').toLowerCase().includes(q);
     });
-    document.getElementById('tabDnsCnt').textContent = rows.length;
+    document.getElementById('tabDnsCnt').textContent = pluralEs(rows.length, 'dominio', 'dominios');
     const tb = document.getElementById('dnsBody');
     if (rows.length === 0) {
-      tb.innerHTML = '<tr><td colspan="6" style="color:var(--txt-sub);">Pulsa [🔎 Auditar DNS Ahora] para analizar dominios en caché, DGA y C2 Beaconing.</td></tr>';
+      tb.innerHTML = `<tr><td colspan="6"><div class="empty-state"><span>0 dominios DNS auditados en la vista actual.</span><button type="button" class="btn btn-sm btn-cyan" onclick="triggerDnsAudit()">Auditar Caché DNS Ahora</button></div></td></tr>`;
       return;
     }
     tb.innerHTML = rows.map(d => {
@@ -1205,26 +2433,27 @@
       const bCls = isSusp ? 'b-crit' : 'b-info';
       const hasIp = d.resolvedIp && d.resolvedIp !== 'N/A' && /^\d+\./.test(d.resolvedIp);
       return `<tr>
-        <td style="color:var(--txt-sub);white-space:nowrap;">${esc(d.timestamp)}</td>
-        <td><strong style="color:${isSusp ? 'var(--gold)' : 'var(--txt-main)'}">${esc(d.domain)}</strong></td>
-        <td><code style="color:var(--cyan)">${esc(d.resolvedIp)}</code></td>
+        <td style="color:var(--txt-muted);white-space:nowrap;">${esc(d.timestamp)}</td>
+        <td><strong class="truncate-90" title="${esc(d.domain)}" style="color:${isSusp ? 'var(--sig-amber)' : 'var(--txt-primary)'}">${esc(d.domain)}</strong></td>
+        <td><code style="color:var(--sig-cyan)">${esc(d.resolvedIp)}</code></td>
         <td><strong>${d.entropy} bits/B</strong></td>
         <td>
-          <span class="badge ${bCls}">${esc(d.verdict)} (${d.risk}%)</span>
+          <span class="badge ${bCls} truncate-90" title="${esc(d.verdict)}">${esc(d.verdict)} (${d.risk}%)</span>
           <span class="badge b-mitre">${esc(d.mitre)}</span>
         </td>
-        <td>
-          ${hasIp ? `<button class="btn btn-sm btn-red" onclick="blockIp('${esc(d.resolvedIp)}', 'DNS DGA/CTI Block (${esc(d.domain)})')">🔥 Bloquear IP</button>` : '-'}
+        <td style="text-align:right;">
+          ${hasIp ? `<button type="button" class="btn btn-sm btn-red" onclick="blockIp('${esc(d.resolvedIp)}', 'DNS DGA/CTI Block (${esc(d.domain)})')">Bloquear IP</button>` : '-'}
         </td>
       </tr>`;
     }).join('');
   }
 
   function renderSiemTable() {
-    if (!lastState || !lastState.siemEvents) return;
+    const st = getEffectiveState();
+    if (!st) return;
     const sevF = document.getElementById('siemSevFilter').value;
     const q = (document.getElementById('siemSearch').value || '').toLowerCase();
-    const rows = lastState.siemEvents.filter(e => {
+    const rows = (st.siemEvents || []).filter(e => {
       if (sevF !== 'ALL' && e.severity !== sevF) return false;
       if (!q) return true;
       return (e.summary || '').toLowerCase().includes(q) ||
@@ -1233,10 +2462,10 @@
              (e.mitre || '').toLowerCase().includes(q) ||
              (e.module || '').toLowerCase().includes(q);
     });
-    document.getElementById('tabSiemCnt').textContent = rows.length;
+    document.getElementById('tabSiemCnt').textContent = pluralEs(rows.length, 'evento', 'eventos');
     const tb = document.getElementById('siemBody');
     if (rows.length === 0) {
-      tb.innerHTML = '<tr><td colspan="5" style="color:var(--txt-sub);">Sin eventos SIEM que coincidan con el filtro.</td></tr>';
+      tb.innerHTML = `<tr><td colspan="5"><div class="empty-state">0 eventos SIEM coinciden con el filtro.</div></td></tr>`;
       return;
     }
     tb.innerHTML = rows.map(e => {
@@ -1247,107 +2476,118 @@
       let actBtn = `<span class="badge b-info">${esc(e.action)}</span>`;
       if (isIp) {
         const ipOnly = e.target.split(':')[0];
-        actBtn += ` <button class="btn btn-sm btn-red" onclick="blockIp('${esc(ipOnly)}', 'SIEM Alert Block')">🔥 Bloquear</button>`;
+        actBtn += ` <button type="button" class="btn btn-sm btn-red" onclick="blockIp('${esc(ipOnly)}', 'SIEM Alert Block')">Bloquear</button>`;
       } else if (isFile && e.action !== 'QUARANTINED' && e.action !== 'AUTO_QUARANTINED') {
-        actBtn += ` <button class="btn btn-sm btn-gold" onclick="quarantinePath('${safeTarget}')">☣️ Aislar</button>`;
+        actBtn += ` <button type="button" class="btn btn-sm btn-gold" onclick="quarantinePath('${safeTarget}')">Aislar</button>`;
       }
       const chShort = (e.chainHash || '').substring(0, 10);
       return `<tr>
-        <td style="white-space:nowrap;color:var(--txt-sub);">
+        <td style="white-space:nowrap;color:var(--txt-muted);">
           <div>${esc(e.timestamp)}</div>
-          <span class="badge b-mitre" title="SHA-256 ChainHash: ${esc(e.chainHash)}">🔗 ${esc(chShort)}</span>
+          <span class="badge b-mitre" title="SHA-256 ChainHash: ${esc(e.chainHash)}">${esc(chShort)}</span>
         </td>
         <td style="white-space:nowrap;">
           <span class="badge ${bCls}">${esc(e.severity)}</span>
           <span class="badge b-mitre">${esc(e.mitre)}</span>
         </td>
         <td>
-          <strong>${esc(e.agent)}</strong> <span style="color:var(--txt-sub)">// ${esc(e.module)}</span><br>
-          <span style="color:var(--gold)">${esc(e.process)}</span>
+          <strong>${esc(e.agent)}</strong> <span style="color:var(--txt-muted)">// ${esc(e.module)}</span><br>
+          <span class="truncate-90" style="color:var(--sig-amber)" title="${esc(e.process)}">${esc(e.process)}</span>
         </td>
-        <td>
-          <div style="color:var(--cyan);font-weight:600;">${esc(e.target)}</div>
-          <div style="color:var(--txt-sub);font-size:11px;">${esc(e.summary)}</div>
+        <td class="min-w-0">
+          <div class="truncate-90" style="color:var(--sig-cyan);font-weight:600;" title="${esc(e.target)}">${esc(e.target)}</div>
+          <div class="break-anywhere" style="color:var(--txt-secondary);font-size:11px;">${esc(e.summary)}</div>
         </td>
-        <td style="white-space:nowrap;">${actBtn}</td>
+        <td style="text-align:right; white-space:nowrap;">${actBtn}</td>
       </tr>`;
     }).join('');
   }
 
   function renderAvTable() {
-    if (!lastState || !lastState.avScans) return;
+    const st = getEffectiveState();
+    if (!st) return;
     const q = (document.getElementById('avSearch').value || '').toLowerCase();
-    const rows = lastState.avScans.filter(r => {
+    const rows = (st.avScans || []).filter(r => {
       if (!q) return true;
       return (r.fileName || '').toLowerCase().includes(q) ||
              (r.sha256 || '').toLowerCase().includes(q) ||
              (r.verdict || '').toLowerCase().includes(q) ||
              (r.fullPath || '').toLowerCase().includes(q);
     });
-    document.getElementById('tabAvCnt').textContent = rows.length;
+    document.getElementById('tabAvCnt').textContent = pluralEs(rows.length, 'análisis', 'análisis');
     const tb = document.getElementById('avBody');
     if (rows.length === 0) {
-      tb.innerHTML = '<tr><td colspan="5" style="color:var(--txt-sub);">Pulsa [🔍 Auditar Red TCP/PID + Registro + Startup] o sube un archivo para analizarlo.</td></tr>';
+      tb.innerHTML = `<tr><td colspan="5"><div class="empty-state">0 archivos analizados en la vista actual.</div></td></tr>`;
       return;
     }
     tb.innerHTML = rows.map(r => {
       const bCls = r.risk >= 80 ? 'b-crit' : (r.risk >= 50 ? 'b-high' : 'b-info');
       const safePath = (r.fullPath || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
       return `<tr>
-        <td style="white-space:nowrap;color:var(--txt-sub);">${esc(r.timestamp)}</td>
+        <td style="white-space:nowrap;color:var(--txt-muted);">${esc(r.timestamp)}</td>
         <td>
           <span class="badge ${bCls}">${esc(r.verdict)} (${r.risk}%)</span><br>
           <span class="badge b-mitre" style="margin-top:3px;">${esc(r.mitre)}</span>
         </td>
-        <td>
-          <strong style="color:var(--txt-main)">${esc(r.fileName)}</strong> <span style="color:var(--txt-sub)">(${Number(r.sizeBytes || 0).toLocaleString()} B)</span>
-          <div style="color:var(--gold);font-size:11px;">${esc(r.detail)}</div>
-          <div style="color:var(--txt-sub);font-size:10px;">${esc(r.fullPath)}</div>
+        <td class="min-w-0">
+          <strong class="truncate-90" title="${esc(r.fileName)}">${esc(r.fileName)}</strong> <span style="color:var(--txt-muted)">(${Number(r.sizeBytes || 0).toLocaleString()} B)</span>
+          <div class="break-anywhere" style="color:var(--sig-amber);font-size:11px;">${esc(r.detail)}</div>
+          <div class="truncate-90" style="color:var(--txt-muted);font-size:10px;" title="${esc(r.fullPath)}">${esc(r.fullPath)}</div>
         </td>
         <td>
           <div>Entropía: <strong>${r.entropy} bits/B</strong></div>
-          <div style="color:var(--txt-sub);font-size:10px;" title="${esc(r.sha256)}">SHA256: ${esc((r.sha256 || '').substring(0, 16))}...</div>
+          <div style="color:var(--txt-muted);font-size:10px;" title="${esc(r.sha256)}">SHA256: ${esc((r.sha256 || '').substring(0, 16))}…</div>
         </td>
-        <td style="white-space:nowrap;">
-          <button class="btn btn-sm btn-gold" onclick="quarantinePath('${safePath}')">☣️ Cuarentena</button>
+        <td style="text-align:right; white-space:nowrap;">
+          <button type="button" class="btn btn-sm btn-gold" onclick="quarantinePath('${safePath}')">Cuarentena</button>
         </td>
       </tr>`;
     }).join('');
   }
 
   function renderFwAndQuar() {
-    if (!lastState) return;
+    const st = getEffectiveState();
+    if (!st) return;
     const fwTb = document.getElementById('fwBody');
-    const ips = lastState.blockedIps || [];
+    const ips = st.blockedIps || [];
     if (ips.length === 0) {
-      fwTb.innerHTML = '<tr><td colspan="4" style="color:var(--txt-sub);">Ninguna IP bloqueada actualmente en Windows Firewall.</td></tr>';
+      fwTb.innerHTML = `<tr><td colspan="4"><div class="empty-state">0 direcciones IP bloqueadas en Windows Firewall.</div></td></tr>`;
     } else {
       fwTb.innerHTML = ips.map(ip => `<tr>
         <td><code>PorygonIPS_Block_${esc(ip)}</code></td>
-        <td><strong style="color:var(--red)">${esc(ip)}</strong></td>
+        <td><strong style="color:var(--sig-crimson)">${esc(ip)}</strong></td>
         <td><span class="badge b-crit">BLOCKED IN/OUT</span></td>
-        <td><button class="btn btn-sm" onclick="unblockIp('${esc(ip)}')">🔓 Desbloquear en Firewall</button></td>
+        <td style="text-align:right;"><button type="button" class="btn btn-sm" onclick="unblockIp('${esc(ip)}')">Desbloquear</button></td>
       </tr>`).join('');
     }
 
     const qTb = document.getElementById('quarBody');
-    const qFiles = lastState.quarantinedFiles || [];
+    const qFiles = st.quarantinedFiles || [];
     if (qFiles.length === 0) {
-      qTb.innerHTML = '<tr><td colspan="4" style="color:var(--txt-sub);">Bóveda de Cuarentena vacía.</td></tr>';
+      qTb.innerHTML = `<tr><td colspan="4"><div class="empty-state">0 archivos aislados en la Bóveda de Cuarentena.</div></td></tr>`;
     } else {
       qTb.innerHTML = qFiles.map(q => `<tr>
         <td>
           <strong>${esc(q.id)}</strong>
-          <div style="color:var(--txt-sub);font-size:10px;">${esc(q.timestamp)}</div>
+          <div style="color:var(--txt-muted);font-size:10px;">${esc(q.timestamp)}</div>
         </td>
-        <td><strong style="color:var(--gold)">${esc(q.fileName)}</strong></td>
+        <td><strong class="truncate-90" style="color:var(--sig-amber)" title="${esc(q.fileName)}">${esc(q.fileName)}</strong></td>
         <td>
-          <div style="font-size:11px;">${esc(q.originalPath)}</div>
-          <div style="color:var(--txt-sub);font-size:10px;">SHA256: ${esc((q.sha256 || '').substring(0, 20))}...</div>
+          <div class="truncate-90" style="font-size:11px;" title="${esc(q.originalPath)}">${esc(q.originalPath)}</div>
+          <div style="color:var(--txt-muted);font-size:10px;">SHA256: ${esc((q.sha256 || '').substring(0, 20))}…</div>
         </td>
-        <td><button class="btn btn-sm" onclick="restoreQuarantine('${esc(q.id)}')">♻️ Restaurar Archivo</button></td>
+        <td style="text-align:right;"><button type="button" class="btn btn-sm" onclick="restoreQuarantine('${esc(q.id)}')">Restaurar</button></td>
       </tr>`).join('');
     }
+  }
+
+  function renderAllViews() {
+    renderTcpTable();
+    renderFleetAndRules();
+    renderDnsTable();
+    renderSiemTable();
+    renderAvTable();
+    renderFwAndQuar();
   }
 
   async function fetchState() {
@@ -1356,12 +2596,12 @@
       const st = await res.json();
       lastState = st;
 
-      document.getElementById('connDot').style.background = 'var(--teal)';
+      document.getElementById('connDot').style.background = 'var(--sig-emerald)';
       document.getElementById('kCpu').textContent = st.cpu + '%';
       document.getElementById('kGpu').textContent = st.gpu + '%';
       document.getElementById('kFps').textContent = st.fps;
       document.getElementById('kRam').textContent = st.ramPct + '% (' + st.ramUsed + 'G)';
-      document.getElementById('kCtiCnt').textContent = Number(st.ctiTotalIndicators || 0).toLocaleString();
+      document.getElementById('kCtiCnt').textContent = pluralEs(st.ctiTotalIndicators || 0, 'IOC', 'IOCs');
       document.getElementById('kKillCnt').textContent = st.totalEdrKills || 0;
       document.getElementById('kChainHash').textContent = (st.siemChainHash || 'GENESIS').substring(0, 12);
 
@@ -1371,10 +2611,10 @@
 
       const btnG = document.getElementById('btnGamer');
       if (st.gamerMode) {
-        btnG.textContent = '🎮 MODO GAMER ACTIVO (0% GPU)';
+        btnG.textContent = 'MODO GAMER ACTIVO (0% GPU)';
         btnG.className = 'btn btn-gold';
       } else {
-        btnG.textContent = '🎮 Modo Gamer 0% GPU';
+        btnG.textContent = 'Modo Gamer 0% GPU';
         btnG.className = 'btn';
       }
 
@@ -1382,37 +2622,37 @@
         const a0 = st.agents[0], a1 = st.agents[1], a2 = st.agents[2];
         document.getElementById('ag0Name').textContent = `${a0.name} // GEN G${a0.gen} · LVL ${a0.lvl}`;
         document.getElementById('ag0Stats').innerHTML =
-          `Procesos TCP Auditados: <strong>${st.totalPidAudits}</strong> | Alertas SIEM: <strong>${st.totalSiemAlerts}</strong> | Feeds CTI: <strong>${st.ctiTotalIndicators || 0} IOCs</strong><br>` +
-          `F2-Score Anti-FN: <strong>${a0.f2}%</strong> | Fitness: <strong>${a0.fit}</strong> | Precisión: <strong>${a0.acc}%</strong>`;
+          `Procesos TCP: <strong>${st.totalPidAudits}</strong> · Alertas: <strong>${pluralEs(st.totalSiemAlerts, 'alerta', 'alertas')}</strong> · CTI: <strong>${pluralEs(st.ctiTotalIndicators || 0, 'IOC', 'IOCs')}</strong><br>` +
+          `F2-Score Anti-FN: <strong>${a0.f2}%</strong> · Fitness: <strong>${a0.fit}</strong> · Precisión: <strong>${a0.acc}%</strong>`;
 
         document.getElementById('ag1Name').textContent = `${a1.name} // GEN G${a1.gen} · LVL ${a1.lvl}`;
         document.getElementById('ag1Stats').innerHTML =
-          `Archivos Analizados: <strong>${st.totalAvScans}</strong> | Candidato: <strong>${esc(st.candidateQuarantineName || 'Ninguno')}</strong><br>` +
-          `F2-Score Anti-FN: <strong>${a1.f2}%</strong> | Fitness: <strong>${a1.fit}</strong> | Precisión: <strong>${a1.acc}%</strong>`;
+          `Analizados: <strong>${pluralEs(st.totalAvScans, 'archivo', 'archivos')}</strong> · Candidato: <strong class="truncate-90">${esc(st.candidateQuarantineName || 'Ninguno')}</strong><br>` +
+          `F2-Score Anti-FN: <strong>${a1.f2}%</strong> · Fitness: <strong>${a1.fit}</strong> · Precisión: <strong>${a1.acc}%</strong>`;
 
         document.getElementById('ag2Name').textContent = `${a2.name} // GEN G${a2.gen} · LVL ${a2.lvl}`;
         document.getElementById('ag2Stats').innerHTML =
-          `Acciones IPS: <strong>${st.totalIpsActions}</strong> | IPs Bloqueadas: <strong>${(st.blockedIps||[]).length}</strong> | Cuarentena: <strong>${(st.quarantinedFiles||[]).length}</strong><br>` +
-          `Candidato Bloqueo IP: <strong style="color:var(--red)">${esc(st.candidateBlockIp || 'Ninguna')}</strong> (${esc(st.candidateBlockProc || '-')})`;
+          `Acciones IPS: <strong>${st.totalIpsActions}</strong> · Firewall: <strong>${pluralEs((st.blockedIps||[]).length, 'IP', 'IPs')}</strong> · Cuarentena: <strong>${pluralEs((st.quarantinedFiles||[]).length, 'archivo', 'archivos')}</strong><br>` +
+          `Candidato Bloqueo IP: <strong style="color:var(--sig-crimson)">${esc(st.candidateBlockIp || 'Ninguna')}</strong> (${esc(st.candidateBlockProc || '-')})`;
       }
 
       if (st.officePc) {
         const ob = document.getElementById('officeBadge');
         if (st.officePc.online) {
-          ob.textContent = 'ONLINE (:8002 C2/IDS + :5080 NIDS/VT)';
+          ob.textContent = 'ONLINE (:8002 + :5080)';
           ob.className = 'badge b-info';
         } else {
           ob.textContent = 'OFFLINE';
           ob.className = 'badge b-crit';
         }
-        document.getElementById('offOnlineAgents').textContent = Number(st.officePc.onlineAgentsCount || 0).toLocaleString();
-        document.getElementById('offTotalAgents').textContent = Number(st.officePc.totalAgentsCount || 0).toLocaleString();
+        document.getElementById('offOnlineAgents').textContent = pluralEs(st.officePc.onlineAgentsCount || 0, 'agente online', 'agentes online');
+        document.getElementById('offTotalAgents').textContent = pluralEs(st.officePc.totalAgentsCount || 0, 'registrado', 'registrados');
         document.getElementById('offLogsRaw').textContent = Number(st.officePc.logsRaw || 0).toLocaleString();
         document.getElementById('offLogsDec').textContent = Number(st.officePc.logsDecrypted || 0).toLocaleString();
         document.getElementById('offCreds').textContent = Number(st.officePc.credentialsCount || 0).toLocaleString();
         document.getElementById('offScreens').textContent = Number(st.officePc.screenshotsCount || 0).toLocaleString();
-        document.getElementById('offIdsAlerts').textContent = Number(st.officePc.idsAlertsTotal || 0).toLocaleString();
-        document.getElementById('offLanHosts').textContent = Number(st.officePc.lanHostsTotal || 0).toLocaleString();
+        document.getElementById('offIdsAlerts').textContent = pluralEs(st.officePc.idsAlertsTotal || 0, 'alerta', 'alertas');
+        document.getElementById('offLanHosts').textContent = pluralEs(st.officePc.lanHostsTotal || 0, 'host', 'hosts');
         document.getElementById('offOnlineList').textContent = st.officePc.onlineAgentsSummary || 'Ninguno activo (<120s)';
         document.getElementById('offProbeReport').textContent = st.officePc.lastLiveProbeReport || 'Listo para probar agentes online';
       }
@@ -1436,14 +2676,9 @@
         manualIpInput.value = st.candidateBlockIp;
       }
 
-      renderTcpTable();
-      renderFleetAndRules();
-      renderDnsTable();
-      renderSiemTable();
-      renderAvTable();
-      renderFwAndQuar();
+      renderAllViews();
     } catch (e) {
-      document.getElementById('connDot').style.background = 'var(--red)';
+      document.getElementById('connDot').style.background = 'var(--sig-crimson)';
     }
   }
 
