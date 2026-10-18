@@ -3406,9 +3406,41 @@ public static class PorygonCyberDefenseEngine {
                                     }
                                 }
                                 if (shouldAdd) {
+                                    // Skip 0-engine or 1-engine false positives on benign CDNs (Google, Cloudflare, Microsoft, Fastly, Yandex, DigitalOcean)
+                                    if ((nType == "VT_MALICIOUS_0_ENGINES" || nType == "VT_MALICIOUS_1_ENGINES") &&
+                                        (nDet.IndexOf("Google", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                         nDet.IndexOf("Cloudflare", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                         nDet.IndexOf("Microsoft", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                         nDet.IndexOf("Fastly", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                         nDet.IndexOf("DigitalOcean", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                         nDet.IndexOf("G-Core", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                         nDet.IndexOf("Facebook", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                         nDet.IndexOf("YANDEX", StringComparison.OrdinalIgnoreCase) >= 0)) {
+                                        continue;
+                                    }
+
                                     string mitre = nType.Contains("LATERAL") ? "T1021.002" : "T1071";
+                                    string epIpOnly = rEp.Contains(":") ? rEp.Split(':')[0] : rEp;
+                                    string originHostLabel = "DEVQB [192.168.2.222] (VT-Cache :5080)";
+                                    if (epIpOnly.StartsWith("192.168.") || epIpOnly.StartsWith("10.")) {
+                                        string resolvedName = null;
+                                        lock (SyncLock) {
+                                            foreach (var kv in FleetNodes) {
+                                                if (string.Equals(kv.Value.IpAddress, epIpOnly, StringComparison.OrdinalIgnoreCase)) {
+                                                    resolvedName = kv.Value.Hostname;
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                        originHostLabel = !string.IsNullOrEmpty(resolvedName)
+                                            ? string.Format("{0} [{1}] (NIDS :5080)", resolvedName, epIpOnly)
+                                            : string.Format("Host LAN [{0}] (NIDS :5080)", epIpOnly);
+                                    } else if (rEp.StartsWith("185.220.101.5")) {
+                                        originHostLabel = "DEVQB [192.168.2.222] (Sandbox VT Lookup :5080)";
+                                    }
+
                                     RecordSiemEvent("PORYGON-Z", "QB_NIDS_5080", nScore >= 0.90f ? "CRITICAL" : "HIGH",
-                                        mitre, "QB-SOC-5080", rEp, "", nScore, nType + " // " + nDet, "QB_NIDS_ALERT");
+                                        mitre, originHostLabel, rEp, "", nScore, nType + " // " + nDet, "QB_NIDS_ALERT");
                                 }
                             }
                         }
