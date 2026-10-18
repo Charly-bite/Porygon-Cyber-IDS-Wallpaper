@@ -960,12 +960,41 @@
   .soar-grid {
     padding: 14px;
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 12px;
     font-family: var(--font-mono);
     font-size: 11.5px;
   }
-  @media (max-width: 780px) { .soar-grid { grid-template-columns: 1fr; } }
+  @media (max-width: 1120px) { .soar-grid { grid-template-columns: 1fr; } }
+
+  .forensic-screen-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: 10px;
+    padding: 12px;
+  }
+  .forensic-screen-card {
+    background: var(--bg-surface-2);
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-sm);
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    cursor: pointer;
+    transition: transform var(--dur-press) var(--ease-out), opacity var(--dur-press) var(--ease-out);
+  }
+  .forensic-screen-card:active {
+    transform: scale(0.97);
+  }
+  .forensic-screen-thumb {
+    width: 100%;
+    height: 120px;
+    object-fit: cover;
+    border-radius: 4px;
+    background: #0f172a;
+    border: 1px solid var(--border-subtle);
+  }
 
   .soar-box {
     background: var(--bg-surface-2);
@@ -1607,7 +1636,7 @@
       </div>
 
       <!-- ======================================================================
-           SECCIÓN 2: PROXY SSH & C2/IDS UNIFICADO (sec-bridge)
+           SECCIÓN 2: PROXY SSH & C2/IDS UNIFICADO + EXPLORADOR FORENSE (sec-bridge)
            ====================================================================== -->
       <section id="viewBridge" class="sec-block bridge-banner hidden">
         <div class="bridge-row">
@@ -1615,9 +1644,14 @@
             <span class="status-dot"></span>
             <strong>SSH PROXY BRIDGE // office-pc (100.89.1.27 → :8002 C2/IDS & :5080 NIDS/VT)</strong>
             <span class="badge b-info" id="officeBadge">ONLINE</span>
+            <span class="badge b-info">CERT: QBOSS CODE SIGNING (SHA-256)</span>
             <span class="badge b-info">LISTA BLANCA MUTUA PORYGON ↔ C2 ACTIVA</span>
           </div>
           <div class="toolbar">
+            <button type="button" class="btn btn-sm btn-primary" id="btnDeployCanary" onclick="deployCanarySensor()" title="Desplegar sensor Dual-Agent Canario con puente IPC en agentes C2 online">
+              <span class="spinner"></span>
+              <span>Desplegar Sensor Dual-Agent (Canario)</span>
+            </button>
             <button type="button" class="btn btn-sm btn-gold" id="btnProbeOnline" onclick="probeOnlineC2Agents()" title="Sonda IDS unificada de solo lectura sobre los agentes C2 online">
               <span class="spinner"></span>
               <span>Probar Agentes Online (Read-Only)</span>
@@ -1663,6 +1697,44 @@
             Listo para probar agentes online (Solo lectura, sin modificar binarios)
           </div>
         </div>
+
+        <!-- FASE 3: EXPLORADOR FORENSE UNIFICADO (office-pc:8002) -->
+        <div class="panel" style="margin-top: 6px;">
+          <div class="panel-header">
+            <div class="panel-title cyan">
+              <span>EXPLORADOR FORENSE UNIFICADO EN VIVO // office-pc:8002 (<span id="forensicCountLbl">Listo para consulta</span>)</span>
+            </div>
+            <div class="panel-controls">
+              <button type="button" class="btn btn-sm btn-cyan" id="fTabLogs" onclick="switchForensicTab('logs')">Logs Descifrados</button>
+              <button type="button" class="btn btn-sm" id="fTabVault" onclick="switchForensicTab('vault')">Bóveda Secretos</button>
+              <button type="button" class="btn btn-sm" id="fTabAlerts" onclick="switchForensicTab('alerts')">Alertas IDS (:8002)</button>
+              <button type="button" class="btn btn-sm" id="fTabScreens" onclick="switchForensicTab('screenshots')">Galería Capturas</button>
+            </div>
+          </div>
+          <div class="scan-bar" style="justify-content:space-between;">
+            <div style="display:flex; flex-wrap:wrap; align-items:center; gap:6px; flex:1;">
+              <input type="text" id="forensicSearchInput" class="input-txt" style="flex:1; min-width:220px;" placeholder="Buscar por IP (ej. 192.168.2.231), usuario, dominio, proceso o palabra clave..." onkeydown="if(event.key==='Enter') queryForensicExplorer()">
+              <select id="forensicFilterSelect" class="input-txt" onchange="queryForensicExplorer()">
+                <option value="">Todos los Niveles</option>
+                <option value="CRITICAL">CRITICAL</option>
+                <option value="HIGH">HIGH</option>
+                <option value="MEDIUM">MEDIUM</option>
+              </select>
+              <button type="button" class="btn btn-sm btn-primary" id="btnForensicQuery" onclick="queryForensicExplorer()">
+                <span class="spinner"></span>
+                <span>Consultar Forense</span>
+              </button>
+            </div>
+            <div style="display:flex; align-items:center; gap:6px;" id="forensicPagerWrap">
+              <button type="button" class="btn btn-sm" onclick="stepForensicPage(-1)">◀ Ant</button>
+              <span class="mono" style="font-size:11px; color:var(--txt-secondary);" id="forensicPageLbl">Pág 1</span>
+              <button type="button" class="btn btn-sm" onclick="stepForensicPage(1)">Sig ▶</button>
+            </div>
+          </div>
+          <div class="table-wrap" id="forensicExplorerContainer" style="max-height: 360px;">
+            <div class="empty-state">Selecciona una pestaña o pulsa <strong>Consultar Forense</strong> para inspeccionar en vivo los +207,000 logs, Bóveda de Secretos, Alertas IDS y Capturas de <code>office-pc:8002</code>.</div>
+          </div>
+        </div>
       </section>
 
       <!-- ======================================================================
@@ -1706,13 +1778,14 @@
         <div class="panel-header">
           <div class="panel-title emerald">FLOTA MULTI-HOST UNIFICADA C2 + XDR SENSORS (<span id="tabFleetCnt">1 nodo</span>)</div>
           <div class="panel-controls">
+            <button type="button" class="btn btn-sm btn-primary" onclick="deployCanarySensor()">Desplegar Sensor Dual-Agent (Canario)</button>
             <button type="button" class="btn btn-sm btn-gold" onclick="simulateRemoteAgentHeartbeat()">Simular Sensor Remoto</button>
             <a class="btn btn-sm btn-cyan" href="/api/agent-script" target="_blank">Descargar Porygon-Sensor.ps1</a>
           </div>
         </div>
         <div class="scan-bar" style="justify-content:space-between;">
           <span class="mono" style="font-size:11px; color:var(--txt-secondary);">
-            Lista blanca mutua activa entre agentes C2 (<code>office-pc:8002</code>) y sensores Porygon XDR. Despliega <code>Porygon-Sensor.ps1</code> en nuevos nodos.
+            Coexistencia Dual-Agent activa (<code>C2 :8002</code> + <code>Porygon XDR :5090</code>) con Salvaguarda Dual-Lock: C2 (<code>192.168.2.222</code>), Tailscale (<code>100.*</code>), RustDesk (<code>:21118</code>) y binarios firmados por <code>QBOSS Code Signing</code> protegidos.
           </span>
         </div>
         <div class="table-wrap">
@@ -1723,7 +1796,7 @@
                 <th>IP Local / OS</th>
                 <th>Telemetría</th>
                 <th>Estado / Riesgo</th>
-                <th style="text-align:right;">Contención EDR</th>
+                <th style="text-align:right;">Respuesta Remota SOAR (Dual-Lock)</th>
               </tr>
             </thead>
             <tbody id="fleetBody"></tbody>
@@ -1805,10 +1878,11 @@
            ====================================================================== -->
       <section id="viewSoar" class="sec-block panel hidden">
         <div class="panel-header">
-          <div class="panel-title red">CONECTOR SOAR PERIMETRAL (FORTIGATE WEBHOOK & SYSLOG CEF RFC 5424 UDP 514)</div>
+          <div class="panel-title red">CONECTOR SOAR PERIMETRAL (SYSLOG CEF UDP 514 · FORTIGATE · WEBHOOK MULTI-CANAL CRÍTICO)</div>
           <div class="panel-controls">
             <span class="badge b-info">CEF Enviados: <span id="kCefSent">0</span></span>
             <span class="badge b-high">Pushes FortiGate: <span id="kFgSent">0</span></span>
+            <span class="badge b-crit">Webhooks Críticos: <span id="kWhSent">0</span></span>
           </div>
         </div>
         <div class="soar-grid">
@@ -1844,12 +1918,27 @@
               </div>
             </div>
           </div>
+
+          <div class="soar-box">
+            <h4>Webhook Alertas Críticas (Telegram / Discord / Teams / Slack)</h4>
+            <div class="form-row">
+              <label><input type="checkbox" id="soarAlertWhEn"> Notificar eventos CRITICAL en vivo con ChainHash SHA-256</label>
+            </div>
+            <div class="form-row">
+              <label>Endpoint Webhook JSON (Discord / Slack / Teams / Telegram Relay):</label>
+              <input type="text" id="soarAlertWhUrl" class="input-txt" placeholder="https://discord.com/api/webhooks/... o https://hooks.slack.com/...">
+            </div>
+            <div class="form-row">
+              <label>Formato de Payload Unificado:</label>
+              <div style="color:var(--txt-muted); font-size:10.5px;">Incluye <code>content</code>, <code>text</code>, <code>message</code>, <code>mitre</code> y <code>chainHash</code> verificable.</div>
+            </div>
+          </div>
         </div>
         <div class="scan-bar" style="justify-content:space-between;">
           <span class="mono" style="font-size:11px; color:var(--sig-amber-txt); font-weight:600;" id="soarStatusTxt">Estado SOAR: STANDBY</span>
           <div style="display:flex; gap:6px;">
             <button type="button" class="btn btn-sm" onclick="saveSoarConfig(false)">Guardar Config SOAR</button>
-            <button type="button" class="btn btn-sm btn-gold" onclick="saveSoarConfig(true)">Guardar y Probar CEF / Webhook</button>
+            <button type="button" class="btn btn-sm btn-gold" onclick="saveSoarConfig(true)">Guardar y Probar Multi-Canal (CEF + Webhook)</button>
           </div>
         </div>
       </section>
@@ -1990,6 +2079,31 @@
 </div>
 
 <!-- ==========================================================================
+     DUAL-LOCK HOST ISOLATION CONFIRMATION MODAL (220ms entry / 0ms on Escape)
+     ========================================================================== -->
+<div class="cmdk-backdrop" id="isolateModalBackdrop" data-open="false" onclick="if(event.target===this) closeIsolateHostModal(false)">
+  <div class="cmdk-dialog" role="dialog" aria-modal="true" aria-label="Confirmación de Aislamiento Remoto Dual-Lock" style="width:min(480px, 92vw); padding:16px; display:flex; flex-direction:column; gap:12px;">
+    <div style="display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border-hairline); padding-bottom:10px;">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span class="badge b-crit">DUAL-LOCK GUARDRAIL</span>
+        <strong style="font-size:13px;">Confirmar Acción de Red Remota</strong>
+      </div>
+      <kbd class="cmdk-kbd">ESC</kbd>
+    </div>
+    <div class="mono" style="font-size:11.5px; color:var(--txt-secondary); line-height:1.55;" id="isolateModalBody">
+      ¿Confirmas ejecutar el aislamiento perimetral en el agente remoto?
+    </div>
+    <div class="soar-box mono" style="font-size:10.5px; color:var(--sig-emerald-txt);">
+      <strong>Salvaguarda Anti-Lockout Garantizada:</strong> Se preservará comunicación estricta con <code>192.168.2.222</code> (office-pc), <code>192.168.2.218</code> (Admin), malla Tailscale (<code>100.*</code>) y puertos <code>8002</code> (C2/IDS), <code>5080</code> (NIDS), <code>5090</code> (XDR), <code>21118</code> (RustDesk), <code>22</code> (SSH) y <code>3389</code> (RDP).
+    </div>
+    <div style="display:flex; justify-content:flex-end; gap:8px; padding-top:4px;">
+      <button type="button" class="btn" onclick="closeIsolateHostModal(false)">Cancelar (ESC)</button>
+      <button type="button" class="btn btn-red" id="btnConfirmIsolateModal" onclick="confirmIsolateHostModal()">Ejecutar en Agente (:8002)</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==========================================================================
      CONTEXTUAL FORENSIC SOCKET INSPECTOR DRAWER (220ms entry / 0ms Esc)
      ========================================================================== -->
 <aside class="forensic-drawer" id="forensicDrawer" data-open="false" aria-label="Inspector Forense de Socket">
@@ -2060,8 +2174,8 @@
     },
     bridge: {
       viewId: 'viewBridge',
-      title: 'Proxy SSH Unificado & Telemetría C2/IDS (office-pc)',
-      sub: 'Túnel SSH hacia 100.89.1.27 (:8002 C2/IDS & :5080 NIDS/VT) con Lista Blanca Mutua y sonda en vivo de agentes'
+      title: 'Proxy SSH Unificado, Coexistencia Dual-Agent & Explorador Forense (office-pc)',
+      sub: 'Túnel SSH hacia 100.89.1.27 (:8002 C2/IDS & :5080 NIDS/VT) con Búsqueda Forense, Bóveda de Secretos y Capturas'
     },
     tcp: {
       viewId: 'viewTcp',
@@ -2070,8 +2184,8 @@
     },
     fleet: {
       viewId: 'viewFleet',
-      title: 'Flota Multi-Host Unificada (Agentes C2 + Sensores XDR)',
-      sub: 'Inventario centralizado de nodos reportando desde office-pc (:8002) y sensores Porygon-Sensor.ps1'
+      title: 'Flota Multi-Host Unificada (Agentes C2 + Sensores XDR + Respuesta Remota)',
+      sub: 'Inventario centralizado de nodos reportando desde office-pc (:8002) con acciones remotas protegidas por Dual-Lock'
     },
     rules: {
       viewId: 'viewRules',
@@ -2085,8 +2199,8 @@
     },
     soar: {
       viewId: 'viewSoar',
-      title: 'Conector SOAR Perimetral (Syslog CEF & FortiGate Webhook)',
-      sub: 'Exportación en tiempo real RFC 5424 UDP 514 (Wazuh/QRadar/Splunk) y propagación de bloqueos a FortiOS'
+      title: 'Conector SOAR Perimetral (Syslog CEF, FortiGate & Webhook Crítico)',
+      sub: 'Exportación en tiempo real RFC 5424 UDP 514, propagación a FortiOS y notificaciones multicanal firmadas SHA-256'
     },
     siem: {
       viewId: 'viewSiem',
@@ -2239,16 +2353,17 @@
      ============================================================================ */
   const CMDK_COMMANDS = [
     { label: 'Ir a Sección: Resumen Ejecutivo & Enjambre IA', kbd: 'Sección', run: () => selectSection('overview') },
-    { label: 'Ir a Sección: Proxy SSH & C2/IDS Unificado (office-pc)', kbd: 'Sección', run: () => selectSection('bridge') },
+    { label: 'Ir a Sección: Proxy SSH & Explorador Forense (office-pc)', kbd: 'Sección', run: () => selectSection('bridge') },
     { label: 'Ir a Sección: Sockets TCP ↔ PID / Authenticode', kbd: 'Sección', run: () => selectSection('tcp') },
-    { label: 'Ir a Sección: Flota Multi-Host XDR', kbd: 'Sección', run: () => selectSection('fleet') },
+    { label: 'Ir a Sección: Flota Multi-Host XDR & Respuesta Activa', kbd: 'Sección', run: () => selectSection('fleet') },
     { label: 'Ir a Sección: Motor de Reglas YARA & Sigma', kbd: 'Sección', run: () => selectSection('rules') },
     { label: 'Ir a Sección: Inspector DNS & Entropía DGA', kbd: 'Sección', run: () => selectSection('dns') },
     { label: 'Ir a Sección: SIEM Ledger SHA-256', kbd: 'Sección', run: () => selectSection('siem') },
     { label: 'Ir a Sección: Antivirus & EDR en Tiempo Real', kbd: 'Sección', run: () => selectSection('av') },
     { label: 'Ir a Sección: Firewall IPS & Bóveda de Cuarentena', kbd: 'Sección', run: () => selectSection('ips') },
-    { label: 'Ir a Sección: Conector SOAR Perimetral', kbd: 'Sección', run: () => selectSection('soar') },
+    { label: 'Ir a Sección: Conector SOAR Perimetral & Webhook', kbd: 'Sección', run: () => selectSection('soar') },
     { label: 'Ir a Sección: Vista Mosaico Completa (Todas)', kbd: 'Sección', run: () => selectSection('all') },
+    { label: 'Acción: Desplegar Sensor Dual-Agent (Canario) en Agentes Online', kbd: '↵ Canary', run: () => deployCanarySensor() },
     { label: 'Acción: Probar Agentes C2 Online (Sonda IDS Solo Lectura)', kbd: '↵ Probe', run: () => probeOnlineC2Agents() },
     { label: 'Acción: Sincronizar Proxy SSH office-pc (:8002 C2/IDS)', kbd: '↵ Sync', run: () => syncOfficePcC2(false) },
     { label: 'Acción: Auditar Red TCP/PID + Startup', kbd: '↵ Audit', run: () => triggerAudit() },
@@ -2367,6 +2482,7 @@
       closeCommandPalette(true);
       closePlaybookPopover(true);
       closeForensicDrawer(true);
+      closeIsolateHostModal(true);
       return;
     }
 
@@ -2544,7 +2660,7 @@
   let lastState = null;
   let soarFormDirty = false;
 
-  ['soarSyslogEn','soarSyslogHost','soarSyslogPort','soarFgEn','soarFgUrl','soarFgGroup','soarFgToken'].forEach(id => {
+  ['soarSyslogEn','soarSyslogHost','soarSyslogPort','soarFgEn','soarFgUrl','soarFgGroup','soarFgToken','soarAlertWhEn','soarAlertWhUrl'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('input', () => { soarFormDirty = true; });
     if (el) el.addEventListener('change', () => { soarFormDirty = true; });
@@ -2592,6 +2708,10 @@
     showToast('Ejecutando sonda IDS unificada (solo lectura) en agentes C2 online...', false);
     apiPost('/api/probe-online-c2-agents', {}, 'btnProbeOnline');
   }
+  function deployCanarySensor() {
+    showToast('Desplegando Sensor Canario Dual-Agent C2+XDR en agentes online (QB_WFS_002 / VIG-17)...', false);
+    apiPost('/api/deploy-canary-sensor', {}, 'btnDeployCanary');
+  }
   function triggerDnsAudit() {
     showToast('Auditando caché DNS, entropía DGA y patrones C2 Beaconing...', false);
     apiPost('/api/dns-audit', {});
@@ -2606,6 +2726,265 @@
   function toggleHostIsolation(hostId) {
     apiPost('/api/host-isolate', { hostId: hostId });
   }
+
+  /* ============================================================================
+     FASE 2: REMOTE ACTIVE RESPONSE WITH DUAL-LOCK GUARDRAILS (:8002)
+     ============================================================================ */
+  let pendingIsolateAgentId = '';
+  let pendingIsolateAction = 'isolate_host';
+
+  function openIsolateHostModal(agentId, isCurrentlyIsolated) {
+    pendingIsolateAgentId = agentId || '';
+    pendingIsolateAction = isCurrentlyIsolated ? 'unisolate_host' : 'isolate_host';
+    const bd = document.getElementById('isolateModalBackdrop');
+    bd.removeAttribute('data-kb-instant');
+    const bodyEl = document.getElementById('isolateModalBody');
+    const btnEl = document.getElementById('btnConfirmIsolateModal');
+    if (isCurrentlyIsolated) {
+      bodyEl.innerHTML = `¿Confirmas <strong>levantar el aislamiento perimetral</strong> en el agente remoto <code style="color:var(--sig-cyan-txt);font-weight:700;">${esc(agentId)}</code> a través de <code>office-pc:8002</code>?`;
+      btnEl.textContent = 'Levantar Aislamiento (:8002)';
+      btnEl.className = 'btn btn-emerald';
+    } else {
+      bodyEl.innerHTML = `¿Confirmas ejecutar <strong>Aislamiento Perimetral Completo</strong> en el agente remoto <code style="color:var(--sig-crimson-txt);font-weight:700;">${esc(agentId)}</code> a través de <code>office-pc:8002</code>?`;
+      btnEl.textContent = 'Confirmar Aislamiento (:8002)';
+      btnEl.className = 'btn btn-red';
+    }
+    bd.setAttribute('data-open', 'true');
+  }
+
+  function closeIsolateHostModal(fromKeyboard) {
+    const bd = document.getElementById('isolateModalBackdrop');
+    if (!bd) return;
+    if (fromKeyboard) {
+      bd.setAttribute('data-kb-instant', 'true');
+    } else {
+      bd.removeAttribute('data-kb-instant');
+    }
+    bd.setAttribute('data-open', 'false');
+  }
+
+  function confirmIsolateHostModal() {
+    const agId = pendingIsolateAgentId;
+    const act = pendingIsolateAction;
+    closeIsolateHostModal(false);
+    if (!agId) return;
+    apiPost('/api/remote-soar-action', {
+      agentId: agId,
+      actionType: act,
+      target: agId,
+      confirmed: true
+    });
+  }
+
+  function remoteBlockIpPrompt(agentId) {
+    const defIp = (lastState && lastState.candidateBlockIp && !lastState.candidateBlockIp.startsWith('100.') && !lastState.candidateBlockIp.startsWith('192.200.0.'))
+      ? lastState.candidateBlockIp
+      : '';
+    const ip = window.prompt(`[Dual-Lock SOAR] Introduce la IP externa maliciosa a bloquear en el firewall del agente remoto ${agentId}:`, defIp);
+    if (!ip || !ip.trim()) return;
+    apiPost('/api/remote-soar-action', {
+      agentId: agentId,
+      actionType: 'block_ip',
+      target: ip.trim(),
+      confirmed: true
+    });
+  }
+
+  function remoteKillPidPrompt(agentId) {
+    const pidOrName = window.prompt(`[Dual-Lock SOAR] Introduce el PID numérico o nombre de proceso a terminar en el agente remoto ${agentId} (los binarios firmados por QBOSS / Microsoft y agentes C2/RustDesk están protegidos):`, '');
+    if (!pidOrName || !pidOrName.trim()) return;
+    apiPost('/api/remote-soar-action', {
+      agentId: agentId,
+      actionType: 'kill_pid',
+      target: pidOrName.trim(),
+      confirmed: true
+    });
+  }
+
+  /* ============================================================================
+     FASE 3: UNIFIED FORENSIC EXPLORER (Logs / Vault / Alerts / Screenshots)
+     ============================================================================ */
+  let currentForensicMode = 'logs';
+  let currentForensicPage = 1;
+  let forensicLoadedOnce = false;
+
+  function switchForensicTab(mode) {
+    currentForensicMode = mode || 'logs';
+    currentForensicPage = 1;
+    ['Logs','Vault','Alerts','Screens'].forEach(t => {
+      const btn = document.getElementById('tabFor' + t);
+      if (btn) btn.className = 'btn btn-sm';
+    });
+    const mapId = { logs: 'tabForLogs', vault: 'tabForVault', alerts: 'tabForAlerts', screenshots: 'tabForScreens' };
+    const activeBtn = document.getElementById(mapId[currentForensicMode] || 'tabForLogs');
+    if (activeBtn) activeBtn.className = 'btn btn-sm btn-cyan';
+    queryForensicExplorer(1);
+  }
+
+  function stepForensicPage(delta) {
+    const nextP = Math.max(1, currentForensicPage + delta);
+    queryForensicExplorer(nextP);
+  }
+
+  async function queryForensicExplorer(page) {
+    currentForensicPage = Math.max(1, Number(page || 1));
+    const q = (document.getElementById('forensicQueryInput').value || '').trim();
+    const host = (document.getElementById('forensicHostInput').value || '').trim();
+    const statusLbl = document.getElementById('forensicStatusLbl');
+    const pageLbl = document.getElementById('forensicPageLbl');
+    const tableWrap = document.getElementById('forensicTableWrap');
+    const screenWrap = document.getElementById('forensicScreensWrap');
+    const detailBox = document.getElementById('forensicDetailViewer');
+    if (detailBox) detailBox.classList.add('hidden');
+
+    statusLbl.textContent = `Consultando office-pc:8002 (${currentForensicMode.toUpperCase()})...`;
+    pageLbl.textContent = `Pág ${currentForensicPage}`;
+
+    try {
+      const url = `/api/office-forensic?mode=${encodeURIComponent(currentForensicMode)}&q=${encodeURIComponent(q)}&host=${encodeURIComponent(host)}&page=${currentForensicPage}&per_page=24`;
+      const res = await fetch(url);
+      const data = await res.json();
+      forensicLoadedOnce = true;
+
+      if (data && data.error) {
+        statusLbl.textContent = `Error: ${data.error}`;
+        return;
+      }
+
+      if (currentForensicMode === 'screenshots') {
+        tableWrap.classList.add('hidden');
+        screenWrap.classList.remove('hidden');
+        const items = data.items || data.screenshots || [];
+        const total = data.total || items.length;
+        statusLbl.textContent = `Galería Forense: ${pluralEs(total, 'captura indexada', 'capturas indexadas')} (mostrando ${items.length})`;
+        if (items.length === 0) {
+          screenWrap.innerHTML = `<div class="empty-state" style="grid-column:1/-1;">0 capturas coinciden con el filtro de host (${esc(host || 'todos')}).</div>`;
+          return;
+        }
+        screenWrap.innerHTML = items.map(s => {
+          const relPath = s.path || s.rel_path || s.file || s.name || '';
+          const hName = s.alias || s.hostname || s.host || s.ip || relPath.split('/')[0] || 'HOST';
+          const fName = s.filename || s.name || relPath.split('/').pop() || 'screen.png';
+          const dt = s.modified || s.date || s.mtime || s.timestamp || '';
+          const thumbUrl = `/api/office-screenshot-img?path=${encodeURIComponent(relPath)}&thumb=1`;
+          const safeRel = relPath.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+          return `<div class="forensic-screen-card" onclick="openForensicScreenshotFull('${safeRel}', '${esc(hName)}', '${esc(fName)}')">
+            <img class="forensic-screen-thumb" loading="lazy" src="${thumbUrl}" alt="${esc(fName)}">
+            <div class="forensic-screen-meta">
+              <strong class="truncate-90" style="color:var(--sig-emerald-txt);display:block;" title="${esc(hName)}">${esc(hName)}</strong>
+              <span class="truncate-90" style="display:block;" title="${esc(fName)}">${esc(fName)}</span>
+              <span style="font-size:9.5px;color:var(--txt-muted);">${esc(dt)}</span>
+            </div>
+          </div>`;
+        }).join('');
+        return;
+      }
+
+      screenWrap.classList.add('hidden');
+      tableWrap.classList.remove('hidden');
+      const thead = document.getElementById('forensicThead');
+      const tbody = document.getElementById('forensicTbody');
+
+      if (currentForensicMode === 'logs') {
+        const items = data.results || data.items || data.logs || [];
+        const total = data.total !== undefined ? data.total : items.length;
+        statusLbl.textContent = `Logs Descifrados: ${pluralEs(total, 'coincidencia', 'coincidencias')} en office-pc:8002`;
+        thead.innerHTML = `<tr><th>Host / Fecha</th><th>Archivo</th><th>Extracto / Coincidencia</th><th style="text-align:right">Inspección</th></tr>`;
+        if (items.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="4"><div class="empty-state">0 logs descifrados coinciden con "${esc(q || '*')}".</div></td></tr>`;
+          return;
+        }
+        tbody.innerHTML = items.slice(0, 40).map(it => {
+          const relPath = it.path || it.rel_path || it.file || it.name || '';
+          const fName = it.filename || it.name || relPath.split(/[\\/]/).pop() || relPath;
+          const ipMatch = fName.match(/(\d{1,3}(?:\.\d{1,3}){3})/);
+          const hName = it.host || it.hostname || (ipMatch ? ipMatch[1] : 'HOST');
+          const snip = it.snippets || it.snippet || it.preview || it.match || it.line || 'Log descifrado disponible para lectura';
+          const dt = it.modified || it.date || it.mtime || '';
+          const safeRel = relPath.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+          return `<tr>
+            <td style="white-space:nowrap;"><strong style="color:var(--sig-emerald-txt)">${esc(hName)}</strong><div style="font-size:10px;color:var(--txt-muted);">${esc(dt)}</div></td>
+            <td><code class="truncate-90" title="${esc(relPath)}">${esc(fName)}</code></td>
+            <td class="min-w-0"><div class="break-anywhere" style="font-size:11px;color:var(--txt-secondary);">${esc(snip)}</div></td>
+            <td style="text-align:right;"><button type="button" class="btn btn-sm btn-cyan" onclick="openForensicLogDetail('${safeRel}')">Ver Log</button></td>
+          </tr>`;
+        }).join('');
+      } else if (currentForensicMode === 'vault') {
+        const items = data.secrets || data.items || data.results || (Array.isArray(data) ? data : []);
+        statusLbl.textContent = `Bóveda de Secretos: ${pluralEs(items.length, 'registro extraído', 'registros extraídos')}`;
+        thead.innerHTML = `<tr><th>Host / Origen</th><th>Tipo / Servicio</th><th>Usuario / Identificador</th><th>Secreto / Metadata</th></tr>`;
+        if (items.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="4"><div class="empty-state">0 registros en la vista actual de la bóveda.</div></td></tr>`;
+          return;
+        }
+        tbody.innerHTML = items.slice(0, 50).map(s => {
+          const hName = s.host || s.hostname || 'HOST';
+          const kind = s.type || s.category || s.service || 'CREDENTIAL';
+          const usr = s.username || s.user || s.email || s.account || '-';
+          const val = s.secret || s.password || s.value || s.url || s.context || '***';
+          return `<tr>
+            <td><strong style="color:var(--sig-emerald-txt)">${esc(hName)}</strong></td>
+            <td><span class="badge b-high">${esc(kind)}</span></td>
+            <td><code style="color:var(--sig-cyan-txt)">${esc(usr)}</code></td>
+            <td class="min-w-0"><div class="truncate-90" title="${esc(val)}">${esc(val)}</div></td>
+          </tr>`;
+        }).join('');
+      } else if (currentForensicMode === 'alerts') {
+        const items = data.alerts || data.items || data.results || (Array.isArray(data) ? data : []);
+        statusLbl.textContent = `Alertas IDS (:8002): ${pluralEs(items.length, 'alerta detectada', 'alertas detectadas')}`;
+        thead.innerHTML = `<tr><th>Severidad / Regla</th><th>Host</th><th>Detalle / Evidencia</th><th>Fecha</th></tr>`;
+        if (items.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="4"><div class="empty-state">0 alertas IDS en el filtro actual.</div></td></tr>`;
+          return;
+        }
+        tbody.innerHTML = items.slice(0, 50).map(a => {
+          const sev = (a.severity || a.level || 'HIGH').toUpperCase();
+          const bCls = sev.includes('CRIT') ? 'b-crit' : (sev.includes('HIGH') ? 'b-high' : 'b-info');
+          const rule = a.rule || a.category || a.type || 'IDS_MATCH';
+          const hName = a.host || a.hostname || 'HOST';
+          const desc = a.description || a.detail || a.match || a.line || JSON.stringify(a);
+          const dt = a.timestamp || a.date || '';
+          return `<tr>
+            <td style="white-space:nowrap;"><span class="badge ${bCls}">${esc(sev)}</span> <strong style="font-size:11px;">${esc(rule)}</strong></td>
+            <td><strong style="color:var(--sig-emerald-txt)">${esc(hName)}</strong></td>
+            <td class="min-w-0"><div class="break-anywhere" style="font-size:11px;color:var(--txt-secondary);">${esc(desc)}</div></td>
+            <td style="white-space:nowrap;color:var(--txt-muted);font-size:10.5px;">${esc(dt)}</td>
+          </tr>`;
+        }).join('');
+      }
+    } catch (e) {
+      statusLbl.textContent = 'Error consultando explorador forense: ' + e.message;
+    }
+  }
+
+  async function openForensicLogDetail(relPath) {
+    if (!relPath) return;
+    const box = document.getElementById('forensicDetailViewer');
+    const titleEl = document.getElementById('forensicDetailTitle');
+    const contentEl = document.getElementById('forensicDetailContent');
+    box.classList.remove('hidden');
+    titleEl.textContent = 'Cargando archivo forense: ' + relPath + '...';
+    contentEl.textContent = 'Descargando desde office-pc:8002...';
+    try {
+      const res = await fetch('/api/office-forensic?mode=log_detail&path=' + encodeURIComponent(relPath));
+      const data = await res.json();
+      titleEl.textContent = 'Archivo Forense: ' + relPath;
+      contentEl.textContent = data.content || data.text || data.raw || JSON.stringify(data, null, 2);
+    } catch (e) {
+      contentEl.textContent = 'Error leyendo detalle de log: ' + e.message;
+    }
+  }
+
+  function openForensicScreenshotFull(relPath, hName, fName) {
+    const box = document.getElementById('forensicDetailViewer');
+    const titleEl = document.getElementById('forensicDetailTitle');
+    const contentEl = document.getElementById('forensicDetailContent');
+    box.classList.remove('hidden');
+    titleEl.textContent = `Captura Forense HD: ${hName} // ${fName}`;
+    const fullUrl = `/api/office-screenshot-img?path=${encodeURIComponent(relPath)}&thumb=0`;
+    contentEl.innerHTML = `<div style="text-align:center;"><img src="${fullUrl}" alt="${esc(fName)}" style="max-width:100%;max-height:540px;border-radius:6px;border:1px solid var(--border-subtle);"></div>`;
+  }
+
   function simulateRemoteAgentHeartbeat() {
     const num = Math.floor(10 + Math.random() * 80);
     apiPost('/api/agent-heartbeat', {
@@ -2646,6 +3025,8 @@
       fortiGateUrl: document.getElementById('soarFgUrl').value.trim(),
       fortiGateGroup: document.getElementById('soarFgGroup').value.trim(),
       fortiGateToken: document.getElementById('soarFgToken').value.trim(),
+      alertWebhookEnabled: document.getElementById('soarAlertWhEn').checked,
+      alertWebhookUrl: document.getElementById('soarAlertWhUrl').value.trim(),
       testEvent: !!testEvent
     });
   }
@@ -2789,10 +3170,23 @@
     } else {
       fb.innerHTML = fleet.map(n => {
         const hId = n.hostId || n.hostname || n.hostName;
-        const stCls = (n.status === 'ISOLATED' || n.isIsolated) ? 'b-crit' : (n.risk >= 75 ? 'b-high' : 'b-info');
-        const isoBtn = (n.status === 'ISOLATED' || n.isIsolated)
-          ? `<button type="button" class="btn btn-sm" onclick="toggleHostIsolation('${esc(hId)}')">Levantar</button>`
-          : `<button type="button" class="btn btn-sm btn-red" onclick="toggleHostIsolation('${esc(hId)}')">Aislar Host</button>`;
+        const isIsolated = (n.status === 'ISOLATED' || n.isIsolated);
+        const isDual = (n.status || '').includes('DUAL_AGENT');
+        const stCls = isIsolated ? 'b-crit' : (isDual ? 'b-info' : (n.risk >= 75 ? 'b-high' : 'b-info'));
+        const isLocalMaster = (n.role || '').includes('MASTER_SOC') || hId === 'LOCAL';
+        let actionBtns = '';
+        if (isLocalMaster) {
+          actionBtns = `<span class="badge b-info">NODO MASTER PROTEGIDO</span>`;
+        } else {
+          const isoBtn = isIsolated
+            ? `<button type="button" class="btn btn-sm btn-emerald" onclick="openIsolateHostModal('${esc(hId)}', true)">Levantar</button>`
+            : `<button type="button" class="btn btn-sm btn-red" onclick="openIsolateHostModal('${esc(hId)}', false)">Aislar Host</button>`;
+          actionBtns = `
+            <button type="button" class="btn btn-sm" onclick="remoteBlockIpPrompt('${esc(hId)}')" title="Bloquear IP en firewall del agente remoto (:8002)">Bloquear IP</button>
+            <button type="button" class="btn btn-sm btn-gold" onclick="remoteKillPidPrompt('${esc(hId)}')" title="Terminar PID en agente remoto con protección Authenticode">Kill PID</button>
+            ${isoBtn}
+          `;
+        }
         return `<tr>
           <td>
             <strong class="truncate-90" style="color:var(--sig-emerald-txt)" title="${esc(n.hostname || n.hostName)}">${esc(n.hostname || n.hostName)}</strong>
@@ -2807,7 +3201,7 @@
             <span class="badge ${stCls}">${esc(n.status)}</span>
             <span class="badge b-mitre">${n.risk}%</span>
           </td>
-          <td style="text-align:right;">${isoBtn}</td>
+          <td style="text-align:right; white-space:nowrap;">${actionBtns}</td>
         </tr>`;
       }).join('');
     }
@@ -3128,6 +3522,8 @@
       if (st.soar) {
         document.getElementById('kCefSent').textContent = st.soar.totalCefSent || 0;
         document.getElementById('kFgSent').textContent = st.soar.totalFortiGatePushes || 0;
+        const kWh = document.getElementById('kWhSent');
+        if (kWh) kWh.textContent = st.soar.totalAlertWebhooksSent || 0;
         document.getElementById('soarStatusTxt').textContent = 'Estado SOAR: ' + (st.soar.lastStatus || 'STANDBY');
         if (!soarFormDirty) {
           document.getElementById('soarSyslogEn').checked = !!st.soar.syslogEnabled;
@@ -3136,6 +3532,10 @@
           document.getElementById('soarFgEn').checked = !!st.soar.fortiGateEnabled;
           document.getElementById('soarFgUrl').value = st.soar.fortiGateUrl || '';
           document.getElementById('soarFgGroup').value = st.soar.fortiGateGroup || 'PORYGON_XDR_BLOCKLIST';
+          const whEn = document.getElementById('soarAlertWhEn');
+          const whUrl = document.getElementById('soarAlertWhUrl');
+          if (whEn) whEn.checked = !!st.soar.alertWebhookEnabled;
+          if (whUrl) whUrl.value = st.soar.alertWebhookUrl || '';
         }
       }
 
@@ -3145,6 +3545,9 @@
       }
 
       renderAllViews();
+      if (!forensicLoadedOnce && st.officePc && st.officePc.online) {
+        queryForensicExplorer(1);
+      }
     } catch (e) {
       document.getElementById('connDot').style.background = 'var(--sig-crimson)';
     }

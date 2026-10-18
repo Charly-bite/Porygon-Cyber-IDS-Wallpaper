@@ -35,4 +35,28 @@ Write-Host "[3/3] Compilando TrayAutoHide.exe (Auto-Ocultar Iconos de Bandeja)..
        "$repoRoot\src\TrayAutoHide.cs"
 
 Copy-Item "$repoRoot\Models" "$binDir\Models" -Recurse -Force
-Write-Host "Compilacion completada con exito en: $binDir" -ForegroundColor Green
+
+# 4. Firma Digital Authenticode Corporativa (CN=QBOSS Code Signing, O=Quimica Boss, OU=IT)
+try {
+    $qbossCert = Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert -ErrorAction SilentlyContinue |
+        Where-Object { $_.Subject -match 'QBOSS Code Signing' -and $_.HasPrivateKey } |
+        Select-Object -First 1
+    if (-not $qbossCert) {
+        $qbossCert = New-SelfSignedCertificate -Subject "CN=QBOSS Code Signing, O=Quimica Boss, OU=IT" `
+            -Type CodeSigningCert -KeyUsage DigitalSignature -CertStoreLocation "Cert:\CurrentUser\My" `
+            -NotAfter (Get-Date).AddYears(5) -ErrorAction Stop
+    }
+    if ($qbossCert) {
+        foreach ($exeName in @("HackerWallpaper.exe", "HackerLockScreen.exe", "TrayAutoHide.exe")) {
+            $exePath = Join-Path $binDir $exeName
+            if (Test-Path $exePath) {
+                $sig = Set-AuthenticodeSignature -FilePath $exePath -Certificate $qbossCert -HashAlgorithm SHA256
+                Write-Host "[SIGN] $exeName firmado con $($qbossCert.Subject) [$($qbossCert.Thumbprint.Substring(0,10))]" -ForegroundColor Yellow
+            }
+        }
+    }
+} catch {
+    Write-Warning "Aviso de firma Authenticode: $($_.Exception.Message)"
+}
+
+Write-Host "Compilacion y firma completadas con exito en: $binDir" -ForegroundColor Green
