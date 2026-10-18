@@ -1618,7 +1618,8 @@ public static class PorygonCyberDefenseEngine {
         }
         bool yaraOrSigmaHit = mod.Contains("YARA") || mod.Contains("SIGMA") || mod.Contains("CTI") ||
             sum.Contains("CTI") || sum.Contains("FEODO") || sum.Contains("YARA") || sum.Contains("RANSOM") ||
-            sum.Contains("MIMIKATZ") || sum.Contains("BEACON") || act.Contains("CTI");
+            sum.Contains("MIMIKATZ") || sum.Contains("BEACON") || sum.Contains("VT_MALICIOUS") ||
+            act.Contains("CTI") || act.Contains("VT_MALICIOUS");
 
         if (isExternalPublicIp && (ctiHit || yaraOrSigmaHit)) {
             evidenceDetail = string.Format("Factor 1: IP pública externa fuera de LAN/Tailscale ({0}) + Factor 2: Correlación {1} (Riesgo {2:0}%)",
