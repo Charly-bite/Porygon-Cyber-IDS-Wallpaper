@@ -2788,6 +2788,10 @@ public static class PorygonCyberDefenseEngine {
     public static bool EnsureOfficePcSshProxyTunnel(bool forceRestart) {
         bool p8002 = IsLocalPortListening(8002);
         bool p5080 = IsLocalPortListening(5080);
+        if (string.Equals(Environment.MachineName, "DEVQB", StringComparison.OrdinalIgnoreCase)) {
+            OfficePcTunnelOnline = p8002 || p5080;
+            return OfficePcTunnelOnline;
+        }
         if (!forceRestart && p8002 && p5080) {
             OfficePcTunnelOnline = true;
             return true;
@@ -2812,7 +2816,7 @@ public static class PorygonCyberDefenseEngine {
             }
 
             ProcessStartInfo psi = new ProcessStartInfo("ssh.exe",
-                "-N -o BatchMode=yes -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -L 127.0.0.1:5080:127.0.0.1:5080 -L 127.0.0.1:8002:127.0.0.1:8002 office-pc") {
+                "-N -o BatchMode=yes -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -L 127.0.0.1:5080:192.168.2.222:5080 -L 127.0.0.1:8002:192.168.2.222:8002 office-pc") {
                 CreateNoWindow = true,
                 UseShellExecute = false,
                 WindowStyle = ProcessWindowStyle.Hidden
@@ -3219,23 +3223,40 @@ public static class PorygonCyberDefenseEngine {
                                             }
                                         }
                                         if (isNewProbeResult) {
-                                            // Cross-check the online agent's external/LAN endpoints against Unified Porygon XDR + CTI Rules
+                                            // Cross-check the online agent's external/LAN endpoints against Unified Porygon XDR + CTI Rules + VirusTotal (:5080)
+                                            int agentVtChecksThisCycle = 0;
                                             for (int e = 0; e < extEndpoints.Count; e++) {
                                                 string epFull = extEndpoints[e];
                                                 string epAddr = epFull.Split(' ')[0];
+                                                string epPidTag = epFull.Contains("[") ? epFull.Substring(epFull.IndexOf('[')) : ("PID:" + apid);
                                                 string remIpOnly = epAddr.Split(':')[0];
                                                 string remPortStr = epAddr.Contains(":") ? epAddr.Split(':')[1] : "0";
                                                 // Never flag office-pc C2 (192.168.2.222 / 100.89.1.27)
                                                 if (remIpOnly == "192.168.2.222" || remIpOnly == "100.89.1.27") continue;
 
+                                                if (!remIpOnly.StartsWith("192.168.") && !remIpOnly.StartsWith("10.") &&
+                                                    !remIpOnly.StartsWith("100.") && !remIpOnly.StartsWith("127.") &&
+                                                    agentVtChecksThisCycle < 2 && IsLocalPortListening(5080)) {
+                                                    agentVtChecksThisCycle++;
+                                                    try {
+                                                        string vtUrl = string.Format(
+                                                            "http://127.0.0.1:5080/api/wallpaper-vt-check?target={0}&port={1}&host={2}&proc={3}",
+                                                            Uri.EscapeDataString(remIpOnly),
+                                                            Uri.EscapeDataString(remPortStr),
+                                                            Uri.EscapeDataString(ahname + " [" + aip + "]"),
+                                                            Uri.EscapeDataString(epPidTag));
+                                                        wc.DownloadString(vtUrl);
+                                                    } catch { }
+                                                }
+
                                                 if (IsCtiMaliciousIp(remIpOnly)) {
                                                     RecordSiemEvent("PORYGON-Z", "UNIFIED_AGENT_CTI", "CRITICAL", "T1071",
-                                                        ahname + " (" + aip + ")", epAddr, "", 0.97f,
+                                                        ahname + " (" + aip + ") " + epPidTag, epAddr, "", 0.97f,
                                                         string.Format("[UNIFIED-IDS] Agente Online {0} ({1}) conectado a IP en lista CTI Botnet/C2: {2}", ahname, aip, epFull),
                                                         "UNIFIED_IDS_ALERT");
                                                 } else if (remPortStr == "80" && !remIpOnly.StartsWith("192.168.") && !remIpOnly.StartsWith("10.")) {
                                                     RecordSiemEvent("PORYGON", "UNIFIED_AGENT_NIDS", "HIGH", "T1071.001",
-                                                        ahname + " (" + aip + ")", epAddr, "", 0.85f,
+                                                        ahname + " (" + aip + ") " + epPidTag, epAddr, "", 0.85f,
                                                         string.Format("[UNIFIED-IDS] Tráfico HTTP sin cifrar (:80) hacia WAN detectado en agente online {0} ({1}) -> {2}", ahname, aip, epFull),
                                                         "UNIFIED_IDS_ALERT");
                                                     if (OnInject3DThreatOrb != null) {
@@ -3396,6 +3417,9 @@ public static class PorygonCyberDefenseEngine {
                                 string rEp = nd.ContainsKey("remote_ep") && nd["remote_ep"] != null ? nd["remote_ep"].ToString() : "";
                                 string nType = nd.ContainsKey("type") && nd["type"] != null ? nd["type"].ToString() : "QB_NIDS";
                                 string nDet = nd.ContainsKey("detail") && nd["detail"] != null ? nd["detail"].ToString() : "";
+                                string nOriginLabel = nd.ContainsKey("origin_label") && nd["origin_label"] != null ? nd["origin_label"].ToString() : "";
+                                string nOriginHost = nd.ContainsKey("origin_host") && nd["origin_host"] != null ? nd["origin_host"].ToString() : "";
+                                string nOriginProc = nd.ContainsKey("origin_proc") && nd["origin_proc"] != null ? nd["origin_proc"].ToString() : "";
                                 float nScore = nd.ContainsKey("score") ? Convert.ToSingle(nd["score"]) : 0.85f;
                                 string dedupKey = "QB5080_" + rEp + "_" + nType;
                                 bool shouldAdd = false;
@@ -3421,7 +3445,12 @@ public static class PorygonCyberDefenseEngine {
 
                                     string mitre = nType.Contains("LATERAL") ? "T1021.002" : "T1071";
                                     string epIpOnly = rEp.Contains(":") ? rEp.Split(':')[0] : rEp;
-                                    string originHostLabel = "DEVQB [192.168.2.222] (VT-Cache :5080)";
+                                    string originHostLabel = !string.IsNullOrEmpty(nOriginLabel)
+                                        ? nOriginLabel
+                                        : (!string.IsNullOrEmpty(nOriginHost)
+                                            ? (!string.IsNullOrEmpty(nOriginProc) ? (nOriginHost + " // " + nOriginProc) : nOriginHost)
+                                            : "DEVQB [192.168.2.222] (VT-Cache :5080)");
+
                                     if (epIpOnly.StartsWith("192.168.") || epIpOnly.StartsWith("10.")) {
                                         string resolvedName = null;
                                         lock (SyncLock) {
@@ -3434,8 +3463,8 @@ public static class PorygonCyberDefenseEngine {
                                         }
                                         originHostLabel = !string.IsNullOrEmpty(resolvedName)
                                             ? string.Format("{0} [{1}] (NIDS :5080)", resolvedName, epIpOnly)
-                                            : string.Format("Host LAN [{0}] (NIDS :5080)", epIpOnly);
-                                    } else if (rEp.StartsWith("185.220.101.5")) {
+                                            : (!string.IsNullOrEmpty(nOriginHost) ? nOriginHost : string.Format("Host LAN [{0}] (NIDS :5080)", epIpOnly));
+                                    } else if (string.IsNullOrEmpty(nOriginHost) && rEp.StartsWith("185.220.101.5")) {
                                         originHostLabel = "DEVQB [192.168.2.222] (Sandbox VT Lookup :5080)";
                                     }
 
@@ -10079,7 +10108,13 @@ public class HackerWallpaperForm : Form {
                         try {
                             using (System.Net.WebClient vtWc = new System.Net.WebClient()) {
                                 vtWc.Encoding = System.Text.Encoding.UTF8;
-                                string vtJson = vtWc.DownloadString("http://127.0.0.1:5080/api/wallpaper-vt-check?target=" + remIp + "&port=" + remPort);
+                                string vtUrl = string.Format(
+                                    "http://127.0.0.1:5080/api/wallpaper-vt-check?target={0}&port={1}&host={2}&proc={3}",
+                                    Uri.EscapeDataString(remIp),
+                                    remPort,
+                                    Uri.EscapeDataString(Environment.MachineName),
+                                    Uri.EscapeDataString(procTag));
+                                string vtJson = vtWc.DownloadString(vtUrl);
                                 JavaScriptSerializer vtSer = new JavaScriptSerializer();
                                 Dictionary<string, object> vtObj = vtSer.Deserialize<Dictionary<string, object>>(vtJson);
                                 if (vtObj != null) {
