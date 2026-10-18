@@ -1786,7 +1786,11 @@
               <option value="PORYGON2">PORYGON2 (Kernel EDR · Authenticode · YARA/Sigma · Cuarentena)</option>
               <option value="PORYGON-Z">PORYGON-Z (Firewall IPS · SOAR · Aislamiento Dual-Lock)</option>
             </select>
-            <input type="text" class="input" id="alertResSearch" placeholder="Buscar alerta por ID, host (DEVQB, QB_WFS_002), IP, dominio, proceso o cómo la resolvió Porygon..." oninput="renderAlertsResolutionPanel()" style="flex:1; min-width:240px;">
+            <span style="font-size:11px; color:var(--txt-muted); font-weight:600; margin-left:4px;">Host de Origen:</span>
+            <select class="select" id="alertHostFilter" onchange="renderAlertsResolutionPanel()" title="Filtrar alertas por servidor o estación de origen">
+              <option value="ALL">Todos los Hosts de Origen</option>
+            </select>
+            <input type="text" class="input" id="alertResSearch" placeholder="Buscar alerta por ID, host (DEVQB, QB_WFS_002), IP, dominio, proceso o cómo la resolvió Porygon..." oninput="renderAlertsResolutionPanel()" style="flex:1; min-width:220px;">
           </div>
           <div style="font-size:11px; color:var(--txt-secondary);">
             Tasa de Resolución Porygon: <strong id="lblAlertsResRate" style="color:var(--sig-emerald-txt)">100%</strong>
@@ -3757,6 +3761,47 @@
     return baseEvents;
   }
 
+  function extractAlertOriginHostKey(a) {
+    const p = String((a && a.process) || '').trim();
+    if (!p) return 'Estación Local (HOME)';
+    // If format is "HOST // PROC", take HOST part
+    if (p.includes(' // ')) {
+      return p.split(' // ')[0].trim();
+    }
+    // If format is "HOST [IP] (NIDS :5080)" or "HOST [IP]"
+    const bracketMatch = p.match(/^([A-Za-z0-9_\-\.\s]+?)\s*\[([0-9]{1,3}(?:\.[0-9]{1,3}){3})/);
+    if (bracketMatch) {
+      const hName = bracketMatch[1].trim();
+      const hIp = bracketMatch[2].trim();
+      return `${hName} [${hIp}]`;
+    }
+    // If format is "HOST [user | PID:123]" from C2 canary/probe
+    const userPidMatch = p.match(/^([A-Za-z0-9_\-\.]+)\s*\[[^\]]*PID:/i);
+    if (userPidMatch) {
+      const hName = userPidMatch[1].trim();
+      const tgt = String((a && a.target) || '').split(':')[0].trim();
+      return tgt && /^[0-9]+\.[0-9]+\./.test(tgt) ? `${hName} [${tgt}]` : hName;
+    }
+    // If format is "HOST (IP)" from Unified Agent
+    const parenIpMatch = p.match(/^([A-Za-z0-9_\-\.]+)\s*\(([0-9]{1,3}(?:\.[0-9]{1,3}){3})\)/);
+    if (parenIpMatch) {
+      return `${parenIpMatch[1].trim()} [${parenIpMatch[2].trim()}]`;
+    }
+    // Local process like "chrome.exe (PID:1234)" or "svchost.exe (PID:...)"
+    if (/\(PID:\d+\)/i.test(p) || /\.exe\b/i.test(p)) {
+      return 'Estación Local (HOME / Procesos EDR)';
+    }
+    return p;
+  }
+
+  function setAlertHostFilter(hostKey) {
+    const sel = document.getElementById('alertHostFilter');
+    if (sel) {
+      sel.value = hostKey || 'ALL';
+    }
+    renderAlertsResolutionPanel();
+  }
+
   function renderAlertsResolutionPanel() {
     const st = getEffectiveState();
     if (!st) return;
@@ -3809,12 +3854,35 @@
       rateEl.style.color = cntPend === 0 ? 'var(--sig-emerald-txt)' : 'var(--sig-amber-txt)';
     }
 
+    // Dynamically populate #alertHostFilter with unique origin hosts and counts
+    const hostCountsMap = {};
+    allAlerts.forEach(a => {
+      const hk = extractAlertOriginHostKey(a);
+      hostCountsMap[hk] = (hostCountsMap[hk] || 0) + 1;
+    });
+    const sortedHosts = Object.keys(hostCountsMap).sort((a, b) => hostCountsMap[b] - hostCountsMap[a]);
+    const selHost = document.getElementById('alertHostFilter');
+    let hostF = selHost ? selHost.value : 'ALL';
+    if (selHost && document.activeElement !== selHost) {
+      const prevVal = selHost.value || 'ALL';
+      selHost.innerHTML = `<option value="ALL">Todos los Hosts de Origen (${sortedHosts.length} hosts)</option>` +
+        sortedHosts.map(hk => `<option value="${esc(hk)}">${esc(hk)} (${hostCountsMap[hk]})</option>`).join('');
+      if (prevVal !== 'ALL' && hostCountsMap[prevVal]) {
+        selHost.value = prevVal;
+        hostF = prevVal;
+      } else {
+        selHost.value = 'ALL';
+        hostF = 'ALL';
+      }
+    }
+
     const agentF = (document.getElementById('alertAgentFilter') ? document.getElementById('alertAgentFilter').value : 'ALL');
     const q = (document.getElementById('alertResSearch') ? document.getElementById('alertResSearch').value : '').toLowerCase().trim();
 
     const filtered = allAlerts.filter(a => {
       if (currentAlertResFilter !== 'ALL' && a.resolutionStatus !== currentAlertResFilter) return false;
       if (agentF !== 'ALL' && (a.resolvedBy || '').toUpperCase() !== agentF) return false;
+      if (hostF !== 'ALL' && extractAlertOriginHostKey(a) !== hostF) return false;
       if (!q) return true;
       return (a.alertId || '').toLowerCase().includes(q) ||
              (a.process || '').toLowerCase().includes(q) ||
@@ -3836,9 +3904,9 @@
 
     if (filtered.length === 0) {
       tb.innerHTML = `<tr><td colspan="6"><div class="empty-state">
-        <span>0 alertas coinciden con el filtro activo (${esc(currentAlertResFilter)} / ${esc(agentF)}).</span>
+        <span>0 alertas coinciden con el filtro activo (${esc(currentAlertResFilter)} / ${esc(agentF)} / ${esc(hostF)}).</span>
         <div style="display:flex;gap:6px;justify-content:center;margin-top:6px;">
-          <button type="button" class="btn btn-sm btn-cyan" onclick="setAlertResFilter('ALL')">Mostrar Todas las Alertas</button>
+          <button type="button" class="btn btn-sm btn-cyan" onclick="setAlertResFilter('ALL'); setAlertHostFilter('ALL');">Mostrar Todas las Alertas</button>
           <button type="button" class="btn btn-sm btn-gold" onclick="probeOnlineC2Agents()">Ejecutar Sonda IDS C2 (:8002)</button>
         </div>
       </div></td></tr>`;
@@ -3865,6 +3933,8 @@
       const agMeta = agentMetaMap[agKey] || agentMetaMap['PORYGON'];
       const chShort = (a.chainHash || '').substring(0, 10);
       const safeKey = (a.alertId || a.chainHash || '').replace(/'/g, "\\'");
+      const hostKey = extractAlertOriginHostKey(a);
+      const safeHostKey = hostKey.replace(/'/g, "\\'");
 
       const actionBtn = a.resolutionStatus === 'PENDING_ACTION'
         ? `<button type="button" class="btn btn-sm btn-emerald" onclick="resolveSingleAlertWithPorygon('${safeKey}')">⚡ Resolver con Porygon</button>`
@@ -3882,7 +3952,9 @@
           <div style="color:var(--txt-secondary);font-size:10.5px;margin-top:4px;font-weight:600;">${esc(a.module)}</div>
         </td>
         <td class="min-w-0">
-          <strong class="truncate-90" style="color:var(--sig-amber-txt);" title="${esc(a.process)}">${esc(a.process)}</strong>
+          <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+            <strong class="truncate-90" style="color:var(--sig-amber-txt);cursor:pointer;text-decoration:underline dotted;" onclick="setAlertHostFilter('${safeHostKey}')" title="Clic para filtrar alertas de ${esc(hostKey)}">${esc(a.process)}</strong>
+          </div>
           <div class="truncate-90" style="color:var(--sig-cyan-txt);font-weight:600;font-size:11px;" title="${esc(a.target)}">${esc(a.target)}</div>
           <div class="break-anywhere" style="color:var(--txt-secondary);font-size:11px;margin-top:2px;">${esc(a.summary)}</div>
         </td>
