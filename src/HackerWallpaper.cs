@@ -1005,7 +1005,7 @@ public static class PorygonCyberDefenseEngine {
                     IPAddress locIp = new IPAddress(row.dwLocalAddr);
                     IPAddress remIp = new IPAddress(row.dwRemoteAddr);
                     int locPort = ConvertNetworkPort(row.dwLocalPort);
-                    int remPort = ConvertNetworkPort(row.dwRemotePort);
+                    int remPort = (row.dwState == 2 || row.dwRemoteAddr == 0) ? 0 : ConvertNetworkPort(row.dwRemotePort);
 
                     string exactKey = locIp.ToString() + ":" + locPort + "|" + remIp.ToString() + ":" + remPort;
                     string remKey = remIp.ToString() + ":" + remPort;
