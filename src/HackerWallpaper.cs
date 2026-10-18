@@ -710,6 +710,7 @@ public static class PorygonCyberDefenseEngine {
     private static List<FileSystemWatcher> activeWatchers = new List<FileSystemWatcher>();
     private static Queue<string> pendingAvFiles = new Queue<string>();
     private static HashSet<string> recentlyScannedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    private static HashSet<string> alertedDnsDgaDomains = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     private static Thread avWorkerThread = null;
     private static Thread webSocThread = null;
     private static TcpListener webSocListener = null;
@@ -1619,9 +1620,9 @@ public static class PorygonCyberDefenseEngine {
             sum.Contains("CTI") || sum.Contains("FEODO") || sum.Contains("YARA") || sum.Contains("RANSOM") ||
             sum.Contains("MIMIKATZ") || sum.Contains("BEACON") || act.Contains("CTI");
 
-        if (isExternalPublicIp && (ctiHit || yaraOrSigmaHit || ev.RiskScore >= 0.85f)) {
+        if (isExternalPublicIp && (ctiHit || yaraOrSigmaHit)) {
             evidenceDetail = string.Format("Factor 1: IP pública externa fuera de LAN/Tailscale ({0}) + Factor 2: Correlación {1} (Riesgo {2:0}%)",
-                cleanIp, ctiHit ? "Feed CTI Feodo/CINS" : (yaraOrSigmaHit ? "Firma YARA/Sigma/CTI" : "Heurística Crítica >=85%"), ev.RiskScore * 100f);
+                cleanIp, ctiHit ? "Feed CTI Feodo/CINS" : "Firma YARA/Sigma/VT/CTI", ev.RiskScore * 100f);
             return true;
         }
 
@@ -1675,12 +1676,16 @@ public static class PorygonCyberDefenseEngine {
             ev.ResolvedAt = ev.Timestamp ?? DateTime.Now.ToString("HH:mm:ss");
         }
 
-        // 1. Whitelisted Corporate / Tailscale / Authenticode events
+        // 1. Whitelisted Corporate / Tailscale / Authenticode / Cloud Run events
         bool isTrustedTarget = tgt.StartsWith("100.") || tgt.StartsWith("192.200.0.") || tgt.StartsWith("199.165.136.") ||
             tgt.StartsWith("209.177.158.") || tgt.StartsWith("192.73.248.") ||
             tgt.IndexOf(".googleapis.com", StringComparison.OrdinalIgnoreCase) >= 0 ||
             tgt.IndexOf(".google.com", StringComparison.OrdinalIgnoreCase) >= 0 ||
             tgt.IndexOf(".gstatic.com", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            tgt.IndexOf(".run.app", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            tgt.IndexOf(".1e100.net", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            tgt.IndexOf(".googleusercontent.com", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            tgt.IndexOf(".cloud.google.com", StringComparison.OrdinalIgnoreCase) >= 0 ||
             tgt.IndexOf(".microsoft.com", StringComparison.OrdinalIgnoreCase) >= 0 ||
             act.Contains("WHITELIST") || act.Contains("CLEAN_SIGNED");
 
@@ -2493,6 +2498,8 @@ public static class PorygonCyberDefenseEngine {
                             bool isTrustedCorpDomain =
                                 curDomain.EndsWith(".googleapis.com") || curDomain.EndsWith(".google.com") ||
                                 curDomain.EndsWith(".gstatic.com") || curDomain.EndsWith(".gvt1.com") ||
+                                curDomain.EndsWith(".run.app") || curDomain.EndsWith(".1e100.net") ||
+                                curDomain.EndsWith(".googleusercontent.com") || curDomain.EndsWith(".cloud.google.com") ||
                                 curDomain.EndsWith(".microsoft.com") || curDomain.EndsWith(".windowsupdate.com") ||
                                 curDomain.EndsWith(".live.com") || curDomain.EndsWith(".office.com") ||
                                 curDomain.EndsWith(".cloudflare.com") || curDomain.EndsWith(".tailscale.com") ||
@@ -2541,10 +2548,19 @@ public static class PorygonCyberDefenseEngine {
                             });
 
                             if (risk >= 80) {
-                                RecordSiemEvent("PORYGON", "DNS_DGA_INSPECTOR", risk >= 90 ? "CRITICAL" : "HIGH", mitre,
-                                    "DNS_CLIENT", curDomain + " -> " + val, "", risk / 100f,
-                                    string.Format("Dominio sospechoso en caché DNS: {0} ({1}, H={2:0.00}b -> {3})", curDomain, verdict, ent, val),
-                                    "DNS_ALERT");
+                                bool shouldEmit = false;
+                                lock (SyncLock) {
+                                    if (!alertedDnsDgaDomains.Contains(curDomain)) {
+                                        alertedDnsDgaDomains.Add(curDomain);
+                                        shouldEmit = true;
+                                    }
+                                }
+                                if (shouldEmit) {
+                                    RecordSiemEvent("PORYGON", "DNS_DGA_INSPECTOR", risk >= 90 ? "CRITICAL" : "HIGH", mitre,
+                                        "DNS_CLIENT", curDomain + " -> " + val, "", risk / 100f,
+                                        string.Format("Dominio sospechoso en caché DNS: {0} ({1}, H={2:0.00}b -> {3})", curDomain, verdict, ent, val),
+                                        "DNS_ALERT");
+                                }
                             }
                         }
                     }
