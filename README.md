@@ -67,6 +67,20 @@ Cada evolución de la tríada **Porygon** ejecuta un módulo real de defensa sob
 * **Gestor Web de Firewall IPS y Bóveda de Cuarentena (`.qz`):** Bloquea o desbloquea IPs en Windows Firewall y aísla o restaura archivos en cuarentena a su ruta original desde el navegador.
 * **Control Remoto del Enjambre 3D y Wallpaper:** Botones web para *Auditar Ahora*, *Simular Oleada IDS*, *Forzar Cruce +1 Gen*, *Subir Nivel +1 LVL*, *Cambiar Escena 3D (`1/3..3/3`)* y *Activar/Desactivar Modo Gamer 0% GPU*.
 
+### 7. 🚨 Panel de Alertas del C2 & Resoluciones por Porygon + Autonomía Graduada (`GRADUATED_2FA`)
+El dashboard [`web/soc_dashboard.html`](web/soc_dashboard.html) (`http://localhost:5090/#alerts` y `#bridge`) integra una consola dedicada para auditar, filtrar y gobernar cómo la tríada **Porygon (`PORYGON`, `PORYGON2`, `PORYGON-Z`)** investiga y resuelve cada alerta de seguridad proveniente del **Servidor C2/IDS (`:8002`)**, **QB-Network NIDS + VirusTotal v3 (`:5080`)** y el **Kernel EDR local (`:5090`)**:
+* **5 Tarjetas KPI de Filtrado Rápido + Filtros por Agente y por Host de Origen (`#alertHostFilter`):**
+  * Filtra en 1 clic por estado (`Todas`, `Contenidas por SOAR/IPS`, `Triaje Autónomo IA`, `Lista Blanca Verificada`, `Pendientes de Remediación`), por agente resolutor (`PORYGON`, `PORYGON2`, `PORYGON-Z`) o por **Host de Origen** (tanto desde el selector dinámico con conteo de alertas por servidor/estación como haciendo clic directamente sobre el host en la tabla).
+* **Explicación Paso a Paso y Cajón Forense (`Ver Forense`):**
+  * Cada alerta documenta el método exacto (`resolutionMethod`), marca de tiempo (`resolvedAt`), narrativa técnica paso a paso (`resolutionDetail`) y el `ChainHash SHA-256` verificable.
+* **Motor de Autonomía Graduada por Doble Evidencia (`GRADUATED_2FA`) con Selector de 3 Niveles en Vivo (`POST /api/autonomy-mode`):**
+  1. **`Copiloto 1-Click` (`COPILOT_1CLICK`):** Los Porygon enriquecen y diagnostican en tiempo real, pero esperan confirmación humana en 1 clic (`⚡ Resolver con Porygon`) antes de bloquear en firewall.
+  2. **`Autonomía Graduada [Recomendado]` (`GRADUATED_2FA`):** `PORYGON-Z` ejecuta bloqueo autónomo inmediato (`RESOLVED_SOAR`) **únicamente cuando se cumple Doble Evidencia independiente** (**Evidencia #1:** IP pública externa fuera de la LAN `192.168.2.0/24` y malla Tailscale `100.64.0.0/10` + **Evidencia #2:** confirmación en listas CTI Botnet/Tor, `VT_MALICIOUS_*` con `Score >= 0.90`, `C2_BEACON` o binario sin firma en `%TEMP%`/`Downloads`). Las alertas sobre estaciones o servidores internos de oficina nunca se aíslan a ciegas.
+  3. **`Auto-SOAR Estricto` (`STRICT_AUTO_SOAR`):** Contención automática inmediata para cualquier alerta de severidad `CRITICAL`.
+* **Puente SSH Auto-Curable (`:8002` C2/IDS & `:5080` NIDS/VT) y Trazabilidad `origin_host // origin_proc`:**
+  * [`EnsureOfficePcSshProxyTunnel`](src/HackerWallpaper.cs) verifica puertos de escucha mediante tabla extendida del kernel (`QueryExtendedTcpPidMap`, sin abrir canales TCP espurios ni cerrar sesiones SSH interactivas del usuario), evita bucles de loopback al ejecutarse sobre `DEVQB` y auto-recupera el watchdog remoto por WMI.
+  * Cada consulta a VirusTotal (`/api/wallpaper-vt-check`) envía y persiste `&host=<Hostname>&proc=<Proceso>` en `virustotal_cache.json` para atribuir con exactitud qué servidor, estación y PID originó cada alerta.
+
 ---
 
 ## ⌨️ Atajos de Teclado Globales

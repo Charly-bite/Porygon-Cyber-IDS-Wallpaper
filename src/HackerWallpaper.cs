@@ -2773,13 +2773,10 @@ public static class PorygonCyberDefenseEngine {
     // =========================================================================
     public static bool IsLocalPortListening(int port) {
         try {
-            using (TcpClient tc = new TcpClient()) {
-                IAsyncResult ar = tc.BeginConnect("127.0.0.1", port, null, null);
-                bool ok = ar.AsyncWaitHandle.WaitOne(260);
-                if (ok && tc.Connected) {
-                    tc.EndConnect(ar);
-                    return true;
-                }
+            Dictionary<string, int> map = QueryExtendedTcpPidMap();
+            if (map.ContainsKey("127.0.0.1:" + port + "|0.0.0.0:0") ||
+                map.ContainsKey("0.0.0.0:" + port + "|0.0.0.0:0")) {
+                return true;
             }
         } catch { }
         return false;
@@ -2805,18 +2802,29 @@ public static class PorygonCyberDefenseEngine {
                 sshTunnelProcess = null;
             }
             if (forceRestart) {
-                // Also terminate any orphan ssh.exe processes holding 127.0.0.1:8002 or :5080 from previous sessions
+                // Only terminate orphan ssh.exe processes that actually own local listener 127.0.0.1:8002 or :5080
+                // NEVER kill interactive user ssh.exe sessions (e.g. ssh oficina, ssh devqb)!
                 try {
-                    Process[] sshProcs = Process.GetProcessesByName("ssh");
-                    for (int i = 0; i < sshProcs.Length; i++) {
-                        try { sshProcs[i].Kill(); } catch { } finally { sshProcs[i].Dispose(); }
+                    Dictionary<string, int> tcpMap = QueryExtendedTcpPidMap();
+                    int[] tunnelPorts = new int[] { 8002, 5080 };
+                    for (int pIdx = 0; pIdx < tunnelPorts.Length; pIdx++) {
+                        int portPid;
+                        if (tcpMap.TryGetValue("127.0.0.1:" + tunnelPorts[pIdx] + "|0.0.0.0:0", out portPid) && portPid > 4) {
+                            try {
+                                using (Process p = Process.GetProcessById(portPid)) {
+                                    if (string.Equals(p.ProcessName, "ssh", StringComparison.OrdinalIgnoreCase)) {
+                                        p.Kill();
+                                    }
+                                }
+                            } catch { }
+                        }
                     }
-                    Thread.Sleep(350);
+                    Thread.Sleep(250);
                 } catch { }
             }
 
             ProcessStartInfo psi = new ProcessStartInfo("ssh.exe",
-                "-N -o BatchMode=yes -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -L 127.0.0.1:5080:192.168.2.222:5080 -L 127.0.0.1:8002:192.168.2.222:8002 office-pc") {
+                "-N -o BatchMode=yes -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=6 -L 127.0.0.1:5080:192.168.2.222:5080 -L 127.0.0.1:8002:192.168.2.222:8002 office-pc") {
                 CreateNoWindow = true,
                 UseShellExecute = false,
                 WindowStyle = ProcessWindowStyle.Hidden
@@ -9826,19 +9834,8 @@ public class HackerWallpaperForm : Form {
         if (socPort5080Online && (telemetryCycles - socPort5080LastCheckCycle) < 4) return true;
         if (!socPort5080Online && (telemetryCycles - socPort5080LastCheckCycle) < 15) return false;
         socPort5080LastCheckCycle = telemetryCycles;
-        try {
-            using (TcpClient tcp = new TcpClient()) {
-                IAsyncResult ar = tcp.BeginConnect("127.0.0.1", 5080, null, null);
-                bool ok = ar.AsyncWaitHandle.WaitOne(28);
-                if (ok && tcp.Connected) {
-                    try { tcp.EndConnect(ar); } catch { }
-                    socPort5080Online = true;
-                    return true;
-                }
-            }
-        } catch { }
-        socPort5080Online = false;
-        return false;
+        socPort5080Online = PorygonCyberDefenseEngine.IsLocalPortListening(5080);
+        return socPort5080Online;
     }
 
     private void UpdateRealTelemetry(object state) {
