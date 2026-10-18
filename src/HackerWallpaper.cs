@@ -626,7 +626,7 @@ public static class PorygonCyberDefenseEngine {
         public bool FortiGateEnabled = false;
         public string FortiGateWebhookUrl = "https://192.168.1.99/api/v2/monitor/system/automation-stitch/webhook/porygon_ips";
         public string FortiGateApiToken = "";
-        public string FortiGateAddressGroup = "PORYGON_XDR_BLOCKLIST";
+        public string FortiGateAddressGroup = "PORYGON_SOAR_BLOCKLIST";
         public bool AlertWebhookEnabled = false;
         public string AlertWebhookUrl = "";
         public string PorygonAutonomyMode = "GRADUATED_2FA"; // "COPILOT_1CLICK", "GRADUATED_2FA", "STRICT_AUTO_SOAR"
@@ -3609,17 +3609,24 @@ public static class PorygonCyberDefenseEngine {
         // 1. Local Windows Firewall Block
         bool localBlocked = BlockRemoteIpInFirewall(cleanIp, cleanReason, false);
 
-        // 2. QB-Network (:5080) -> FortiGate (192.168.2.1:60001) + SQL Server Audit Log
+        // 2. QB-Network (:5080) -> FortiGate (192.168.2.1:60001) + Address Group + SQL Server Audit Log
         string fortiStatus = "OFFLINE";
+        string fgGroup = "PORYGON_SOAR_BLOCKLIST";
+        lock (SyncLock) {
+            if (!string.IsNullOrEmpty(SoarConfig.FortiGateAddressGroup)) {
+                fgGroup = SoarConfig.FortiGateAddressGroup;
+            }
+        }
         try {
             EnsureOfficePcSshProxyTunnel(false);
             using (WebClient wc = new WebClient()) {
                 wc.Encoding = Encoding.UTF8;
                 string url = string.Format(
-                    "http://127.0.0.1:5080/api/wallpaper-soar-block?ip={0}&host={1}&reason={2}",
+                    "http://127.0.0.1:5080/api/wallpaper-soar-block?ip={0}&host={1}&reason={2}&group={3}",
                     Uri.EscapeDataString(cleanIp),
                     Uri.EscapeDataString(cleanHost),
-                    Uri.EscapeDataString(cleanReason));
+                    Uri.EscapeDataString(cleanReason),
+                    Uri.EscapeDataString(fgGroup));
                 string json = wc.DownloadString(url);
                 JavaScriptSerializer ser = new JavaScriptSerializer();
                 var d = ser.Deserialize<Dictionary<string, object>>(json);
