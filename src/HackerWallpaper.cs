@@ -2056,7 +2056,16 @@ public static class PorygonCyberDefenseEngine {
                             string verdict = "CLEAN_DNS";
                             string mitre = "T1071.004";
 
-                            if (ent >= 3.85f && curDomain.Length > 18) {
+                            bool isTrustedCorpDomain =
+                                curDomain.EndsWith(".googleapis.com") || curDomain.EndsWith(".google.com") ||
+                                curDomain.EndsWith(".gstatic.com") || curDomain.EndsWith(".gvt1.com") ||
+                                curDomain.EndsWith(".microsoft.com") || curDomain.EndsWith(".windowsupdate.com") ||
+                                curDomain.EndsWith(".live.com") || curDomain.EndsWith(".office.com") ||
+                                curDomain.EndsWith(".cloudflare.com") || curDomain.EndsWith(".tailscale.com") ||
+                                curDomain.EndsWith(".github.com") || curDomain.EndsWith(".githubusercontent.com") ||
+                                curDomain.EndsWith(".akamai.net") || curDomain.EndsWith(".akamaiedge.net");
+
+                            if (ent >= 3.85f && curDomain.Length > 18 && !isTrustedCorpDomain) {
                                 risk = 84;
                                 verdict = "DGA_HIGH_ENTROPY";
                                 mitre = "T1568.002";
@@ -3058,13 +3067,15 @@ while ($true) {
     }
 
     private static string ResolveWebDashboardHtmlPath() {
+        string pUser = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Porygon-Cyber-IDS-Wallpaper", "web", "soc_dashboard.html");
+        if (File.Exists(pUser)) return pUser;
         string p1 = @"C:\Users\Admin\Porygon-Cyber-IDS-Wallpaper\web\soc_dashboard.html";
         if (File.Exists(p1)) return p1;
         string p2 = Path.Combine(AppBaseDir, "web", "soc_dashboard.html");
         if (File.Exists(p2)) return p2;
         string p3 = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "web", "soc_dashboard.html");
         if (File.Exists(p3)) return p3;
-        return p1;
+        return p2;
     }
 
     private static void StartWebSocServer() {
