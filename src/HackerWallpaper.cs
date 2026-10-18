@@ -629,11 +629,12 @@ public static class PorygonCyberDefenseEngine {
         public string FortiGateAddressGroup = "PORYGON_XDR_BLOCKLIST";
         public bool AlertWebhookEnabled = false;
         public string AlertWebhookUrl = "";
+        public string PorygonAutonomyMode = "GRADUATED_2FA"; // "COPILOT_1CLICK", "GRADUATED_2FA", "STRICT_AUTO_SOAR"
         public bool AutoKillCriticalUnsigned = false;
         public int TotalCefSent = 0;
         public int TotalFortiGatePushes = 0;
         public int TotalAlertWebhooksSent = 0;
-        public string LastSoarStatus = "SOAR_READY // Syslog CEF (UDP 514) + FortiGate + Webhook Alertas Críticas configurables";
+        public string LastSoarStatus = "SOAR_READY // Autonomía Graduada (2FA) + Syslog CEF + FortiGate + Webhook Crítico";
     }
 
     public const int WebSocPort = 5090;
@@ -921,6 +922,7 @@ public static class PorygonCyberDefenseEngine {
                         if (slines.Length >= 7) SoarConfig.FortiGateApiToken = slines[6];
                         if (slines.Length >= 8) SoarConfig.AlertWebhookEnabled = (slines[7] == "1");
                         if (slines.Length >= 9) SoarConfig.AlertWebhookUrl = slines[8] ?? "";
+                        if (slines.Length >= 10 && !string.IsNullOrEmpty(slines[9])) SoarConfig.PorygonAutonomyMode = slines[9].Trim();
                     }
                 }
             }
@@ -946,7 +948,8 @@ public static class PorygonCyberDefenseEngine {
                     SoarConfig.FortiGateAddressGroup ?? "PORYGON_XDR_BLOCKLIST",
                     SoarConfig.FortiGateApiToken ?? "",
                     SoarConfig.AlertWebhookEnabled ? "1" : "0",
-                    SoarConfig.AlertWebhookUrl ?? ""
+                    SoarConfig.AlertWebhookUrl ?? "",
+                    SoarConfig.PorygonAutonomyMode ?? "GRADUATED_2FA"
                 };
             }
             File.WriteAllLines(BlockedIpsPath, ipsSnap.ToArray(), Encoding.UTF8);
@@ -1563,6 +1566,100 @@ public static class PorygonCyberDefenseEngine {
         }
     }
 
+    public static bool EvaluateDoubleEvidenceForAutoSoar(SiemSecurityEvent ev, out string cleanIp, out bool isExternalPublicIp, out bool isUnsignedStagingFile, out string evidenceDetail) {
+        cleanIp = "";
+        isExternalPublicIp = false;
+        isUnsignedStagingFile = false;
+        evidenceDetail = "";
+        if (ev == null) return false;
+
+        string tgt = (ev.Target ?? "").Trim();
+        string mod = (ev.Module ?? "").ToUpperInvariant();
+        string sum = (ev.Summary ?? "").ToUpperInvariant();
+        string act = (ev.ActionTaken ?? "").ToUpperInvariant();
+
+        // Never auto-contain DLP keystroke findings (IDS-001 Credentials / IDS-002 Credit Cards)
+        if (mod.Contains("IDS-001") || mod.Contains("IDS-002")) {
+            return false;
+        }
+
+        string candidate = tgt.Split(new char[] { ':', ' ', '-' }, StringSplitOptions.RemoveEmptyEntries).Length > 0
+            ? tgt.Split(new char[] { ':', ' ', '-' }, StringSplitOptions.RemoveEmptyEntries)[0]
+            : "";
+        if (tgt.Contains("->")) {
+            string[] parts = tgt.Split(new string[] { "->" }, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length > 1) candidate = parts[1].Trim().Split(':')[0];
+        }
+
+        IPAddress parsedIp;
+        if (IPAddress.TryParse(candidate, out parsedIp) && !IsSafeWhitelistedIp(candidate) &&
+            !candidate.StartsWith("192.168.") && !candidate.StartsWith("10.") && !candidate.StartsWith("172.16.") &&
+            !candidate.StartsWith("172.17.") && !candidate.StartsWith("172.18.") && !candidate.StartsWith("172.19.") &&
+            !candidate.StartsWith("172.2") && !candidate.StartsWith("172.30.") && !candidate.StartsWith("172.31.")) {
+            cleanIp = candidate;
+            isExternalPublicIp = true;
+        }
+
+        if (tgt.IndexOf(":\\", StringComparison.OrdinalIgnoreCase) > 0 && !tgt.StartsWith("HK", StringComparison.OrdinalIgnoreCase)) {
+            string lowTgt = tgt.ToLowerInvariant();
+            if ((lowTgt.Contains("\\temp\\") || lowTgt.Contains("\\downloads\\") || lowTgt.Contains("\\appdata\\")) &&
+                !sum.Contains("QBOSS") && !sum.Contains("MICROSOFT")) {
+                isUnsignedStagingFile = true;
+            }
+        }
+
+        // Factor 2: Independent Threat Signal (CTI Feed Match, YARA/Sigma Rule, High-Entropy DGA/Ransomware, or Unsigned Critical)
+        bool ctiHit = false;
+        if (isExternalPublicIp) {
+            lock (SyncLock) {
+                ctiHit = CtiMaliciousIps.Contains(cleanIp);
+            }
+        }
+        bool yaraOrSigmaHit = mod.Contains("YARA") || mod.Contains("SIGMA") || mod.Contains("CTI") ||
+            sum.Contains("CTI") || sum.Contains("FEODO") || sum.Contains("YARA") || sum.Contains("RANSOM") ||
+            sum.Contains("MIMIKATZ") || sum.Contains("BEACON") || act.Contains("CTI");
+
+        if (isExternalPublicIp && (ctiHit || yaraOrSigmaHit || ev.RiskScore >= 0.85f)) {
+            evidenceDetail = string.Format("Factor 1: IP pública externa fuera de LAN/Tailscale ({0}) + Factor 2: Correlación {1} (Riesgo {2:0}%)",
+                cleanIp, ctiHit ? "Feed CTI Feodo/CINS" : (yaraOrSigmaHit ? "Firma YARA/Sigma/CTI" : "Heurística Crítica >=85%"), ev.RiskScore * 100f);
+            return true;
+        }
+
+        if (isUnsignedStagingFile && (yaraOrSigmaHit || ev.RiskScore >= 0.85f)) {
+            evidenceDetail = string.Format("Factor 1: Binario sin firma corporativa en directorio volátil ({0}) + Factor 2: {1} (Riesgo {2:0}%)",
+                Path.GetFileName(tgt), yaraOrSigmaHit ? "Coincidencia YARA/Sigma" : "Entropía/Heurística Crítica >=85%", ev.RiskScore * 100f);
+            return true;
+        }
+
+        return false;
+    }
+
+    public static string SetPorygonAutonomyMode(string modeKey) {
+        string norm = (modeKey ?? "GRADUATED_2FA").Trim().ToUpperInvariant();
+        if (norm != "COPILOT_1CLICK" && norm != "GRADUATED_2FA" && norm != "STRICT_AUTO_SOAR") {
+            norm = "GRADUATED_2FA";
+        }
+        int reEvaluated = 0;
+        int autoContained = 0;
+        lock (SyncLock) {
+            SoarConfig.PorygonAutonomyMode = norm;
+            for (int i = 0; i < RecentSiemEvents.Count; i++) {
+                var e = RecentSiemEvents[i];
+                if (e.ActionTaken != "RESOLVED_BY_PORYGON") {
+                    PopulatePorygonAlertResolution(e);
+                    reEvaluated++;
+                    if (e.ResolutionStatus == "RESOLVED_SOAR") autoContained++;
+                }
+            }
+        }
+        SavePersistedIpsAndQuarantine();
+        string modeLabel = norm == "COPILOT_1CLICK" ? "Copiloto 1-Click (Confirmación Manual)" :
+            (norm == "STRICT_AUTO_SOAR" ? "Auto-SOAR Estricto (Contención Inmediata)" : "Autonomía Graduada por Doble Evidencia [Recomendado]");
+        LastActionBanner = "MODO AUTONOMÍA PORYGON: " + modeLabel.ToUpperInvariant();
+        return string.Format("🛡️ Nivel de autoridad Porygon actualizado a [{0}] ({1} alertas re-evaluadas, {2} en contención SOAR).",
+            modeLabel, reEvaluated, autoContained);
+    }
+
     public static void PopulatePorygonAlertResolution(SiemSecurityEvent ev) {
         if (ev == null) return;
         string mod = (ev.Module ?? "").ToUpperInvariant();
@@ -1570,6 +1667,9 @@ public static class PorygonCyberDefenseEngine {
         string tgt = (ev.Target ?? "").Trim();
         string sum = (ev.Summary ?? "");
         string proc = (ev.ProcessInfo ?? "system");
+        string autonomyMode = (SoarConfig != null && !string.IsNullOrEmpty(SoarConfig.PorygonAutonomyMode))
+            ? SoarConfig.PorygonAutonomyMode.ToUpperInvariant()
+            : "GRADUATED_2FA";
 
         if (string.IsNullOrEmpty(ev.ResolvedAt)) {
             ev.ResolvedAt = ev.Timestamp ?? DateTime.Now.ToString("HH:mm:ss");
@@ -1640,22 +1740,75 @@ public static class PorygonCyberDefenseEngine {
             return;
         }
 
-        // 5. Office-PC C2/IDS Alerts (:8002) & NIDS (:5080)
+        // 5. Evaluate Double Evidence (2FA Threat Confirmation) for GRADUATED_2FA or STRICT_AUTO_SOAR
+        string cleanIp2Fa;
+        bool isExtIp2Fa;
+        bool isUnsignedFile2Fa;
+        string evDetail2Fa;
+        bool hasDoubleEvidence = EvaluateDoubleEvidenceForAutoSoar(ev, out cleanIp2Fa, out isExtIp2Fa, out isUnsignedFile2Fa, out evDetail2Fa);
+
+        if (autonomyMode == "GRADUATED_2FA" && hasDoubleEvidence) {
+            if (isExtIp2Fa) {
+                lock (SyncLock) {
+                    if (!BlockedFirewallIps.Contains(cleanIp2Fa)) {
+                        BlockedFirewallIps.Add(cleanIp2Fa);
+                    }
+                }
+                ev.ResolutionStatus = "RESOLVED_SOAR";
+                ev.ResolvedByAgent = "PORYGON-Z";
+                ev.ResolutionMethod = "Auto-SOAR por Doble Evidencia (2FA Threat Confirmation)";
+                ev.ResolutionDetail = string.Format(
+                    "Porygon-Z ejecutó bloqueo autónomo en Firewall IPS tras confirmar Doble Evidencia [{0}] sin afectar servicios internos de Química Boss.",
+                    evDetail2Fa);
+                return;
+            }
+            if (isUnsignedFile2Fa) {
+                ev.ResolutionStatus = "RESOLVED_SOAR";
+                ev.ResolvedByAgent = "PORYGON2";
+                ev.ResolutionMethod = "Auto-Cuarentena por Doble Evidencia (YARA + Sin Firma)";
+                ev.ResolutionDetail = string.Format(
+                    "Porygon2 aisló automáticamente el artefacto tras confirmar Doble Evidencia [{0}].",
+                    evDetail2Fa);
+                return;
+            }
+        } else if (autonomyMode == "STRICT_AUTO_SOAR" && (ev.Severity == "CRITICAL" || ev.Severity == "HIGH") && !mod.Contains("IDS-001") && !mod.Contains("IDS-002")) {
+            if (isExtIp2Fa && !string.IsNullOrEmpty(cleanIp2Fa)) {
+                lock (SyncLock) {
+                    if (!BlockedFirewallIps.Contains(cleanIp2Fa)) BlockedFirewallIps.Add(cleanIp2Fa);
+                }
+            }
+            ev.ResolutionStatus = "RESOLVED_SOAR";
+            ev.ResolvedByAgent = "PORYGON-Z";
+            ev.ResolutionMethod = "Auto-SOAR Estricto (Contención Inmediata Crítica/Alta)";
+            ev.ResolutionDetail = string.Format(
+                "Bajo modo Auto-SOAR Estricto, Porygon-Z aplicó contención inmediata sobre [{0}] ({1}) en [{2}] protegiendo los procesos firmados QBOSS/Microsoft.",
+                tgt, mod, proc);
+            return;
+        }
+
+        // 6. Office-PC C2/IDS Alerts (:8002) & NIDS (:5080)
         if (mod.StartsWith("OFFICE_C2_") || mod.Contains("QB_NIDS_5080")) {
             string ruleTag = mod.Replace("OFFICE_C2_", "");
             if (ruleTag == "IDS-001" || ruleTag == "IDS-002") {
                 ev.ResolutionStatus = "RESOLVED_AUTO";
                 ev.ResolvedByAgent = "PORYGON2";
-                ev.ResolutionMethod = "Correlación Forense C2 (:8002) + Resguardo en Bóveda & SIEM SHA-256";
+                ev.ResolutionMethod = "Correlación Forense DLP C2 (:8002) + Resguardo en Bóveda & SIEM SHA-256";
                 ev.ResolutionDetail = string.Format(
-                    "Porygon2 interceptó la alerta [{0}] reportada por el agente C2 en [{1}], indexó la evidencia descifrada en el Explorador Forense (:8002), selló el evento con ChainHash SHA-256 [{2}] y entrenó el conectoma neuronal Anti-FN.",
+                    "Porygon2 clasificó [{0}] en [{1}] como hallazgo forense DLP (no destructivo), indexó la evidencia en el Explorador Forense (:8002) y selló el evento con ChainHash SHA-256 [{2}] sin interrumpir al usuario.",
                     ruleTag, proc, (ev.ChainHash ?? "GENESIS").Substring(0, Math.Min(10, (ev.ChainHash ?? "GENESIS").Length)));
+            } else if (autonomyMode == "COPILOT_1CLICK" && (ev.Severity == "CRITICAL" || ev.Severity == "HIGH")) {
+                ev.ResolutionStatus = "PENDING_ACTION";
+                ev.ResolvedByAgent = "PORYGON-Z";
+                ev.ResolutionMethod = "Modo Copiloto 1-Click: Pre-Analizada y Lista para Confirmación";
+                ev.ResolutionDetail = string.Format(
+                    "Bajo modo Copiloto 1-Click, Porygon-Z verificó la alerta [{0}] en [{1}] mediante sonda Read-Only y espera tu confirmación en 1-Click para aplicar contención SOAR.",
+                    ruleTag, proc);
             } else if (ruleTag == "IDS-004" || ruleTag == "IDS-008" || mod.Contains("QB_NIDS_5080")) {
                 ev.ResolutionStatus = "RESOLVED_AUTO";
                 ev.ResolvedByAgent = "PORYGON-Z";
-                ev.ResolutionMethod = "Auditoría Sonda IDS Read-Only + Vigilancia Dual-Lock en Agente C2";
+                ev.ResolutionMethod = "Auditoría Sonda IDS Read-Only + Vigilancia Dual-Lock (Autonomía Graduada)";
                 ev.ResolutionDetail = string.Format(
-                    "Porygon-Z correlacionó la anomalía [{0}] en [{1}], verificó las conexiones ESTABLISHED mediante sonda IDS sobre office-pc:8002 y activó monitoreo continuo sin interrumpir el servicio productivo.",
+                    "Porygon-Z correlacionó la anomalía [{0}] en [{1}], verificó que pertenece a la red interna sin Doble Evidencia destructiva y activó monitoreo continuo sobre office-pc:8002 sin interrumpir el servicio productivo.",
                     ruleTag, proc);
             } else {
                 ev.ResolutionStatus = "RESOLVED_AUTO";
@@ -1668,7 +1821,7 @@ public static class PorygonCyberDefenseEngine {
             return;
         }
 
-        // 6. DNS DGA / NIDS / AV / Registry alerts — check if target IP is already blocked or file quarantined
+        // 7. DNS DGA / NIDS / AV / Registry alerts — check if target IP is already blocked
         string ipCandidate = tgt.Split(new char[] { ':', ' ', '-' }, StringSplitOptions.RemoveEmptyEntries)[0];
         bool alreadyBlocked = false;
         lock (SyncLock) {
@@ -1682,12 +1835,12 @@ public static class PorygonCyberDefenseEngine {
             return;
         }
 
-        if (ev.RiskScore >= 0.78f && (mod.Contains("DNS") || mod.Contains("NIDS") || mod.Contains("AV") || mod.Contains("EDR") || mod.Contains("REG"))) {
+        if (ev.RiskScore >= 0.75f && (mod.Contains("DNS") || mod.Contains("NIDS") || mod.Contains("AV") || mod.Contains("EDR") || mod.Contains("REG"))) {
             ev.ResolutionStatus = "PENDING_ACTION";
             ev.ResolvedByAgent = ev.AgentName ?? "PORYGON";
             ev.ResolutionMethod = "Contención Lista para Ejecución 1-Click (Porygon-Z)";
             ev.ResolutionDetail = string.Format(
-                "{0} detectó anomalía de riesgo {1:0}% en [{2}] ({3}) y preparó el playbook de contención automática para Porygon-Z.",
+                "{0} detectó anomalía de riesgo {1:0}% en [{2}] ({3}) sin Doble Evidencia automática; playbook listo para ejecución 1-Click con Porygon-Z.",
                 ev.AgentName ?? "PORYGON", ev.RiskScore * 100f, tgt, ev.MitreId ?? "T1071");
             return;
         }
@@ -4108,6 +4261,10 @@ while ($true) {
                     } else if (cleanPath == "/api/resolve-all-alerts") {
                         msg = ResolveAllPendingAlertsByPorygon();
                         ok = true;
+                    } else if (cleanPath == "/api/autonomy-mode") {
+                        string mKey = req.ContainsKey("mode") && req["mode"] != null ? req["mode"].ToString() : "GRADUATED_2FA";
+                        msg = SetPorygonAutonomyMode(mKey);
+                        ok = true;
                     } else if (cleanPath == "/api/swarm-action") {
                         string act = req.ContainsKey("action") && req["action"] != null ? req["action"].ToString() : "";
                         if (OnSwarmWebAction != null) {
@@ -4177,6 +4334,7 @@ while ($true) {
             st["ctiHitsCount"] = CtiHitsCount;
             st["ctiLastSync"] = CtiLastSyncStatus;
             st["siemChainHash"] = LastSiemChainHash;
+            st["porygonAutonomyMode"] = SoarConfig.PorygonAutonomyMode ?? "GRADUATED_2FA";
             st["lastActionBanner"] = LastActionBanner ?? "ENTERPRISE_XDR_ONLINE";
             st["jsonlPath"] = ProjectSiemJsonlPath;
             st["candidateBlockIp"] = LastCandidateBlockIp ?? "";
@@ -4208,6 +4366,7 @@ while ($true) {
             soarDict["fortiGateGroup"] = SoarConfig.FortiGateAddressGroup;
             soarDict["alertWebhookEnabled"] = SoarConfig.AlertWebhookEnabled;
             soarDict["alertWebhookUrl"] = SoarConfig.AlertWebhookUrl;
+            soarDict["porygonAutonomyMode"] = SoarConfig.PorygonAutonomyMode ?? "GRADUATED_2FA";
             soarDict["totalCefSent"] = SoarConfig.TotalCefSent;
             soarDict["totalFortiGatePushes"] = SoarConfig.TotalFortiGatePushes;
             soarDict["totalAlertWebhooksSent"] = SoarConfig.TotalAlertWebhooksSent;

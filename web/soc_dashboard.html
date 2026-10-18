@@ -1728,8 +1728,17 @@
             <span class="panel-dot" style="background:var(--sig-emerald)"></span>
             <span>Centro de Alertas C2 & Resoluciones por Porygon (IDS :8002 · NIDS :5080 · DNS DGA · EDR/IPS)</span>
             <span class="badge b-info" id="tabAlertsResCnt">0 alertas</span>
+            <span class="badge b-mitre" id="badgeAutonomyPolicy" title="Regla de Doble Evidencia: Auto-SOAR solo cuando converge IP pública externa + CTI/YARA sin firma; hallazgos DLP y aislamiento de hosts bajo confirmación">2FA: Autonomía Graduada Activa</span>
           </div>
           <div class="toolbar">
+            <div style="display:flex;align-items:center;gap:6px;background:var(--bg-void);padding:3px 8px;border-radius:6px;border:1px solid var(--border-subtle);">
+              <span style="font-size:10.5px;color:var(--txt-secondary);font-weight:600;white-space:nowrap;">Autoridad Porygon:</span>
+              <select class="select" id="porygonAutonomySelect" onchange="changePorygonAutonomyMode(this.value)" style="min-height:26px;padding:2px 8px;font-weight:600;color:var(--sig-emerald-txt);">
+                <option value="COPILOT_1CLICK">Copiloto 1-Click (Confirmación Manual)</option>
+                <option value="GRADUATED_2FA" selected>Autonomía Graduada [Recomendado · Doble Evidencia]</option>
+                <option value="STRICT_AUTO_SOAR">Auto-SOAR Estricto (Contención Inmediata)</option>
+              </select>
+            </div>
             <button type="button" class="btn btn-sm btn-emerald" id="btnResolveAllPorygon" onclick="resolveAllAlertsWithPorygon()" title="Ejecuta remediación y triaje autónomo con Porygon, Porygon2 y Porygon-Z sobre todas las alertas pendientes">
               <span class="spinner"></span>
               <span>⚡ Auto-Resolver Pendientes con Porygon</span>
@@ -3646,6 +3655,12 @@
     apiPost('/api/resolve-all-alerts', {}, 'btnResolveAllPorygon');
   }
 
+  function changePorygonAutonomyMode(modeVal) {
+    const m = modeVal || 'GRADUATED_2FA';
+    showToast('Actualizando nivel de autoridad de los Porygon a ' + m + '...', false);
+    apiPost('/api/autonomy-mode', { mode: m });
+  }
+
   function buildUnifiedPorygonAlertsList(st) {
     const baseEvents = (st.siemEvents || []).map((e, idx) => {
       const tgt = (e.target || '').trim();
@@ -3745,6 +3760,25 @@
   function renderAlertsResolutionPanel() {
     const st = getEffectiveState();
     if (!st) return;
+
+    const activeAutonomy = st.porygonAutonomyMode || (st.soar && st.soar.porygonAutonomyMode) || 'GRADUATED_2FA';
+    const selAuto = document.getElementById('porygonAutonomySelect');
+    if (selAuto && document.activeElement !== selAuto) {
+      selAuto.value = activeAutonomy;
+    }
+    const badgePol = document.getElementById('badgeAutonomyPolicy');
+    if (badgePol) {
+      if (activeAutonomy === 'COPILOT_1CLICK') {
+        badgePol.textContent = 'Modo Copiloto 1-Click Activo';
+        badgePol.className = 'badge b-high';
+      } else if (activeAutonomy === 'STRICT_AUTO_SOAR') {
+        badgePol.textContent = 'Modo Auto-SOAR Estricto Activo';
+        badgePol.className = 'badge b-crit';
+      } else {
+        badgePol.textContent = '2FA: Autonomía Graduada Activa';
+        badgePol.className = 'badge b-mitre';
+      }
+    }
 
     const allAlerts = buildUnifiedPorygonAlertsList(st);
     const cntAll = allAlerts.length;
