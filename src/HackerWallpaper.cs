@@ -3613,21 +3613,24 @@ public static class PorygonCyberDefenseEngine {
         string fortiStatus = "OFFLINE";
         try {
             EnsureOfficePcSshProxyTunnel(false);
-            if (IsLocalPortListening(5080)) {
-                using (WebClient wc = new WebClient()) {
-                    wc.Encoding = Encoding.UTF8;
-                    string url = string.Format(
-                        "http://127.0.0.1:5080/api/wallpaper-soar-block?ip={0}&host={1}&reason={2}",
-                        Uri.EscapeDataString(cleanIp),
-                        Uri.EscapeDataString(cleanHost),
-                        Uri.EscapeDataString(cleanReason));
-                    string json = wc.DownloadString(url);
-                    JavaScriptSerializer ser = new JavaScriptSerializer();
-                    var d = ser.Deserialize<Dictionary<string, object>>(json);
-                    if (d != null && d.ContainsKey("ok") && Convert.ToBoolean(d["ok"])) {
-                        bool fgPushed = d.ContainsKey("fortigate_pushed") && Convert.ToBoolean(d["fortigate_pushed"]);
-                        fortiStatus = fgPushed ? "FORTIGATE_API_OK (BLOCKED_" + cleanIp + ")" : "SQL_LOGGED + FORTIGATE_STAGED (BLOCKED_" + cleanIp + ")";
-                    }
+            using (WebClient wc = new WebClient()) {
+                wc.Encoding = Encoding.UTF8;
+                string url = string.Format(
+                    "http://127.0.0.1:5080/api/wallpaper-soar-block?ip={0}&host={1}&reason={2}",
+                    Uri.EscapeDataString(cleanIp),
+                    Uri.EscapeDataString(cleanHost),
+                    Uri.EscapeDataString(cleanReason));
+                string json = wc.DownloadString(url);
+                JavaScriptSerializer ser = new JavaScriptSerializer();
+                var d = ser.Deserialize<Dictionary<string, object>>(json);
+                if (d != null && ((d.ContainsKey("success") && Convert.ToBoolean(d["success"])) || (d.ContainsKey("ok") && Convert.ToBoolean(d["ok"])))) {
+                    bool fgSynced = (d.ContainsKey("fortigate_synced") && Convert.ToBoolean(d["fortigate_synced"])) ||
+                                    (d.ContainsKey("fortigate_pushed") && Convert.ToBoolean(d["fortigate_pushed"]));
+                    string fgDetail = d.ContainsKey("fortigate_detail") && d["fortigate_detail"] != null ? d["fortigate_detail"].ToString() : ("BLOCKED_" + cleanIp);
+                    bool sqlOk = d.ContainsKey("sql_logged") && Convert.ToBoolean(d["sql_logged"]);
+                    fortiStatus = fgSynced
+                        ? string.Format("FORTIGATE_API_OK ({0}{1})", fgDetail, sqlOk ? " + SQL_AUDIT" : "")
+                        : string.Format("SQL_LOGGED + FORTIGATE_STAGED ({0})", fgDetail);
                 }
             }
         } catch (Exception ex) {
@@ -3658,7 +3661,7 @@ public static class PorygonCyberDefenseEngine {
         }
 
         bool c2Queued = false;
-        if (!string.IsNullOrEmpty(agentIp) && agentIp != "127.0.0.1" && IsLocalPortListening(8002)) {
+        if (!string.IsNullOrEmpty(agentIp) && agentIp != "127.0.0.1") {
             string ruleName = "PorygonRemoteIPS_Block_" + cleanIp;
             string cmd = string.Format(
                 "netsh advfirewall firewall delete rule name=\"{0}\" & " +
