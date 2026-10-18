@@ -1625,9 +1625,11 @@ public static class PorygonCyberDefenseEngine {
             cleanIp == "172.25.247.247") {
             return true;
         }
-        // Protect Loopback, Corporate LAN, Tailscale/WireGuard CGNAT (100.x.x.x -> office-pc 100.89.1.27), and Link-Local
+        // Protect Loopback, Corporate LAN, Tailscale/WireGuard CGNAT (100.x.x.x -> office-pc 100.89.1.27), Tailscale DERP Relays, and Link-Local
         if (cleanIp.StartsWith("127.") || cleanIp.StartsWith("10.") || cleanIp.StartsWith("192.168.") ||
-            cleanIp.StartsWith("169.254.") || cleanIp.StartsWith("100.")) {
+            cleanIp.StartsWith("169.254.") || cleanIp.StartsWith("100.") ||
+            cleanIp.StartsWith("192.200.0.") || cleanIp.StartsWith("199.165.136.") ||
+            cleanIp.StartsWith("209.177.158.") || cleanIp.StartsWith("192.73.248.")) {
             return true;
         }
         if (cleanIp.StartsWith("172.")) {
@@ -8951,7 +8953,7 @@ public class HackerWallpaperForm : Form {
 
                     string fullLoc = string.Format("{0}:{1} [{2} {3}]", ipv4, locPort, procTag, signBadge);
                     string proto = ClassifyPortProtocol(remPort) + " // " + procShort;
-                    bool isLan = remIp.StartsWith("192.168.") || remIp.StartsWith("10.") || remIp.StartsWith("172.");
+                    bool isLan = remIp.StartsWith("192.168.") || remIp.StartsWith("10.") || remIp.StartsWith("172.") || PorygonCyberDefenseEngine.IsSafeWhitelistedIp(remIp);
                     bool isStandardPort = (remPort == 443 || remPort == 80 || remPort == 53 || remPort == 123);
 
                     if (sampleConn == null) {
