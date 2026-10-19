@@ -3,9 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
-<title>PORYGON ENTERPRISE XDR // C2-IDS CONSOLE — Daylight Sentinel (Emil Craft)</title>
-<link id="porygon-favicon" rel="icon" type="image/png" href="/favicon.ico">
-<link rel="alternate icon" type="image/gif" href="/favicon.gif">
+<title>Porygon XDR</title>
+<link id="porygon-favicon" rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -4415,6 +4414,31 @@
     }
   }
 
+  // Pre-bake 24 frames (64x64 PNG DataURLs) so Chromium tab bar repaints every frame with zero encoding lag
+  const NUM_FAV_FRAMES = 24;
+  const favFrames = new Array(NUM_FAV_FRAMES);
+  for (let fIdx = 0; fIdx < NUM_FAV_FRAMES; fIdx++) {
+    const fy = (fIdx / NUM_FAV_FRAMES) * Math.PI * 2;
+    const fw = (fIdx / NUM_FAV_FRAMES) * Math.PI * 4;
+    renderPorygonToCtx(favCtx, 64, 64, fy, fw);
+    favFrames[fIdx] = favCanvas.toDataURL('image/png');
+  }
+  let favFrameIdx = 0;
+
+  function updateTabFavicon() {
+    let link = document.getElementById('porygon-favicon');
+    if (!link) {
+      document.querySelectorAll("link[rel*='icon']").forEach(el => el.remove());
+      link = document.createElement('link');
+      link.id = 'porygon-favicon';
+      link.rel = 'icon';
+      link.type = 'image/png';
+      document.head.appendChild(link);
+    }
+    link.href = favFrames[favFrameIdx];
+    favFrameIdx = (favFrameIdx + 1) % NUM_FAV_FRAMES;
+  }
+
   function stepAnimation() {
     yaw = (yaw + 0.048 + spinBoost) % (Math.PI * 2);
     walkPhase = (walkPhase + 0.11 + spinBoost * 1.5) % (Math.PI * 2);
@@ -4426,26 +4450,12 @@
       const bCtx = brandCanvas.getContext('2d');
       renderPorygonToCtx(bCtx, brandCanvas.width, brandCanvas.height, yaw, walkPhase);
     }
-
-    const now = Date.now();
-    if (now - lastFavUpdate >= 75) {
-      lastFavUpdate = now;
-      renderPorygonToCtx(favCtx, 64, 64, yaw, walkPhase);
-      let link = document.getElementById('porygon-favicon');
-      if (!link) {
-        link = document.createElement('link');
-        link.id = 'porygon-favicon';
-        link.rel = 'icon';
-        link.type = 'image/png';
-        document.head.appendChild(link);
-      }
-      link.href = favCanvas.toDataURL('image/png');
-    }
   }
 
-  // Use setInterval (40ms = 25 FPS) so the tab favicon keeps spinning even when backgrounded
   setInterval(stepAnimation, 40);
+  setInterval(updateTabFavicon, 95);
   stepAnimation();
+  updateTabFavicon();
 })();
 </script>
 
