@@ -4186,6 +4186,18 @@ while ($true) {
                     return;
                 }
 
+                if (method == "GET" && (cleanPath == "/favicon.ico" || cleanPath == "/favicon.gif")) {
+                    string webDir = Path.GetDirectoryName(ResolveWebDashboardHtmlPath()) ?? Path.Combine(AppBaseDir, "web");
+                    bool isGif = cleanPath.EndsWith(".gif", StringComparison.OrdinalIgnoreCase);
+                    string favPath = Path.Combine(webDir, isGif ? "favicon.gif" : "favicon.ico");
+                    if (File.Exists(favPath)) {
+                        WriteHttpResponse(ns, "200 OK", isGif ? "image/gif" : "image/x-icon", File.ReadAllBytes(favPath));
+                    } else {
+                        WriteHttpResponse(ns, "204 No Content", "text/plain", new byte[0]);
+                    }
+                    return;
+                }
+
                 if (method == "GET" && cleanPath == "/api/siem-jsonl") {
                     string p = File.Exists(ProjectSiemJsonlPath) ? ProjectSiemJsonlPath : SiemJsonlPath;
                     string txt = File.Exists(p) ? File.ReadAllText(p, Encoding.UTF8) : "";
