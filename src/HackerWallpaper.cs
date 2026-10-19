@@ -719,6 +719,7 @@ public static class PorygonCyberDefenseEngine {
     // Callbacks to interact with HackerWallpaperForm & Porygon3DAvatar
     public static Action<int, string, string, string, string, string, string, float> OnInject3DThreatOrb = null;
     public static Func<Dictionary<string, object>> OnQueryFormState = null;
+    public static Func<string, Dictionary<string, string>, string> OnBrainApi = null;
     public static Action<string> OnSwarmWebAction = null;
 
     private static string AppBaseDir {
@@ -4217,6 +4218,12 @@ while ($true) {
                     return;
                 }
 
+                if (method == "GET" && cleanPath.StartsWith("/api/brain")) {
+                    string bj = (OnBrainApi != null) ? OnBrainApi(cleanPath, ParseQueryString(path)) : "{\"loaded\":false}";
+                    WriteHttpResponse(ns, "200 OK", "application/json; charset=utf-8", Encoding.UTF8.GetBytes(bj));
+                    return;
+                }
+
                 if (method == "GET" && cleanPath == "/api/state") {
                     Dictionary<string, object> st = BuildWebStateDictionary();
                     string json = ser.Serialize(st);
@@ -6043,6 +6050,20 @@ public class Porygon3DAvatar {
         }
     }
 
+    private static void TrimFileIfExceedsBytes(string filePath, long maxBytes, int keepLines) {
+        try {
+            if (!File.Exists(filePath)) return;
+            FileInfo fi = new FileInfo(filePath);
+            if (fi.Length <= maxBytes) return;
+            string[] allLines = File.ReadAllLines(filePath, Encoding.UTF8);
+            if (allLines.Length > keepLines) {
+                string[] kept = new string[keepLines];
+                Array.Copy(allLines, allLines.Length - keepLines, kept, 0, keepLines);
+                File.WriteAllLines(filePath, kept, Encoding.UTF8);
+            }
+        } catch { }
+    }
+
     private void AppendLineageRecord(string auditSummaryLine, string jsonlRecord) {
         try {
             lock (LineageAuditHistory) {
@@ -6051,17 +6072,24 @@ public class Porygon3DAvatar {
             }
             string dir1 = Path.GetDirectoryName(LineageJsonlPath);
             if (!Directory.Exists(dir1)) Directory.CreateDirectory(dir1);
+            if (TotalCrossovers % 25 == 0) {
+                TrimFileIfExceedsBytes(LineageJsonlPath, 512 * 1024, 250);
+                TrimFileIfExceedsBytes(LocalLineageAuditLogPath, 256 * 1024, 250);
+            }
             File.AppendAllText(LineageJsonlPath, jsonlRecord + "\r\n", Encoding.UTF8);
             File.AppendAllText(LocalLineageAuditLogPath, auditSummaryLine + "\r\n", Encoding.UTF8);
 
             string dir2 = Path.GetDirectoryName(ProjectLineageAuditLogPath);
-            if (!Directory.Exists(dir2)) Directory.CreateDirectory(dir2);
-            File.AppendAllText(ProjectLineageAuditLogPath, auditSummaryLine + "\r\n", Encoding.UTF8);
+            if (Directory.Exists(dir2)) {
+                File.AppendAllText(ProjectLineageAuditLogPath, auditSummaryLine + "\r\n", Encoding.UTF8);
+            }
         } catch { }
     }
 
     private void LoadLineageHistory() {
         try {
+            TrimFileIfExceedsBytes(LineageJsonlPath, 512 * 1024, 250);
+            TrimFileIfExceedsBytes(LocalLineageAuditLogPath, 256 * 1024, 250);
             string path = File.Exists(LocalLineageAuditLogPath) ? LocalLineageAuditLogPath : ProjectLineageAuditLogPath;
             if (File.Exists(path)) {
                 string[] lines = File.ReadAllLines(path, Encoding.UTF8);
@@ -6301,11 +6329,11 @@ public class Porygon3DAvatar {
         }
     }
 
-    // Multi-Threaded CPU Evolutionary Accelerator (runs on background CPU thread pool every 200ms)
+    // Background CPU Evolutionary Accelerator (runs on single background thread every 800ms without multi-core contention)
     public void RunCpuEvolutionTick(RealTelemetryFeed feed) {
         if (Agents.Count == 0) return;
         cpuEvoBatchCounter++;
-        int stepsPerAgent = 750; // 750 steps * 5 agents * 5 ticks/s = 18,750 evolutionary steps/sec on CPU!
+        int stepsPerAgent = 300;
 
         float dlZ = feed.DlZScore;
         float ulZ = feed.UlZScore;
@@ -6313,12 +6341,12 @@ public class Porygon3DAvatar {
         float anomIdx = feed.AnomalyIndex;
         int tickSeed = Environment.TickCount ^ (cpuEvoBatchCounter * 2654435761.GetHashCode());
 
-        // 1. Parallel Neuro-Evolutionary Training across all CPU cores (with 3.5x False Negative penalty)!
-        Parallel.For(0, Agents.Count, aIdx => {
+        // 1. Sequential Neuro-Evolutionary Training on background thread (avoids waking all 12 Ryzen threads every 250ms)
+        for (int aIdx = 0; aIdx < Agents.Count; aIdx++) {
             PorygonAgent ag = Agents[aIdx];
             uint sVal = (uint)(tickSeed + aIdx * 999983);
             ag.Brain.CpuTrainMicroBatch(stepsPerAgent, dlZ, ulZ, pgZ, anomIdx, sVal);
-        });
+        }
 
         // 2. Advance Life Cycle, Morph 3D Stages, and Execute Alpha Genetic Crossover + Anti-Negative-Trait Audit at 100% Age
         lock (packetLock) {
@@ -6339,7 +6367,7 @@ public class Porygon3DAvatar {
                 PorygonAgent ag = Agents[i];
                 FlyBrainConnectome br = ag.Brain;
 
-                br.LifeAge += 0.42f; // Full 3-stage life cycle (Porygon -> Porygon2 -> Porygon-Z -> Crossover) in ~47s
+                br.LifeAge += 0.42f; // Full 3-stage life cycle (Porygon -> Porygon2 -> Porygon-Z -> Crossover)
                 if (br.LifeAge >= 100.0f) {
                     string oldName = ag.Name;
                     string auditLine, jsonlLine;
@@ -6372,7 +6400,7 @@ public class Porygon3DAvatar {
             BestSwarmFitness = maxFit;
             AvgSwarmAccuracy = sumAcc / Agents.Count;
             TotalPrunedTraits = totalPruned;
-            CpuEvoStepsPerSec = Agents.Count * stepsPerAgent * 5;
+            CpuEvoStepsPerSec = Agents.Count * stepsPerAgent * 2;
             if (anyCrossover) {
                 SaveBrainStates();
             }
@@ -6789,9 +6817,9 @@ public class Porygon3DAvatar {
             int subdiv = 1;
             float depthBias = 0f;
             if (bmp != null && uvs != null) {
-                if (isPorygon3ds && meshIdx == 1) { subdiv = 6; depthBias = 1.8f; }
+                if (isPorygon3ds && meshIdx == 1) { subdiv = 3; depthBias = 1.8f; }
                 else if (isPorygonZ && meshIdx == 1) { subdiv = 2; depthBias = 1.5f; }
-                else if (isPorygon2 && meshIdx == 2) { subdiv = 3; depthBias = 4.5f; }
+                else if (isPorygon2 && meshIdx == 2) { subdiv = 2; depthBias = 4.5f; }
                 else if (isPorygon2 && meshIdx == 0) { subdiv = 1; depthBias = 1.0f; }
             }
 
@@ -8124,6 +8152,8 @@ public class Porygon3DAvatar {
         }
     }
 
+    public Func<float, float, bool> IsPointOccluded = null;
+
     public void RenderOpenGL(float userScale, Color themeCyan, Color themeMag) {
         List<DataPacket> pktsSnap;
         List<CaptureVertexShard> shardsSnap;
@@ -8150,6 +8180,7 @@ public class Porygon3DAvatar {
             for (int i = 0; i < Agents.Count; i++) {
                 PorygonAgent a1 = Agents[i];
                 PorygonAgent a2 = Agents[(i + 1) % Agents.Count];
+                if (IsPointOccluded != null && IsPointOccluded(a1.PosX, a1.PosY) && IsPointOccluded(a2.PosX, a2.PosY)) continue;
                 float avgScale = (GetDepthScale(a1.PosZ) + GetDepthScale(a2.PosZ)) * 0.5f;
                 GpuGl.DrawLine(a1.PosX, a1.PosY, a2.PosX, a2.PosY, meshCol, 1.2f * avgScale);
                 float tPulse = (float)((a1.FloatBob * 0.18 + i * 0.33) % 1.0);
@@ -8165,6 +8196,7 @@ public class Porygon3DAvatar {
         // 1. Draw floating 3D Real Network Nodes on GPU (with 3D Rotating Octahedra, Satellite Vertices & Tractor Lock Rings)
         for (int i = 0; i < pktsSnap.Count; i++) {
             DataPacket p = pktsSnap[i];
+            if (IsPointOccluded != null && IsPointOccluded(p.X, p.Y)) continue;
             float zScale = GetDepthScale(p.Z);
             float sz = ((p.Kind == 0 ? 9.2f : 12.6f) + (float)Math.Sin(p.floatRot * 2.2f) * 2.6f) * zScale;
             if (p.IsHovered) sz *= 1.35f;
@@ -8270,7 +8302,9 @@ public class Porygon3DAvatar {
         // 2. Render each of the 3D Porygon Agents sorted back-to-front by PosZ via Hardware OpenGL Z-Buffer + Triangles!
         GpuGl.glClear(GpuGl.GL_DEPTH_BUFFER_BIT);
         for (int aIdx = 0; aIdx < agentsSorted.Count; aIdx++) {
-            RenderSingleAgentOpenGL(agentsSorted[aIdx], userScale, themeCyan, themeMag);
+            PorygonAgent ag = agentsSorted[aIdx];
+            if (IsPointOccluded != null && IsPointOccluded(ag.PosX, ag.PosY)) continue;
+            RenderSingleAgentOpenGL(ag, userScale, themeCyan, themeMag);
         }
 
         // 2.5 Render 3D Packet Capture Shockwaves, Polyhedral Vertex Shards, Constellation Webs & Homing Absorption Streams on GPU!
@@ -9286,6 +9320,9 @@ public class HackerWallpaperForm : Form {
     [DllImport("user32.dll")]
     public static extern IntPtr WindowFromPoint(Point pt);
 
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetAncestor(IntPtr hwnd, uint gaFlags);
+
     [DllImport("user32.dll", CharSet = CharSet.Auto)]
     public static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
 
@@ -9334,6 +9371,31 @@ public class HackerWallpaperForm : Form {
     [DllImport("user32.dll")]
     public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 
+    [DllImport("pdh.dll", CharSet = CharSet.Unicode)]
+    private static extern int PdhOpenQuery(IntPtr szDataSource, IntPtr dwUserData, out IntPtr phQuery);
+
+    [DllImport("pdh.dll", CharSet = CharSet.Unicode)]
+    private static extern int PdhAddEnglishCounter(IntPtr hQuery, string szFullCounterPath, IntPtr dwUserData, out IntPtr phCounter);
+
+    [DllImport("pdh.dll")]
+    private static extern int PdhCollectQueryData(IntPtr hQuery);
+
+    [DllImport("pdh.dll", CharSet = CharSet.Unicode)]
+    private static extern int PdhGetFormattedCounterArray(IntPtr hCounter, uint dwFormat, ref uint lpdwBufferSize, out uint lpdwItemCount, IntPtr ItemBuffer);
+
+    [DllImport("pdh.dll")]
+    private static extern int PdhCloseQuery(IntPtr hQuery);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct PDH_FMT_COUNTERVALUE_ITEM_DOUBLE {
+        public IntPtr szName;
+        public uint CStatus;
+        public double doubleValue;
+    }
+
+    private const uint PDH_FMT_DOUBLE = 0x00000200;
+    private const uint PDH_MORE_DATA = 0x800007D2;
+
     [StructLayout(LayoutKind.Sequential)]
     public struct RECT { public int Left, Top, Right, Bottom; }
 
@@ -9374,15 +9436,30 @@ public class HackerWallpaperForm : Form {
     const int HOTKEY_BG_MODE_ID = 9006;
     const int HOTKEY_GAMER_ID = 9007;
     const int HOTKEY_SIEM_ID = 9008;
+    const int HOTKEY_OPACITY_TOGGLE_ID = 9009;
     const uint MOD_ALT = 0x0001;
     const uint MOD_CONTROL = 0x0002;
     const int WH_MOUSE_LL = 14;
     const int WM_MOUSEWHEEL = 0x020A;
     private int terminalOpacityPct = 50;
 
-    // Gamer Mode (0.0% GPU / 0.0% CPU Hibernation State)
+    // Gamer Mode & >90% External GPU Load Auto-Hibernation State
     private bool autoGameDetected = false;
     private string activeGameName = "";
+    private bool autoHighGpuDetected = false;
+    private string highGpuProcessName = "";
+    private float externalGpuMaxPct = 0.0f;
+    private float realSelfGpuPct = 1.2f;
+    private int highGpuStreak = 0;
+    private int lowGpuStreak = 0;
+    private bool gpuOverBudgetEco = false;
+    private IntPtr pdhGpuQuery = IntPtr.Zero;
+    private IntPtr pdhGpuCounter = IntPtr.Zero;
+    private IntPtr pdhGpuBuf = IntPtr.Zero;
+    private uint pdhGpuBufSize = 0;
+    private int cachedSelfPid = 0;
+    private readonly Dictionary<string, double> pdhEngineSums = new Dictionary<string, double>(32);
+    private readonly Dictionary<int, double> pdhPidSums = new Dictionary<int, double>(64);
     private bool isGamerSuspended = false;
     private bool gamerStaticFrameRendered = false;
     private bool socPort5080Online = false;
@@ -9397,6 +9474,7 @@ public class HackerWallpaperForm : Form {
     private System.Threading.Timer cpuEvoTimer;
     private EventWaitHandle showConfigEvent;
     private EventWaitHandle toggleGamerEvent;
+    private EventWaitHandle opacityCmdEvent;
     private HotkeyMessageWindow hotkeySink;
     private int prevHotkeyMask = 0;
     private DateTime lastHotkeyUtc = DateTime.MinValue;
@@ -9422,7 +9500,7 @@ public class HackerWallpaperForm : Form {
     private bool hudBrain3DDirty = true;
     private float brain3DYaw = 0f;
     private bool brain3DFullscreen = false;
-    private bool brain3DAutoRotate = true;
+    private bool brain3DAutoRotate = false;
     private float brain3DManualYaw = 0f;
     private float brain3DManualPitch = 0.14f;
     private float brain3DZoom = 1.0f;
@@ -9431,6 +9509,12 @@ public class HackerWallpaperForm : Form {
     private Point brain3DDragStartPt;
     private float brain3DDragStartYaw = 0f;
     private float brain3DDragStartPitch = 0.14f;
+    private int[] brainActHist = new int[110];
+    private int brainActHistPos = 0;
+    private int brainActHistFrame = -1;
+    private float[] brainRegionAct = new float[4];
+    private int brain3DHoverX = -1;
+    private int brain3DHoverY = -1;
     private HashSet<string> vtAuditedIps = new HashSet<string>();
 
     // Real System Telemetry & Radar Blips with Mouse Hover Metadata
@@ -9449,11 +9533,16 @@ public class HackerWallpaperForm : Form {
 
     private float cpuUsage = 0f;
     private ulong prevIdle = 0, prevKernel = 0, prevUser = 0;
-    private float gpuUsagePct = 6.2f;
+    private float gpuUsagePct = 3.2f;
     private float gpuFrameMs = 2.4f;
-    private int currentFps = 40;
+    private int currentFps = 28;
     private bool gpuEcoMode = false;
     private bool cachedWindowMaximized = false;
+    private bool[] monitorOccluded = new bool[8];
+    private bool primaryMonitorOccluded = false;
+    private bool anyMonitorOccluded = false;
+    private int visibleMonitorCount = 5;
+    private readonly StringBuilder occlusionClassSb = new StringBuilder(64);
     private float sceneTimePhase = 0f;
     private int fpsFrameAccum = 0;
     private Stopwatch fpsMeasureSw = Stopwatch.StartNew();
@@ -9492,6 +9581,7 @@ public class HackerWallpaperForm : Form {
         public bool IsForeground;
         public string LogTag;
         public int MinY, MaxY, MinX, MaxX;
+        public int MonitorIndex;
     }
     private List<RainColumn> columns = new List<RainColumn>();
     private List<Rectangle> monitorRects = new List<Rectangle>();
@@ -9699,9 +9789,12 @@ public class HackerWallpaperForm : Form {
     private Font fontHudBold;
     private Font fontHudTitle;
 
-    public HackerWallpaperForm(EventWaitHandle configEvt, bool openConfigOnStart, EventWaitHandle gamerEvt = null, bool startGamerOnBoot = false) {
+    public HackerWallpaperForm(EventWaitHandle configEvt, bool openConfigOnStart, EventWaitHandle gamerEvt = null, bool startGamerOnBoot = false, EventWaitHandle opacityEvt = null) {
         this.showConfigEvent = configEvt;
         this.toggleGamerEvent = gamerEvt;
+        this.opacityCmdEvent = opacityEvt;
+        try { cachedSelfPid = Process.GetCurrentProcess().Id; } catch { cachedSelfPid = 0; }
+        LoadInitialTerminalOpacity();
         Config = WallpaperConfig.Load();
         if (configEvt != null) {
             // Ensure cold startup always begins with live 3D rendering and Scene Mode 0 (Forest + River)
@@ -9732,6 +9825,7 @@ public class HackerWallpaperForm : Form {
         fontHudTitle = new Font("Consolas", 9.8f, FontStyle.Bold);
 
         porygon = new Porygon3DAvatar(screenW, screenH);
+        porygon.IsPointOccluded = IsPointOnOccludedMonitor;
 
         for (int i = 0; i < pingHistory.Length; i++) pingHistory[i] = 15f;
         if (configEvt == null) {
@@ -9746,18 +9840,29 @@ public class HackerWallpaperForm : Form {
             netUpKbps = 28.4f;
             pingMs = 14;
             liveLogLines.Add("[13:20:01] [3D_BG_SCENE] Entorno 3D -> [1/3] SELVA+OSC (Ctrl+Alt+M)");
-            liveLogLines.Add("[13:20:02] [TERM_OPACITY] Opacidad Terminal -> 50% (Ctrl+Alt+Up/Down)");
+            liveLogLines.Add("[13:20:02] [TERM_OPACITY] Opacidad Terminal -> 50% (Ctrl+Alt+Up/Down/O)");
             liveLogLines.Add("[13:20:03] BASELINE // DL:142.5KB/s | GPU:5.2% (24FPS) | PING:14ms");
             return;
         }
         RebuildBackground();
         RebuildRainColumns();
+        InitFlyWireBrain();
 
         // Hook PorygonCyberDefenseEngine (NIDS+PID / AV Watcher / SIEM / Hybrid IPS / Web SOC) to 3D Cyberspace
         PorygonCyberDefenseEngine.OnInject3DThreatOrb = (kind, remEp, locSkt, proto, tcpSt, anomType, anomDet, score) => {
             try {
                 if (porygon != null) {
                     porygon.InjectRealNetworkNode(screenW, screenH, kind, remEp, locSkt, proto, tcpSt, anomType, anomDet, score, netDownKbps + netUpKbps);
+                }
+                if (flyWire != null && flyWire.Loaded) {
+                    string at = (anomType ?? "").ToUpperInvariant();
+                    string fwKind;
+                    if (at.Contains("REGISTRY") || at.Contains("PERSIST") || at.Contains("SERVICE") || at.Contains("STARTUP")) fwKind = "malware";
+                    else if (at.Contains("PORT") || at.Contains("SCAN") || at.Contains("RECON") || at.Contains("PROBE")) fwKind = "signature";
+                    else if (at.Contains("EXFIL") || at.Contains("UPLOAD") || at.Contains("TUNNEL")) fwKind = "exfil";
+                    else if (at.Contains("DGA") || at.Contains("C2") || at.Contains("BEACON") || at.Contains("LOLBIN") || at.Contains("POWERSHELL")) fwKind = "anomaly";
+                    else fwKind = score >= 0.70f ? "anomaly" : "signature";
+                    flyWire.Enqueue(fwKind, string.Format("IDS {0} {1}", anomType, remEp), score);
                 }
                 lock (telemetryLock) {
                     string ts = DateTime.Now.ToString("HH:mm:ss");
@@ -9773,6 +9878,11 @@ public class HackerWallpaperForm : Form {
             lock (telemetryLock) {
                 d["cpu"] = cpuUsage.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
                 d["gpu"] = (isGamerSuspended ? 0.0f : gpuUsagePct).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+                d["selfGpu"] = (isGamerSuspended ? 0.0f : realSelfGpuPct).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+                d["extGpu"] = externalGpuMaxPct.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+                d["autoHighGpu"] = autoHighGpuDetected;
+                d["highGpuProc"] = highGpuProcessName;
+                d["termOpacity"] = terminalOpacityPct;
                 d["fps"] = isGamerSuspended ? 0 : currentFps;
                 d["ramPct"] = ramPercent;
                 d["ramUsed"] = ramUsedGB.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
@@ -9782,6 +9892,8 @@ public class HackerWallpaperForm : Form {
                 d["bgSceneMode"] = Config != null ? Config.BgSceneMode : 0;
                 d["bgSceneName"] = GetBgSceneModeShortName(Config != null ? Config.BgSceneMode : 0);
                 d["gamerMode"] = isGamerSuspended || (Config != null && Config.GamerMode);
+                d["visMons"] = visibleMonitorCount;
+                d["occDebug"] = lastOcclusionDebug;
             }
             List<Dictionary<string, object>> agList = new List<Dictionary<string, object>>();
             if (porygon != null) {
@@ -9814,6 +9926,12 @@ public class HackerWallpaperForm : Form {
                         CycleBgSceneMode();
                     } else if (act == "toggle_gamer") {
                         ToggleGamerMode();
+                    } else if (act == "opacity_up") {
+                        AdjustTerminalOpacity(15);
+                    } else if (act == "opacity_down") {
+                        AdjustTerminalOpacity(-15);
+                    } else if (act == "opacity_toggle") {
+                        ToggleTerminalOpacityQuick();
                     }
                     hudConnectomeDirty = true;
                     hudBrain3DDirty = true;
@@ -9826,12 +9944,12 @@ public class HackerWallpaperForm : Form {
         UpdateRealTelemetry(null);
 
         renderTimer = new System.Windows.Forms.Timer();
-        renderTimer.Interval = 22; // Hardware GPU Batched target (~42 FPS active desktop / 25 FPS eco mode)
+        renderTimer.Interval = 33; // Hardware GPU Batched target (~30 FPS active desktop / 20 FPS eco mode to minimize cross-GPU DWM copy)
         renderTimer.Tick += OnRenderTick;
 
         telemetryTimer = new System.Threading.Timer(UpdateRealTelemetry, null, 1200, 2200);
-        // Dedicated Multi-Core CPU Evolutionary Training Timer (runs every 250ms across CPU threads while GPU renders)
-        cpuEvoTimer = new System.Threading.Timer(OnCpuEvolutionTimerTick, null, 600, 250);
+        // Single-Core Low-Overhead CPU Evolutionary Training Timer (runs every 800ms in background)
+        cpuEvoTimer = new System.Threading.Timer(OnCpuEvolutionTimerTick, null, 800, 800);
 
         if (openConfigOnStart) {
             System.Windows.Forms.Timer t = new System.Windows.Forms.Timer();
@@ -10004,15 +10122,17 @@ public class HackerWallpaperForm : Form {
 
     public void RebuildRainColumns() {
         columns.Clear();
-        int perMonitorCount = Math.Max(20, (int)(Config.RainDensity * 0.78f));
+        int basePerMonitor = Math.Max(20, (int)(Config.RainDensity * 0.72f));
         for (int mIdx = 0; mIdx < monitorRects.Count; mIdx++) {
             Rectangle m = monitorRects[mIdx];
+            int perMonitorCount = Math.Max(14, (int)Math.Round(basePerMonitor * (m.Width / 1920.0f)));
             float spacing = (float)m.Width / perMonitorCount;
             for (int i = 0; i < perMonitorCount; i++) {
                 float x = m.Left + i * spacing + 4f;
                 if ((x - m.Left) < 130 && i % 2 == 1) continue;
 
                 RainColumn col = new RainColumn();
+                col.MonitorIndex = mIdx;
                 col.X = x;
                 col.MinY = m.Top;
                 col.MaxY = m.Bottom;
@@ -10063,10 +10183,227 @@ public class HackerWallpaperForm : Form {
         return socPort5080Online;
     }
 
+    private HashSet<int> compositorPids = new HashSet<int>();
+    private DateTime compositorPidsAt = DateTime.MinValue;
+    private string lastTopEngineKey = "";
+    private volatile Dictionary<int, double> lastPidRenderGpu = new Dictionary<int, double>();
+
+    private double GetPidRenderGpu(int pid) {
+        Dictionary<int, double> d = lastPidRenderGpu;
+        double v;
+        return (d != null && d.TryGetValue(pid, out v)) ? v : 0.0;
+    }
+
+    private void RefreshCompositorPids() {
+        if ((DateTime.Now - compositorPidsAt).TotalSeconds < 30) return;
+        compositorPidsAt = DateTime.Now;
+        HashSet<int> s = new HashSet<int>();
+        foreach (string pn in new string[] { "dwm", "csrss", "System" }) {
+            try {
+                foreach (Process pr in Process.GetProcessesByName(pn)) { s.Add(pr.Id); pr.Dispose(); }
+            } catch { }
+        }
+        compositorPids = s;
+    }
+
+    private bool SampleHardwareGpuUtilization(out float selfGpuPct, out float extMaxEnginePct, out int topExtPid) {
+        selfGpuPct = realSelfGpuPct;
+        extMaxEnginePct = externalGpuMaxPct;
+        topExtPid = 0;
+        try {
+            // Optional CLI test override flag for verifying >90% GPU auto-hibernation
+            string testFlag = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "gpu_load_test.flag");
+            if (File.Exists(testFlag)) {
+                string txt = File.ReadAllText(testFlag).Trim();
+                float simVal;
+                if (float.TryParse(txt, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out simVal)) {
+                    selfGpuPct = isGamerSuspended ? 0.0f : 1.2f;
+                    extMaxEnginePct = Math.Max(0f, Math.Min(100f, simVal));
+                    topExtPid = cachedSelfPid;
+                    return true;
+                }
+            }
+
+            if (pdhGpuQuery == IntPtr.Zero) {
+                if (PdhOpenQuery(IntPtr.Zero, IntPtr.Zero, out pdhGpuQuery) != 0) return false;
+                if (PdhAddEnglishCounter(pdhGpuQuery, "\\GPU Engine(*)\\Utilization Percentage", IntPtr.Zero, out pdhGpuCounter) != 0) {
+                    PdhCloseQuery(pdhGpuQuery);
+                    pdhGpuQuery = IntPtr.Zero;
+                    return false;
+                }
+                PdhCollectQueryData(pdhGpuQuery);
+                return false;
+            }
+            if (PdhCollectQueryData(pdhGpuQuery) != 0) return false;
+
+            uint bufSize = pdhGpuBufSize;
+            uint itemCount = 0;
+            int status = PdhGetFormattedCounterArray(pdhGpuCounter, PDH_FMT_DOUBLE, ref bufSize, out itemCount, pdhGpuBuf);
+            if ((uint)status == PDH_MORE_DATA || bufSize > pdhGpuBufSize) {
+                if (pdhGpuBuf != IntPtr.Zero) Marshal.FreeHGlobal(pdhGpuBuf);
+                pdhGpuBufSize = bufSize + 16384;
+                pdhGpuBuf = Marshal.AllocHGlobal((int)pdhGpuBufSize);
+                bufSize = pdhGpuBufSize;
+                status = PdhGetFormattedCounterArray(pdhGpuCounter, PDH_FMT_DOUBLE, ref bufSize, out itemCount, pdhGpuBuf);
+            }
+            if (status != 0 || itemCount == 0 || pdhGpuBuf == IntPtr.Zero) return false;
+
+            int structSize = Marshal.SizeOf(typeof(PDH_FMT_COUNTERVALUE_ITEM_DOUBLE));
+            RefreshCompositorPids();
+            pdhEngineSums.Clear();
+            pdhPidSums.Clear();
+            double selfSum = 0.0;
+
+            for (uint i = 0; i < itemCount; i++) {
+                IntPtr ptr = new IntPtr(pdhGpuBuf.ToInt64() + i * structSize);
+                PDH_FMT_COUNTERVALUE_ITEM_DOUBLE item = (PDH_FMT_COUNTERVALUE_ITEM_DOUBLE)Marshal.PtrToStructure(ptr, typeof(PDH_FMT_COUNTERVALUE_ITEM_DOUBLE));
+                if (item.CStatus != 0 || item.doubleValue <= 0.05) continue;
+                string name = Marshal.PtrToStringUni(item.szName);
+                if (string.IsNullOrEmpty(name)) continue;
+
+                // Parse PID from "pid_<digits>_luid_..."
+                int procId = 0;
+                if (name.Length > 6 && name[0] == 'p' && name[1] == 'i' && name[2] == 'd' && name[3] == '_') {
+                    int idx = 4;
+                    while (idx < name.Length && name[idx] >= '0' && name[idx] <= '9') {
+                        procId = procId * 10 + (name[idx] - '0');
+                        idx++;
+                    }
+                }
+
+                if (procId == cachedSelfPid && cachedSelfPid != 0) {
+                    selfSum += item.doubleValue;
+                } else {
+                    // Ignore: system/compositor (dwm composes OUR wallpaper + cross-GPU copies for the iGPU monitors),
+                    // and non-render engines (Copy / Video Decode / Video Encode / Security / Overlay) that spike to 100% on idle desktops.
+                    if (procId <= 4 || compositorPids.Contains(procId)) continue;
+                    int etIdx = name.IndexOf("engtype_", StringComparison.OrdinalIgnoreCase);
+                    string etype = (etIdx >= 0) ? name.Substring(etIdx + 8) : "";
+                    bool renderEngine = etype.StartsWith("3D", StringComparison.OrdinalIgnoreCase) ||
+                                        etype.StartsWith("Compute", StringComparison.OrdinalIgnoreCase) ||
+                                        etype.StartsWith("Graphics", StringComparison.OrdinalIgnoreCase) ||
+                                        etype.StartsWith("Cuda", StringComparison.OrdinalIgnoreCase);
+                    if (!renderEngine) continue;
+                    int luidIdx = name.IndexOf("luid_");
+                    string engKey = (luidIdx >= 0) ? name.Substring(luidIdx) : name;
+                    double curEng;
+                    if (pdhEngineSums.TryGetValue(engKey, out curEng)) {
+                        pdhEngineSums[engKey] = curEng + item.doubleValue;
+                    } else {
+                        pdhEngineSums[engKey] = item.doubleValue;
+                    }
+                    if (procId > 4) {
+                        double curPid;
+                        if (pdhPidSums.TryGetValue(procId, out curPid)) {
+                            pdhPidSums[procId] = curPid + item.doubleValue;
+                        } else {
+                            pdhPidSums[procId] = item.doubleValue;
+                        }
+                    }
+                }
+            }
+
+            selfGpuPct = (float)Math.Min(100.0, selfSum);
+            double maxEng = 0.0;
+            foreach (var kv in pdhEngineSums) {
+                if (kv.Value > maxEng) maxEng = kv.Value;
+            }
+            extMaxEnginePct = (float)Math.Min(100.0, maxEng);
+            lastTopEngineKey = "";
+            foreach (var kv in pdhEngineSums) { if (kv.Value >= maxEng) { lastTopEngineKey = kv.Key; break; } }
+
+            lastPidRenderGpu = new Dictionary<int, double>(pdhPidSums);
+            double maxPidVal = 0.0;
+            foreach (var kv in pdhPidSums) {
+                if (kv.Value > maxPidVal) {
+                    maxPidVal = kv.Value;
+                    topExtPid = kv.Key;
+                }
+            }
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    private void EvaluateHighGpuAutoSuspension() {
+        float sGpu, eGpu;
+        int topPid;
+        if (!SampleHardwareGpuUtilization(out sGpu, out eGpu, out topPid)) return;
+
+        lock (telemetryLock) {
+            realSelfGpuPct = isGamerSuspended ? 0.0f : sGpu;
+            externalGpuMaxPct = eGpu;
+            // Enforce <= 10% GPU budget for the wallpaper itself
+            gpuOverBudgetEco = (!isGamerSuspended && sGpu > 9.2f);
+        }
+
+        // Auto-disable wallpaper when an external application uses > 90% GPU
+        if (eGpu >= 90.0f) {
+            highGpuStreak++;
+            lowGpuStreak = 0;
+            if (!autoHighGpuDetected && highGpuStreak >= 3) {
+                string pName = "GPU_APP";
+                if (topPid > 0) {
+                    try {
+                        using (Process p = Process.GetProcessById(topPid)) {
+                            if (!string.IsNullOrEmpty(p.ProcessName)) pName = p.ProcessName.ToUpperInvariant();
+                        }
+                    } catch { }
+                }
+                autoHighGpuDetected = true;
+                highGpuProcessName = string.Format("{0} ({1:0.0}%)", pName, eGpu);
+                try {
+                    File.AppendAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "gpu_autopause.log"),
+                        string.Format("{0:yyyy-MM-dd HH:mm:ss} AUTO-PAUSE ext={1:0.0}% self={2:0.0}% proc={3} pid={4} engine={5}\r\n",
+                            DateTime.Now, eGpu, sGpu, pName, topPid, lastTopEngineKey));
+                } catch { }
+                try {
+                    this.BeginInvoke((MethodInvoker)delegate {
+                        UpdateGamerSuspensionState(true);
+                        ShowCyberActionToast(
+                            "[ AUTO-PAUSA POR GPU > 90% // WALLPAPER DESACTIVADO (0.0% GPU) ]",
+                            string.Format("Carga GPU crítica detectada en {0} — Se reanudará al bajar del 78%", highGpuProcessName),
+                            Color.FromArgb(250, 204, 21));
+                    });
+                } catch { }
+            }
+        } else if (eGpu < 78.0f) {
+            highGpuStreak = 0;
+            if (autoHighGpuDetected) {
+                lowGpuStreak++;
+                if (lowGpuStreak >= 2) {
+                    autoHighGpuDetected = false;
+                    highGpuProcessName = "";
+                    try {
+                        this.BeginInvoke((MethodInvoker)delegate {
+                            UpdateGamerSuspensionState(true);
+                            if (!isGamerSuspended) {
+                                ShowCyberActionToast(
+                                    "[ CARGA GPU NORMALIZADA (<78%) // WALLPAPER REANUDADO ]",
+                                    "Motor 3D OpenGL restaurado automáticamente (Presupuesto <= 10% GPU)",
+                                    Color.FromArgb(52, 211, 153));
+                            }
+                        });
+                    } catch { }
+                }
+            }
+        }
+    }
+
     private void UpdateRealTelemetry(object state) {
-        if (isGamerSuspended) return;
+        if (isGamerSuspended) {
+            if (autoHighGpuDetected && (Config == null || !Config.GamerMode) && !autoGameDetected) {
+                EvaluateHighGpuAutoSuspension();
+            }
+            return;
+        }
         try {
             telemetryCycles++;
+            if (telemetryCycles == 1 || telemetryCycles % 2 == 0) {
+                EvaluateHighGpuAutoSuspension();
+                if (isGamerSuspended) return;
+            }
             FILETIME ftIdle, ftKernel, ftUser;
             float newCpu = cpuUsage;
             if (GetSystemTimes(out ftIdle, out ftKernel, out ftUser)) {
@@ -10554,18 +10891,22 @@ public class HackerWallpaperForm : Form {
                 } catch { }
             }
 
-            // Zero-Overhead GPU 3D Utilization Calculation from OpenGL Frame Duty (avoids heavy PDH GPU Engine registry stalls)
+            // Zero-Overhead GPU 3D Utilization Calculation from OpenGL Command Duty & Visible Monitor Count
             float newGpuPct;
-            if (isGamerSuspended) {
+            if (isGamerSuspended || (Config != null && Config.AutoPauseMaximized && cachedWindowMaximized)) {
                 newGpuPct = 0.0f;
             } else {
-                float dutyPct = (gpuFrameMs * currentFps) / 10.0f;
-                newGpuPct = Math.Max(1.6f, Math.Min(99f, dutyPct * 1.15f));
+                int totalMons = Math.Max(1, monitorRects.Count);
+                float visFrac = Math.Max(0.15f, (float)visibleMonitorCount / totalMons);
+                float glSubmitDuty = (Math.Min(12.0f, gpuFrameMs) * currentFps) / 10.0f;
+                newGpuPct = Math.Max(0.8f, Math.Min(99f, glSubmitDuty * 0.42f * visFrac + visibleMonitorCount * 0.55f));
             }
 
             lock (telemetryLock) {
                 cpuUsage = newCpu;
-                gpuUsagePct = isGamerSuspended ? 0.0f : (gpuUsagePct * 0.45f + newGpuPct * 0.55f);
+                gpuUsagePct = (isGamerSuspended || (Config != null && Config.AutoPauseMaximized && cachedWindowMaximized))
+                    ? 0.0f
+                    : (gpuUsagePct * 0.45f + newGpuPct * 0.55f);
                 ramUsedGB = newRamUsed;
                 ramTotalGB = newRamTotal;
                 ramPercent = newRamPct;
@@ -10627,7 +10968,7 @@ public class HackerWallpaperForm : Form {
 
     public void HandleHotkeyCommand(int hk) {
         DateTime now = DateTime.UtcNow;
-        if ((now - lastHotkeyUtc).TotalMilliseconds < 280) return;
+        if ((now - lastHotkeyUtc).TotalMilliseconds < 220) return;
         lastHotkeyUtc = now;
 
         if (hk == HOTKEY_ID || hk == HOTKEY_GAMER_ID) {
@@ -10645,9 +10986,11 @@ public class HackerWallpaperForm : Form {
             brain3DFullscreen = !brain3DFullscreen;
             hudBrain3DDirty = true;
         } else if (hk == HOTKEY_OPACITY_UP_ID) {
-            AdjustTerminalOpacity(10);
+            AdjustTerminalOpacity(15);
         } else if (hk == HOTKEY_OPACITY_DOWN_ID) {
-            AdjustTerminalOpacity(-10);
+            AdjustTerminalOpacity(-15);
+        } else if (hk == HOTKEY_OPACITY_TOGGLE_ID) {
+            ToggleTerminalOpacityQuick();
         } else if (hk == HOTKEY_BG_MODE_ID) {
             CycleBgSceneMode();
         }
@@ -10664,6 +11007,7 @@ public class HackerWallpaperForm : Form {
             RegisterHotKey(hkHwnd, HOTKEY_BRAIN_FULL_ID, MOD_CONTROL | MOD_ALT, (uint)Keys.B);
             RegisterHotKey(hkHwnd, HOTKEY_OPACITY_UP_ID, MOD_CONTROL | MOD_ALT, (uint)Keys.Up);
             RegisterHotKey(hkHwnd, HOTKEY_OPACITY_DOWN_ID, MOD_CONTROL | MOD_ALT, (uint)Keys.Down);
+            RegisterHotKey(hkHwnd, HOTKEY_OPACITY_TOGGLE_ID, MOD_CONTROL | MOD_ALT, (uint)Keys.O);
             RegisterHotKey(hkHwnd, HOTKEY_BG_MODE_ID, MOD_CONTROL | MOD_ALT, (uint)Keys.M);
             RegisterHotKey(hkHwnd, HOTKEY_GAMER_ID, MOD_CONTROL | MOD_ALT, (uint)Keys.G);
             RegisterHotKey(hkHwnd, HOTKEY_SIEM_ID, MOD_CONTROL | MOD_ALT, (uint)Keys.S);
@@ -10689,11 +11033,20 @@ public class HackerWallpaperForm : Form {
             UnregisterHotKey(hkHwnd, HOTKEY_BRAIN_FULL_ID);
             UnregisterHotKey(hkHwnd, HOTKEY_OPACITY_UP_ID);
             UnregisterHotKey(hkHwnd, HOTKEY_OPACITY_DOWN_ID);
+            UnregisterHotKey(hkHwnd, HOTKEY_OPACITY_TOGGLE_ID);
             UnregisterHotKey(hkHwnd, HOTKEY_BG_MODE_ID);
             UnregisterHotKey(hkHwnd, HOTKEY_GAMER_ID);
             UnregisterHotKey(hkHwnd, HOTKEY_SIEM_ID);
             try { hotkeySink.DestroyHandle(); } catch { }
             hotkeySink = null;
+        }
+        if (pdhGpuQuery != IntPtr.Zero) {
+            try { PdhCloseQuery(pdhGpuQuery); } catch { }
+            pdhGpuQuery = IntPtr.Zero;
+        }
+        if (pdhGpuBuf != IntPtr.Zero) {
+            try { Marshal.FreeHGlobal(pdhGpuBuf); } catch { }
+            pdhGpuBuf = IntPtr.Zero;
         }
         if (porygon != null) porygon.SaveBrainStates();
         base.OnFormClosing(e);
@@ -10767,6 +11120,10 @@ public class HackerWallpaperForm : Form {
 
     public void SetGamerMode(bool enable, string reasonTag) {
         Config.GamerMode = enable;
+        if (!enable) {
+            autoHighGpuDetected = false;
+            highGpuStreak = 0;
+        }
         Config.Save();
         UpdateGamerSuspensionState(true);
         ShowGamerToastNotification(enable, reasonTag);
@@ -10883,10 +11240,10 @@ public class HackerWallpaperForm : Form {
                     try { procPath = (p.MainModule.FileName ?? "").ToLowerInvariant(); } catch { }
                 }
             } catch {
-                return isD3DFullscreen;
+                return isD3DFullscreen && GetPidRenderGpu((int)pid) >= 20.0;
             }
 
-            if (string.IsNullOrEmpty(procName)) return isD3DFullscreen;
+            if (string.IsNullOrEmpty(procName)) return isD3DFullscreen && GetPidRenderGpu((int)pid) >= 20.0;
 
             // Exclude standard desktop shells, browsers, IDEs, and productivity apps
             if (procName == "explorer" || procName == "shellexperiencehost" || procName == "searchhost" ||
@@ -10895,11 +11252,16 @@ public class HackerWallpaperForm : Form {
                 procName == "windowsterminal" || procName == "powershell" || procName == "pwsh" || procName == "cmd" ||
                 procName == "chrome" || procName == "msedge" || procName == "firefox" || procName == "brave" || procName == "opera" ||
                 procName == "whatsapp" || procName == "whatsapp.root" || procName == "discord" || procName == "spotify" ||
-                procName == "slack" || procName == "teams" || procName == "notepad" || procName == "antigravity") {
+                procName == "slack" || procName == "teams" || procName == "notepad" || procName == "antigravity" ||
+                procName == "rustdesk" || procName == "mstsc" || procName == "anydesk" || procName == "teamviewer" ||
+                procName == "msrdc" || procName == "parsecd" || procName == "vlc" || procName == "mpc-hc64" || procName == "mpv" ||
+                procName == "obs64" || procName == "photos" || procName == "winword" || procName == "excel" || procName == "powerpnt" ||
+                procName == "olk" || procName == "outlook" || procName == "acrobat" || procName == "zoom" || procName == "agy") {
                 return false;
             }
 
-            if (isD3DFullscreen) {
+            double fgGpu = GetPidRenderGpu((int)pid);
+            if (isD3DFullscreen && fgGpu >= 20.0) {
                 detectedName = procName.ToUpperInvariant();
                 return true;
             }
@@ -10913,7 +11275,7 @@ public class HackerWallpaperForm : Form {
                 procName.Contains("fortnite") || procName.Contains("overwatch") || procName.Contains("r5apex") ||
                 procName.Contains("eldenring") || procName.Contains("cyberpunk") || procName.Contains("helldivers") ||
                 procName.Contains("genshin") || procName.Contains("minecraft") || procName.Contains("gtav") ||
-                procName.Contains("cod") || procName.Contains("league") || procName.Contains("unreal")) {
+                procName.Contains("blackops") || procName.Contains("modernwarfare") || procName.Contains("league") || procName.Contains("unreal")) {
                 detectedName = procName.ToUpperInvariant();
                 return true;
             }
@@ -10921,7 +11283,7 @@ public class HackerWallpaperForm : Form {
             // Borderless fullscreen window covering entire monitor (including taskbar area) without standard WS_CAPTION
             int style = GetWindowLong(fg, GWL_STYLE);
             const int WS_CAPTION = 0x00C00000;
-            if (coversFullMonitor && (style & WS_CAPTION) == 0) {
+            if (coversFullMonitor && (style & WS_CAPTION) == 0 && fgGpu >= 20.0) {
                 detectedName = procName.ToUpperInvariant();
                 return true;
             }
@@ -10989,7 +11351,7 @@ public class HackerWallpaperForm : Form {
     }
 
     private void UpdateGamerSuspensionState(bool forceRefresh) {
-        bool shouldSuspend = Config.GamerMode || (Config.AutoGamerOnFullscreenGame && autoGameDetected);
+        bool shouldSuspend = Config.GamerMode || (Config.AutoGamerOnFullscreenGame && autoGameDetected) || autoHighGpuDetected;
         if (shouldSuspend) {
             bool wasSuspended = isGamerSuspended;
             isGamerSuspended = true;
@@ -10999,13 +11361,28 @@ public class HackerWallpaperForm : Form {
                 currentFps = 0;
                 if (!wasSuspended || forceRefresh) {
                     string ts = DateTime.Now.ToString("HH:mm:ss");
-                    string src = Config.GamerMode ? "MANUAL (Ctrl+Alt+G)" : ("AUTO_GAME: " + activeGameName);
+                    string src = Config.GamerMode
+                        ? "MANUAL (Ctrl+Alt+G)"
+                        : (autoHighGpuDetected ? ("AUTO_GPU_>90%: " + highGpuProcessName) : ("AUTO_GAME: " + activeGameName));
                     liveLogLines.Add(string.Format("[{0}] [GAMER_MODE] 0.0% GPU HIBERNACIÓN ACTIVA // {1}", ts, src));
+                    if (!wasSuspended) {
+                        try {
+                            File.AppendAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "gpu_autopause.log"),
+                                string.Format("{0:yyyy-MM-dd HH:mm:ss} HIBERNATE reason={1}\r\n", DateTime.Now, src));
+                        } catch { }
+                    }
                     while (liveLogLines.Count > 5) liveLogLines.RemoveAt(0);
                 }
             }
             if (telemetryTimer != null) {
-                try { telemetryTimer.Change(Timeout.Infinite, Timeout.Infinite); } catch { }
+                try {
+                    if (autoHighGpuDetected && !Config.GamerMode && !autoGameDetected) {
+                        // Keep lightweight 3.5s PDH check active so we automatically resume when GPU load drops < 78%
+                        telemetryTimer.Change(3500, 3500);
+                    } else {
+                        telemetryTimer.Change(Timeout.Infinite, Timeout.Infinite);
+                    }
+                } catch { }
             }
             if (cpuEvoTimer != null) {
                 try { cpuEvoTimer.Change(Timeout.Infinite, Timeout.Infinite); } catch { }
@@ -11039,10 +11416,10 @@ public class HackerWallpaperForm : Form {
                 try { telemetryTimer.Change(150, 2200); } catch { }
             }
             if (cpuEvoTimer != null) {
-                try { cpuEvoTimer.Change(250, 250); } catch { }
+                try { cpuEvoTimer.Change(800, 800); } catch { }
             }
             if (renderTimer != null) {
-                renderTimer.Interval = 42;
+                renderTimer.Interval = 33;
             }
             if (glEnabled) {
                 RenderOpenGLFrame();
@@ -11052,25 +11429,69 @@ public class HackerWallpaperForm : Form {
         }
     }
 
-    private void AdjustTerminalOpacity(int deltaPct) {
+    private void LoadInitialTerminalOpacity() {
         try {
-            terminalOpacityPct = Math.Max(15, Math.Min(100, terminalOpacityPct + deltaPct));
-
-            // 1. Live-update Windows Terminal settings.json (Windows Terminal hot-reloads opacity immediately)
             string localApp = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             string wtSettings = Path.Combine(localApp, @"Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json");
             if (File.Exists(wtSettings)) {
                 string json = File.ReadAllText(wtSettings);
-                string updated = System.Text.RegularExpressions.Regex.Replace(json, @"(""opacity""\s*:\s*)\d+(\s*,\s*""useAcrylic"")", "${1}" + terminalOpacityPct + "${2}");
+                var m = System.Text.RegularExpressions.Regex.Match(json, @"""defaults""\s*:\s*\{[^}]*?""opacity""\s*:\s*(\d+)");
+                if (!m.Success) {
+                    m = System.Text.RegularExpressions.Regex.Match(json, @"""opacity""\s*:\s*(\d+)\s*,\s*""useAcrylic""");
+                }
+                if (m.Success) {
+                    int val;
+                    if (int.TryParse(m.Groups[1].Value, out val)) {
+                        terminalOpacityPct = Math.Max(20, Math.Min(100, val));
+                    }
+                }
+            }
+        } catch { }
+    }
+
+    public void ToggleTerminalOpacityQuick() {
+        int nextPct = (terminalOpacityPct < 90) ? 100 : 50;
+        SetTerminalOpacity(nextPct, true);
+    }
+
+    public void AdjustTerminalOpacity(int deltaPct) {
+        SetTerminalOpacity(terminalOpacityPct + deltaPct, true);
+    }
+
+    public void SetTerminalOpacity(int targetPct, bool showToast) {
+        try {
+            terminalOpacityPct = Math.Max(20, Math.Min(100, targetPct));
+
+            // 1. Live-update Windows Terminal settings.json (Windows Terminal hot-reloads opacity immediately)
+            string localApp = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            string[] wtPaths = new string[] {
+                Path.Combine(localApp, @"Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"),
+                Path.Combine(localApp, @"Packages\Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe\LocalState\settings.json"),
+                Path.Combine(localApp, @"Microsoft\Windows Terminal\settings.json")
+            };
+            for (int pIdx = 0; pIdx < wtPaths.Length; pIdx++) {
+                string wtSettings = wtPaths[pIdx];
+                if (!File.Exists(wtSettings)) continue;
+                string json = File.ReadAllText(wtSettings);
+                string updated = System.Text.RegularExpressions.Regex.Replace(
+                    json,
+                    @"(""defaults""\s*:\s*\{[^}]*?""opacity""\s*:\s*)\d+",
+                    "${1}" + terminalOpacityPct);
+                if (updated == json) {
+                    updated = System.Text.RegularExpressions.Regex.Replace(
+                        json,
+                        @"(""opacity""\s*:\s*)\d+(\s*,\s*""useAcrylic"")",
+                        "${1}" + terminalOpacityPct + "${2}");
+                }
                 if (updated != json) {
                     File.WriteAllText(wtSettings, updated, Encoding.UTF8);
                 }
             }
 
-            // 2. Also apply Win32 LWA_ALPHA to any open classic ConsoleWindowClass windows
-            byte alphaByte = (byte)Math.Max(38, Math.Min(255, (int)Math.Round(terminalOpacityPct * 255.0 / 100.0)));
-            IntPtr hCon = FindWindow("ConsoleWindowClass", null);
-            if (hCon != IntPtr.Zero) {
+            // 2. Also apply Win32 LWA_ALPHA to all open classic ConsoleWindowClass windows
+            byte alphaByte = (byte)Math.Max(50, Math.Min(255, (int)Math.Round(terminalOpacityPct * 255.0 / 100.0)));
+            IntPtr hCon = IntPtr.Zero;
+            while ((hCon = FindWindowEx(IntPtr.Zero, hCon, "ConsoleWindowClass", null)) != IntPtr.Zero) {
                 int ex = GetWindowLong(hCon, GWL_EXSTYLE);
                 SetWindowLong(hCon, GWL_EXSTYLE, ex | WS_EX_LAYERED);
                 SetLayeredWindowAttributes(hCon, 0, alphaByte, LWA_ALPHA);
@@ -11078,11 +11499,19 @@ public class HackerWallpaperForm : Form {
 
             lock (telemetryLock) {
                 string ts = DateTime.Now.ToString("HH:mm:ss");
-                liveLogLines.Add(string.Format("[{0}] [TERM_OPACITY] Opacidad Terminal -> {1}% (Ctrl+Alt+Up/Down)", ts, terminalOpacityPct));
+                liveLogLines.Add(string.Format("[{0}] [TERM_OPACITY] Opacidad Terminal -> {1}% (Ctrl+Alt+Up/Down/O)", ts, terminalOpacityPct));
                 while (liveLogLines.Count > 5) liveLogLines.RemoveAt(0);
             }
             hudTelemetryDirty = true;
             if (isGamerSuspended) RenderGamerHibernationFrameOpenGL();
+
+            if (showToast) {
+                string modeLabel = (terminalOpacityPct >= 95) ? "MODO SÓLIDO / LECTURA NÍTIDA" : "MODO CYBER TRANSLÚCIDO";
+                ShowCyberActionToast(
+                    string.Format("[ OPACIDAD DE TERMINAL -> {0}% // {1} ]", terminalOpacityPct, modeLabel),
+                    "Atajos Rápidos: Ctrl+Alt+Up (+15%) | Ctrl+Alt+Down (-15%) | Ctrl+Alt+O (100% <-> 50%) | Click [OP+] en HUD",
+                    (terminalOpacityPct >= 90) ? Color.FromArgb(52, 211, 153) : Color.FromArgb(245, 202, 78));
+            }
         } catch { }
     }
 
@@ -11324,16 +11753,107 @@ public class HackerWallpaperForm : Form {
         }
     }
 
-    private bool IsAnotherWindowMaximized() {
-        return false; // With 5 monitors, keep the connected virtual environment live across visible screens
+    private bool IsMonitorOccluded(int mIdx) {
+        return mIdx >= 0 && mIdx < monitorOccluded.Length && monitorOccluded[mIdx];
+    }
+
+    private bool IsPointOnOccludedMonitor(float localX, float localY) {
+        if (!anyMonitorOccluded) return false;
+        int ix = (int)localX;
+        int iy = (int)localY;
+        for (int i = 0; i < monitorRects.Count && i < monitorOccluded.Length; i++) {
+            if (monitorOccluded[i] && monitorRects[i].Contains(ix, iy)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private string lastOcclusionDebug = "";
+
+    private bool IsPointDesktopVisible(Point screenPt, out string hitClass) {
+        hitClass = "NONE";
+        IntPtr hHit = WindowFromPoint(screenPt);
+        if (hHit == IntPtr.Zero) return false;
+        if (IsDesktopWindowHandle(hHit)) {
+            hitClass = "DESK";
+            return true;
+        }
+        IntPtr hRoot = GetAncestor(hHit, 2); // GA_ROOT = 2
+        if (hRoot == IntPtr.Zero) hRoot = hHit;
+        occlusionClassSb.Length = 0;
+        GetClassName(hRoot, occlusionClassSb, occlusionClassSb.Capacity);
+        string rCls = occlusionClassSb.ToString();
+        hitClass = rCls;
+        if (terminalOpacityPct < 92 && (rCls == "CASCADIA_HOSTING_WINDOW_CLASS" || rCls == "ConsoleWindowClass")) {
+            return true;
+        }
+        return false;
+    }
+
+    private bool UpdateMonitorOcclusionState() {
+        try {
+            int monCount = monitorRects.Count;
+            if (monCount == 0) {
+                primaryMonitorOccluded = false;
+                anyMonitorOccluded = false;
+                visibleMonitorCount = 1;
+                return false;
+            }
+            bool anyOcc = false;
+            bool allOcc = true;
+            bool primOcc = false;
+            int visCount = 0;
+            StringBuilder dbg = new StringBuilder(128);
+
+            for (int i = 0; i < monCount && i < monitorOccluded.Length; i++) {
+                Rectangle m = monitorRects[i];
+                // Primary monitor's physical Windows coordinate is always (0,0), so (m.Left - primaryMonRect.Left) is the exact physical screen X/Y!
+                int sx = m.Left - primaryMonRect.Left;
+                int sy = m.Top - primaryMonRect.Top;
+                int w = m.Width;
+                int h = m.Height;
+
+                // Sample 5 interior points on monitor i (center + 4 quadrants, avoiding taskbar/titlebar)
+                string centerCls;
+                int occludedPts = 0;
+                if (!IsPointDesktopVisible(new Point(sx + w / 2, sy + h / 2), out centerCls)) occludedPts++;
+                string dummy;
+                if (!IsPointDesktopVisible(new Point(sx + w / 4, sy + h / 3), out dummy)) occludedPts++;
+                if (!IsPointDesktopVisible(new Point(sx + (w * 3) / 4, sy + h / 3), out dummy)) occludedPts++;
+                if (!IsPointDesktopVisible(new Point(sx + w / 4, sy + (h * 2) / 3), out dummy)) occludedPts++;
+                if (!IsPointDesktopVisible(new Point(sx + (w * 3) / 4, sy + (h * 2) / 3), out dummy)) occludedPts++;
+
+                bool isOcc = (occludedPts >= 4);
+                monitorOccluded[i] = isOcc;
+                if (i > 0) dbg.Append(" | ");
+                dbg.AppendFormat("M{0}:{1}({2}/5,{3})", i + 1, isOcc ? "OCC" : "VIS", occludedPts, centerCls);
+
+                if (isOcc) {
+                    anyOcc = true;
+                    if (m == primaryMonRect) primOcc = true;
+                } else {
+                    allOcc = false;
+                    visCount++;
+                }
+            }
+
+            primaryMonitorOccluded = primOcc && brainSnapshotPath == null && DateTime.Now > brainForceVisibleUntil;
+            anyMonitorOccluded = anyOcc;
+            visibleMonitorCount = visCount;
+            lastOcclusionDebug = dbg.ToString();
+            return allOcc;
+        } catch {
+            return false;
+        }
     }
 
     private bool IsDesktopWindowHandle(IntPtr hWnd) {
         if (hWnd == IntPtr.Zero) return false;
         if (hWnd == this.Handle || hWnd == cachedProgman || hWnd == cachedDefView) return true;
-        StringBuilder sb = new StringBuilder(64);
-        GetClassName(hWnd, sb, sb.Capacity);
-        string cls = sb.ToString();
+        occlusionClassSb.Length = 0;
+        GetClassName(hWnd, occlusionClassSb, occlusionClassSb.Capacity);
+        string cls = occlusionClassSb.ToString();
         return cls == "SysListView32" || cls == "SHELLDLL_DefView" || cls == "Progman" || cls == "WorkerW";
     }
 
@@ -11388,6 +11908,7 @@ public class HackerWallpaperForm : Form {
                 brain3DManualYaw += 0.36f;
             } else if (xFrac < 0.56f) {
                 // [ZOOM] Cycle Zoom Level
+                brain3DPanX = 0f; brain3DPanY = 0f;
                 if (brain3DZoom < 1.15f) brain3DZoom = 1.35f;
                 else if (brain3DZoom < 1.55f) brain3DZoom = 1.75f;
                 else if (brain3DZoom > 0.90f) brain3DZoom = 0.80f;
@@ -11463,7 +11984,10 @@ public class HackerWallpaperForm : Form {
                 if (telRect.Contains(pt)) {
                     int relX = pt.X - hudX;
                     int relY = pt.Y - hudY;
-                    if (relY <= 30 && relX >= hudW - 204 && relX < hudW - 142) {
+                    if (relY <= 30 && relX >= hudW - 262 && relX < hudW - 204) {
+                        ToggleTerminalOpacityQuick();
+                        return;
+                    } else if (relY <= 30 && relX >= hudW - 204 && relX < hudW - 142) {
                         ToggleGamerMode();
                         return;
                     } else if (relY <= 30 && relX >= hudW - 142 && relX < hudW - 96) {
@@ -11471,10 +11995,10 @@ public class HackerWallpaperForm : Form {
                         if (isGamerSuspended) RenderGamerHibernationFrameOpenGL();
                         return;
                     } else if (relY <= 30 && relX >= hudW - 96 && relX < hudW - 64) {
-                        AdjustTerminalOpacity(-10);
+                        AdjustTerminalOpacity(-15);
                         return;
                     } else if (relY <= 30 && relX >= hudW - 64 && relX < hudW - 32) {
-                        AdjustTerminalOpacity(10);
+                        AdjustTerminalOpacity(15);
                         return;
                     }
                     telemetryCollapsed = !telemetryCollapsed;
@@ -11584,12 +12108,41 @@ public class HackerWallpaperForm : Form {
         }
     }
 
+    private void ProcessOpacityFlagOrDefault() {
+        try {
+            string opFlagPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "opacity_cmd.flag");
+            if (File.Exists(opFlagPath)) {
+                string otxt = File.ReadAllText(opFlagPath).Trim().ToLowerInvariant();
+                File.Delete(opFlagPath);
+                int parsedOp;
+                if (otxt == "up" || otxt == "+") {
+                    AdjustTerminalOpacity(15);
+                } else if (otxt == "down" || otxt == "-") {
+                    AdjustTerminalOpacity(-15);
+                } else if (otxt == "max" || otxt == "100") {
+                    SetTerminalOpacity(100, true);
+                } else if (otxt == "toggle") {
+                    ToggleTerminalOpacityQuick();
+                } else if (int.TryParse(otxt, out parsedOp)) {
+                    SetTerminalOpacity(parsedOp, true);
+                } else {
+                    AdjustTerminalOpacity(15);
+                }
+                return;
+            }
+        } catch { }
+        AdjustTerminalOpacity(15);
+    }
+
     private void OnRenderTickCore() {
         if (showConfigEvent != null && showConfigEvent.WaitOne(0)) {
             ShowConfigWindow();
         }
         if (toggleGamerEvent != null && toggleGamerEvent.WaitOne(0)) {
             SetGamerMode(!Config.GamerMode, "ACCESO DIRECTO");
+        }
+        if (opacityCmdEvent != null && opacityCmdEvent.WaitOne(0)) {
+            ProcessOpacityFlagOrDefault();
         }
 
         frameCount++;
@@ -11600,6 +12153,10 @@ public class HackerWallpaperForm : Form {
         // Throttle disk flag checks to once every 20 ticks (~0.8s) instead of every frame (eliminates 48 disk I/O ops/sec)
         if (frameCount % 20 == 0 || isGamerSuspended) {
             try {
+                string opFlagPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "opacity_cmd.flag");
+                if (File.Exists(opFlagPath)) {
+                    ProcessOpacityFlagOrDefault();
+                }
                 string gmFlagPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "gamer_mode.flag");
                 if (File.Exists(gmFlagPath)) {
                     string gtxt = File.ReadAllText(gmFlagPath).Trim();
@@ -11668,6 +12225,9 @@ public class HackerWallpaperForm : Form {
                         brain3DDragStartPt = clientPt;
                         brain3DDragStartYaw = GetEffectiveBrainYaw();
                         brain3DDragStartPitch = GetEffectiveBrainPitch();
+                        brain3DPanDrag = rightDown && !leftDown;
+                        brain3DDragStartPanX = brain3DPanX;
+                        brain3DDragStartPanY = brain3DPanY;
                     }
                 }
             } else if (anyBrainDragBtn && brain3DDragging) {
@@ -11675,14 +12235,56 @@ public class HackerWallpaperForm : Form {
                 int dy = clientPt.Y - brain3DDragStartPt.Y;
                 if (Math.Abs(dx) > 4 || Math.Abs(dy) > 4) {
                     brain3DDragMoved = true;
-                    brain3DAutoRotate = false;
-                    brain3DManualYaw = brain3DDragStartYaw + dx * 0.012f;
-                    brain3DManualPitch = Math.Max(-1.20f, Math.Min(1.20f, brain3DDragStartPitch - dy * 0.010f));
+                    if (brain3DPanDrag) {
+                        brain3DPanX = brain3DDragStartPanX + dx;
+                        brain3DPanY = brain3DDragStartPanY + dy;
+                        ClampBrainPan();
+                    } else {
+                        brain3DAutoRotate = false;
+                        brain3DManualYaw = brain3DDragStartYaw + dx * 0.012f;
+                        brain3DManualPitch = Math.Max(-1.20f, Math.Min(1.20f, brain3DDragStartPitch - dy * 0.010f));
+                    }
                     hudBrain3DDirty = true;
                 }
             } else if (!anyBrainDragBtn && brain3DDragging) {
                 brain3DDragging = false;
             }
+
+            // Hover tracking for the fullscreen neuron inspector (bitmap-local coords: card is drawn at (2,2) in a 1:1 texture)
+            if (brain3DFullscreen) {
+                if (!brain3DDragging && bRect.Contains(clientPt) && IsDesktopWindowHandle(WindowFromPoint(screenPt))) {
+                    int hx = clientPt.X - bRect.X + 2;
+                    int hy = clientPt.Y - bRect.Y + 2;
+                    if (brain3DHoverX < 0 || Math.Abs(hx - brain3DHoverX) >= 3 || Math.Abs(hy - brain3DHoverY) >= 3) {
+                        brain3DHoverX = hx;
+                        brain3DHoverY = hy;
+                        hudBrain3DDirty = true;
+                    }
+                } else if (brain3DHoverX >= 0) {
+                    brain3DHoverX = -1;
+                    brain3DHoverY = -1;
+                    hudBrain3DDirty = true;
+                }
+            } else if (brain3DHoverX >= 0) {
+                brain3DHoverX = -1;
+                brain3DHoverY = -1;
+            }
+
+            // Canvas-space hover for the native OpenGL FlyWire panel
+            if (bRect.Contains(clientPt) && IsDesktopWindowHandle(WindowFromPoint(screenPt))) {
+                brainHoverClientX = clientPt.X;
+                brainHoverClientY = clientPt.Y;
+            } else {
+                brainHoverClientX = -1;
+                brainHoverClientY = -1;
+            }
+            // Mouse-wheel zoom (low-level hook runs on its own thread; we only arm it while the cursor is over the brain on the desktop)
+            Point bScr = this.PointToScreen(new Point(bRect.X, bRect.Y));
+            BrainWheelHook.ScreenL = bScr.X; BrainWheelHook.ScreenT = bScr.Y;
+            BrainWheelHook.ScreenR = bScr.X + bRect.Width; BrainWheelHook.ScreenB = bScr.Y + bRect.Height;
+            BrainWheelHook.Armed = brainHoverClientX >= 0;
+            int wheel = BrainWheelHook.TakeDelta();
+            if (wheel != 0) ApplyBrainWheelZoom(wheel, clientPt);
         }
 
         if (!leftDown && prevLeftMouseDown) {
@@ -11703,16 +12305,27 @@ public class HackerWallpaperForm : Form {
             return;
         }
 
-        // Smart Adaptive GPU Governor:
-        // - 42 FPS (22ms) when Desktop is focused or visible (no maximized window)
-        // - 25 FPS (38ms) Eco Mode when another application is focused/maximized
-        if (frameCount % 16 == 0) {
-            cachedWindowMaximized = IsAnotherWindowMaximized();
+        // FlyWire connectome simulation advances every tick (independent of panel visibility) so IDS cascades complete in real time
+        if (IsFlyWireReady()) {
+            double fwNow = flyWireClock.Elapsed.TotalSeconds;
+            float fwDt = (float)(fwNow - flyWireLastT);
+            flyWireLastT = fwNow;
+            PumpFlyWireIdsEvents(fwNow);
+            flyWire.Step(fwDt, GetBaselineRegionGlow());
+        }
+
+        // Smart Adaptive Multi-Monitor GPU Governor (Target <= 10% GPU):
+        // - Per-monitor occlusion culling (0 GPU/CPU work on any monitor covered by a maximized window)
+        // - Complete 0.0% GPU pause when all 5 monitors are covered (AutoPauseMaximized) or external app > 90% GPU
+        // - 25 FPS (38ms) when Desktop is focused, 11-12 FPS (85-95ms) Eco Mode when working in an app or approaching 10% GPU budget
+        if (frameCount <= 2 || frameCount % 10 == 0) {
+            cachedWindowMaximized = UpdateMonitorOcclusionState();
             IntPtr fgWnd = GetForegroundWindow();
             bool deskFocused = IsDesktopWindowHandle(fgWnd) || brain3DDragging || hudBrain3DDirty;
-            bool highFpsMode = deskFocused || !cachedWindowMaximized;
-            gpuEcoMode = !deskFocused && cachedWindowMaximized;
-            int targetInterval = deskFocused ? 22 : (highFpsMode ? 26 : 38);
+            gpuEcoMode = !deskFocused || primaryMonitorOccluded || anyMonitorOccluded || gpuOverBudgetEco;
+            int targetInterval = (Config.AutoPauseMaximized && cachedWindowMaximized)
+                ? 100
+                : (gpuOverBudgetEco ? 95 : (deskFocused ? 38 : (primaryMonitorOccluded ? 95 : 80)));
             if (renderTimer.Interval != targetInterval) {
                 renderTimer.Interval = targetInterval;
             }
@@ -11722,6 +12335,11 @@ public class HackerWallpaperForm : Form {
             EnsureBehindDesktopIcons();
         }
         if (Config.AutoPauseMaximized && cachedWindowMaximized) {
+            lock (telemetryLock) {
+                currentFps = 0;
+                gpuFrameMs = 0.0f;
+                gpuUsagePct = 0.0f;
+            }
             return;
         }
 
@@ -11729,19 +12347,20 @@ public class HackerWallpaperForm : Form {
         fpsFrameAccum++;
         long fpsElapsedMs = fpsMeasureSw.ElapsedMilliseconds;
         if (fpsElapsedMs >= 1000) {
-            currentFps = Math.Max(12, Math.Min(60, (int)Math.Round(fpsFrameAccum * 1000.0 / fpsElapsedMs)));
+            currentFps = Math.Max(10, Math.Min(60, (int)Math.Round(fpsFrameAccum * 1000.0 / fpsElapsedMs)));
             fpsFrameAccum = 0;
             fpsMeasureSw.Restart();
         }
 
-        // Frame-rate independent animation step (calibrated so 40 FPS feels twice as fluid without moving 2x too fast)
-        float dtScale = gpuEcoMode ? 0.88f : 0.62f;
+        // Frame-rate independent animation step
+        float dtScale = gpuEcoMode ? 1.05f : 0.78f;
         sceneTimePhase += 0.032f * dtScale;
 
         if (Config.RainSpeed > 0) {
             float speedMult = (Config.RainSpeed / 100.0f) * dtScale;
             for (int i = 0; i < columns.Count; i++) {
                 RainColumn col = columns[i];
+                if (IsMonitorOccluded(col.MonitorIndex)) continue;
                 int cStep = col.CharStep > 0 ? col.CharStep : 16;
                 col.Y += col.BaseSpeed * speedMult;
                 if (col.Y - col.Length * cStep > col.MaxY) {
@@ -11837,7 +12456,8 @@ public class HackerWallpaperForm : Form {
     }
 
     private void RenderCyberDataRiverOpenGL(int mIdx, Rectangle m, float horizonY, float vanishX, float floorSpan, float phase, float netMod, Color c1, Color c2, Color c3) {
-        int rSteps = 24;
+        bool lowLod = gpuEcoMode || mIdx > 0 || m.Width <= 1366;
+        int rSteps = lowLod ? 14 : 20;
         float[] rCx = bufRCx;
         float[] rCy = bufRCy;
         float[] rHw = bufRHw;
@@ -11920,7 +12540,7 @@ public class HackerWallpaperForm : Form {
         }
 
         // Scrolling V-Ripples & Wave Crests travelling along the curved channel into the horizon
-        int rippleCount = 16;
+        int rippleCount = lowLod ? 10 : 16;
         float flowPhase = phase * (0.38f + Math.Min(0.45f, netMod * 0.18f));
         for (int rp = 0; rp < rippleCount; rp++) {
             // Scroll t from 1.0 -> 0.0 so the caudal visually flows and disappears into the horizon!
@@ -11959,9 +12579,10 @@ public class HackerWallpaperForm : Form {
             GpuGl.glEnd();
         }
 
-        // 4. 5 Continuous Curved Data-Stream Filaments Inside the Riverbed
-        float[] laneOffsets = new float[] { -0.72f, -0.36f, 0.0f, 0.36f, 0.72f };
-        for (int ln = 0; ln < laneOffsets.Length; ln++) {
+        // 4. Continuous Curved Data-Stream Filaments Inside the Riverbed
+        float[] laneOffsets = RIVER_LANE_OFFSETS;
+        int laneStep = lowLod ? 2 : 1;
+        for (int ln = 0; ln < laneOffsets.Length; ln += laneStep) {
             float lu = laneOffsets[ln];
             bool isCenterLane = (ln == 2);
             GpuGl.glLineWidth(isCenterLane ? 1.4f : 1.0f);
@@ -11982,7 +12603,7 @@ public class HackerWallpaperForm : Form {
         }
 
         // 5. High-Speed Cyber Data Packets & Light-Streaks Flowing Along the Curved Riverbed into the Horizon!
-        int packetCount = 40;
+        int packetCount = lowLod ? 18 : 30;
         GpuGl.glLineWidth(2.2f);
         GpuGl.glBegin(GpuGl.GL_LINES);
         for (int p = 0; p < packetCount; p++) {
@@ -12044,8 +12665,8 @@ public class HackerWallpaperForm : Form {
         GpuGl.glEnd();
 
         // 6. Partially Submerged River Rocks with Animated Data-Foam V-Wakes (5 River Boulders)
-        float[] subRockT = new float[] { 0.30f, 0.45f, 0.60f, 0.75f, 0.89f };
-        float[] subRockU = new float[] { -0.36f, 0.34f, -0.28f, 0.38f, -0.32f };
+        float[] subRockT = SUB_ROCK_T;
+        float[] subRockU = SUB_ROCK_U;
         GpuGl.glBegin(GpuGl.GL_TRIANGLES);
         for (int sr = 0; sr < subRockT.Length; sr++) {
             float st = subRockT[sr];
@@ -12111,7 +12732,7 @@ public class HackerWallpaperForm : Form {
         GpuGl.glEnd();
 
         // 7. Translucent Bio-Digital Mist Ribbons Drifting Over the River Channel (1 GL_TRIANGLES batch)
-        int mistCount = 7;
+        int mistCount = lowLod ? 4 : 7;
         GpuGl.glBegin(GpuGl.GL_TRIANGLES);
         for (int mi = 0; mi < mistCount; mi++) {
             float mt = 0.16f + (mi / (float)(mistCount - 1)) * 0.76f;
@@ -12143,9 +12764,9 @@ public class HackerWallpaperForm : Form {
         GpuGl.glEnd();
 
         // 8. Floating Hex/Binary Telemetry Tokens Drifting in the River Current (1 VRAM Font Atlas Batch)
-        if (!gpuEcoMode) {
+        if (!gpuEcoMode && !lowLod) {
             GpuGl.BeginFontAtlasBatch();
-            int glyphStreams = 16;
+            int glyphStreams = 12;
             for (int gs = 0; gs < glyphStreams; gs++) {
                 float seedFrac = (gs * 0.381966f + 0.11f) % 1.0f;
                 float laneU = ((gs % 5) - 2) * 0.30f;
@@ -12309,6 +12930,7 @@ public class HackerWallpaperForm : Form {
     }
 
     private void RenderDenseCyberForestFloraOpenGL(int mIdx, Rectangle m, float horizonY, float vanishX, float floorSpan, float ceilSpan, float phase, float netMod, Color c1, Color c2, Color c3) {
+        bool lowLod = gpuEcoMode || mIdx > 0 || m.Width <= 1366;
         // =========================================================================
         // A. BALANCED LOW-POLY ROCKS & BIOLUMINESCENT CRYSTALS (12 CLUSTERS)
         //    Nestled along the curved riverbanks and near tree bases without clutter
@@ -12316,7 +12938,7 @@ public class HackerWallpaperForm : Form {
         float[] rockDepths = ROCK_DEPTHS;
         float[] rockSides  = ROCK_SIDES;
         float[] rockBankM  = ROCK_BANK_M;
-        int rockCount = rockDepths.Length;
+        int rockCount = lowLod ? 8 : rockDepths.Length;
 
         float[] rkX = bufRkX;
         float[] rkY = bufRkY;
@@ -12651,9 +13273,9 @@ public class HackerWallpaperForm : Form {
         GpuGl.glEnd();
 
         // =========================================================================
-        // C. DELICATE ARCHED CYBER-FERNS (14 ROSETTES ALONG RIVERBANKS & ROCK BASES)
+        // C. DELICATE ARCHED CYBER-FERNS (ROSETTES ALONG RIVERBANKS & ROCK BASES)
         // =========================================================================
-        int fernCount = 14;
+        int fernCount = lowLod ? 8 : 14;
         float[] fnX = bufFnX;
         float[] fnY = bufFnY;
         float[] fnScale = bufFnScale;
@@ -12762,9 +13384,9 @@ public class HackerWallpaperForm : Form {
         GpuGl.glEnd();
 
         // =========================================================================
-        // D. FLOATING BIO-DIGITAL FIREFLIES & LUMINOUS FOREST SPORES (26 PARTICLES)
+        // D. FLOATING BIO-DIGITAL FIREFLIES & LUMINOUS FOREST SPORES
         // =========================================================================
-        int fireflyCount = 26;
+        int fireflyCount = lowLod ? 14 : 22;
         GpuGl.glLineWidth(0.85f);
         GpuGl.glBegin(GpuGl.GL_LINES);
         for (int ff = 0; ff < fireflyCount; ff++) {
@@ -12825,10 +13447,10 @@ public class HackerWallpaperForm : Form {
         GpuGl.glEnd();
 
         // =========================================================================
-        // E. SUBTLE HANGING CANOPY LIANA VINES FROM UPPER CEILING (8 VINES, BATCHED)
+        // E. SUBTLE HANGING CANOPY LIANA VINES FROM UPPER CEILING (BATCHED)
         // =========================================================================
-        int vineCount = 8;
-        int segs = 5;
+        int vineCount = lowLod ? 5 : 8;
+        int segs = lowLod ? 4 : 5;
         GpuGl.glLineWidth(1.1f);
         GpuGl.glBegin(GpuGl.GL_LINES);
         for (int v = 0; v < vineCount; v++) {
@@ -12875,6 +13497,7 @@ public class HackerWallpaperForm : Form {
     }
 
     private void Render3DProceduralEnvironmentOpenGL(int mIdx, Rectangle m, Color c1, Color c2, Color c3) {
+        bool lowLod = gpuEcoMode || mIdx > 0 || m.Width <= 1366;
         int mode = Math.Max(0, Math.Min(2, Config.BgSceneMode));
         float horizonY = m.Top + m.Height * 0.64f;
         float vanishX = m.Left + m.Width * 0.50f;
@@ -12889,8 +13512,8 @@ public class HackerWallpaperForm : Form {
             // =========================================================================
             // 1.0: Distant Low-Poly Horizon Mountain Range + Vanishing Point Cyber-Portal
             RenderHorizonMountainRangeAndPortalOpenGL(mIdx, m, horizonY, vanishX, phase, netMod, c1, c2, c3);
-            int rows = 7;
-            int cols = 18;
+            int rows = lowLod ? 5 : 7;
+            int cols = lowLod ? 12 : 16;
             float[,] vx = bufTerVX;
             float[,] vy = bufTerVY;
 
@@ -13376,8 +13999,9 @@ public class HackerWallpaperForm : Form {
         Color c1, c2, c3, headCol;
         GetThemeColors(out c1, out c2, out c3, out headCol);
 
-        // 0.5. Render Active 3D Procedural Polygon/Vertex Background Scene (Mode 0=Selva+Oscilador, 1=Topo+Delaunay, 2=Bosque Micelial)
+        // 0.5. Render Active 3D Procedural Polygon/Vertex Background Scene only on non-occluded monitors!
         for (int mIdx = 0; mIdx < monitorRects.Count; mIdx++) {
+            if (IsMonitorOccluded(mIdx)) continue;
             Rectangle m = monitorRects[mIdx];
             Render3DProceduralEnvironmentOpenGL(mIdx, m, c1, c2, c3);
         }
@@ -13392,7 +14016,7 @@ public class HackerWallpaperForm : Form {
         int radPanelX = hudX - radPanelW - 14;
         int radPanelY = primaryMonRect.Top + 22;
 
-        // 1. Multi-Plane 3D Parallax Vertical Log Rain across all 5 monitors (Single-Batch VRAM Font Atlas)
+        // 1. Multi-Plane 3D Parallax Vertical Log Rain across visible monitors (Single-Batch VRAM Font Atlas)
         if (Config.RainSpeed > 0) {
             int startLayer = gpuEcoMode ? 1 : 0; // In Eco Mode (app focused), skip far-plane layer 0 rain to save GPU fillrate
 
@@ -13401,6 +14025,7 @@ public class HackerWallpaperForm : Form {
             GpuGl.glBegin(GpuGl.GL_LINES);
             for (int i = 0; i < columns.Count; i++) {
                 RainColumn col = columns[i];
+                if (IsMonitorOccluded(col.MonitorIndex)) continue;
                 bool isPriority = (col.ColorSlot == 0 || col.ColorSlot == 1);
                 if (col.DepthLayer != 2 && !isPriority) continue;
                 if (col.Y <= col.MinY || col.Y >= col.MaxY + 80) continue;
@@ -13424,7 +14049,7 @@ public class HackerWallpaperForm : Form {
                 for (int i = 0; i < columns.Count; i++) {
                     if (gpuEcoMode && (i & 1) == 1) continue;
                     RainColumn col = columns[i];
-                    if (col.DepthLayer != layer) continue;
+                    if (col.DepthLayer != layer || IsMonitorOccluded(col.MonitorIndex)) continue;
 
                     bool isPriority = (col.ColorSlot == 0 || col.ColorSlot == 1);
                     int cStep = col.CharStep > 0 ? col.CharStep : 16;
@@ -13465,61 +14090,67 @@ public class HackerWallpaperForm : Form {
             GpuGl.EndFontAtlasBatch();
         }
 
-        int hudCycle = gpuEcoMode ? 24 : 12;
+        int hudCycle = gpuEcoMode ? 28 : 14;
         int hudSlot = frameCount % hudCycle;
 
         // 2. Render Autonomous 3D Porygons on Hardware GPU + Collapsible Evolutionary Swarm HUD + 3D FlyWire Brain Card
         if (Config.ShowPorygon) {
             porygon.RenderOpenGL(Config.PorygonScale, c1, c2);
 
-            int bw = 584;
-            int fullBh = 78 + porygon.Agents.Count * 21;
-            int drawBh = connectomeCollapsed ? 32 : fullBh;
-            int bx = primaryMonRect.Right - bw - 22;
-            int by = primaryMonRect.Bottom - drawBh - 54;
-            if (hudConnectomeBmp == null || hudConnectomeBmp.Width != bw + 4 || hudConnectomeBmp.Height != fullBh + 4) {
-                if (hudConnectomeBmp != null) hudConnectomeBmp.Dispose();
-                hudConnectomeBmp = new Bitmap(bw + 4, fullBh + 4, PixelFormat.Format32bppArgb);
-            }
-            if (hudSlot == 8 || hudConnectomeTexId == 0 || hudConnectomeDirty) {
-                using (Graphics gHud = Graphics.FromImage(hudConnectomeBmp)) {
-                    gHud.Clear(Color.FromArgb(0, 0, 0, 0));
-                    gHud.SmoothingMode = SmoothingMode.AntiAlias;
-                    gHud.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-                    DrawFlyBrainConnectomeHUDAt(gHud, 2, 2, bw, drawBh, c1, c2, c3);
+            if (!primaryMonitorOccluded) {
+                int bw = 584;
+                int fullBh = 78 + porygon.Agents.Count * 21;
+                int drawBh = connectomeCollapsed ? 32 : fullBh;
+                int bx = primaryMonRect.Right - bw - 22;
+                int by = primaryMonRect.Bottom - drawBh - 54;
+                if (hudConnectomeBmp == null || hudConnectomeBmp.Width != bw + 4 || hudConnectomeBmp.Height != fullBh + 4) {
+                    if (hudConnectomeBmp != null) hudConnectomeBmp.Dispose();
+                    hudConnectomeBmp = new Bitmap(bw + 4, fullBh + 4, PixelFormat.Format32bppArgb);
                 }
-                GpuGl.UploadBitmapToTexture(hudConnectomeBmp, ref hudConnectomeTexId, ref hudConnectomeTexW, ref hudConnectomeTexH);
-                hudConnectomeDirty = false;
-            }
-            GpuGl.DrawTexturedQuad(hudConnectomeTexId, bx - 2, by - 2, bw + 4, fullBh + 4);
-
-            // Render 3D FlyWire Drosophila Brain in Card Mode (Staggered on slot 0 to avoid GDI+ frame spikes!)
-            if (!brain3DFullscreen || brain3DCollapsed) {
-                int brainW = 356;
-                int fullBrainH = 246;
-                int drawBrainH = brain3DCollapsed ? 32 : fullBrainH;
-                int brainX = bx - brainW - 14;
-                int brainY = primaryMonRect.Bottom - drawBrainH - 54;
-                if (hudBrain3DBmp == null || hudBrain3DBmp.Width != brainW + 4 || hudBrain3DBmp.Height != fullBrainH + 4) {
-                    if (hudBrain3DBmp != null) hudBrain3DBmp.Dispose();
-                    hudBrain3DBmp = new Bitmap(brainW + 4, fullBrainH + 4, PixelFormat.Format32bppArgb);
-                }
-                if ((!brain3DCollapsed && hudSlot == 0) || hudBrain3DTexId == 0 || hudBrain3DDirty) {
-                    using (Graphics gBr = Graphics.FromImage(hudBrain3DBmp)) {
-                        gBr.Clear(Color.FromArgb(0, 0, 0, 0));
-                        gBr.SmoothingMode = SmoothingMode.AntiAlias;
-                        gBr.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-                        DrawFlyBrain3DCardAt(gBr, 2, 2, brainW, drawBrainH, c1, c2, c3);
+                if (hudSlot == 8 || hudConnectomeTexId == 0 || hudConnectomeDirty) {
+                    using (Graphics gHud = Graphics.FromImage(hudConnectomeBmp)) {
+                        gHud.Clear(Color.FromArgb(0, 0, 0, 0));
+                        gHud.SmoothingMode = SmoothingMode.AntiAlias;
+                        gHud.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+                        DrawFlyBrainConnectomeHUDAt(gHud, 2, 2, bw, drawBh, c1, c2, c3);
                     }
-                    GpuGl.UploadBitmapToTexture(hudBrain3DBmp, ref hudBrain3DTexId, ref hudBrain3DTexW, ref hudBrain3DTexH);
-                    hudBrain3DDirty = false;
+                    GpuGl.UploadBitmapToTexture(hudConnectomeBmp, ref hudConnectomeTexId, ref hudConnectomeTexW, ref hudConnectomeTexH);
+                    hudConnectomeDirty = false;
                 }
-                GpuGl.DrawTexturedQuad(hudBrain3DTexId, brainX - 2, brainY - 2, brainW + 4, fullBrainH + 4);
+                GpuGl.DrawTexturedQuad(hudConnectomeTexId, bx - 2, by - 2, bw + 4, fullBh + 4);
+
+                // Render 3D FlyWire Drosophila Brain in Card Mode (Staggered on slot 0 to avoid GDI+ frame spikes!)
+                if (!brain3DFullscreen || brain3DCollapsed) {
+                    int brainW = 356;
+                    int fullBrainH = 246;
+                    int drawBrainH = brain3DCollapsed ? 32 : fullBrainH;
+                    int brainX = bx - brainW - 14;
+                    int brainY = primaryMonRect.Bottom - drawBrainH - 54;
+                    if (IsFlyWireReady() && !brain3DCollapsed) {
+                        DrawFlyWirePanelGL(new Rectangle(brainX, brainY, brainW, fullBrainH), false, c1, c2, c3);
+                    } else {
+                    if (hudBrain3DBmp == null || hudBrain3DBmp.Width != brainW + 4 || hudBrain3DBmp.Height != fullBrainH + 4) {
+                        if (hudBrain3DBmp != null) hudBrain3DBmp.Dispose();
+                        hudBrain3DBmp = new Bitmap(brainW + 4, fullBrainH + 4, PixelFormat.Format32bppArgb);
+                    }
+                    if ((!brain3DCollapsed && hudSlot == 0) || hudBrain3DTexId == 0 || hudBrain3DDirty) {
+                        using (Graphics gBr = Graphics.FromImage(hudBrain3DBmp)) {
+                            gBr.Clear(Color.FromArgb(0, 0, 0, 0));
+                            gBr.SmoothingMode = SmoothingMode.AntiAlias;
+                            gBr.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+                            DrawFlyBrain3DCardAt(gBr, 2, 2, brainW, drawBrainH, c1, c2, c3);
+                        }
+                        GpuGl.UploadBitmapToTexture(hudBrain3DBmp, ref hudBrain3DTexId, ref hudBrain3DTexW, ref hudBrain3DTexH);
+                        hudBrain3DDirty = false;
+                    }
+                    GpuGl.DrawTexturedQuad(hudBrain3DTexId, brainX - 2, brainY - 2, brainW + 4, fullBrainH + 4);
+                    }
+                }
             }
         }
 
         // 3. Render Collapsible Network Sonar Radar (50% Transparent, staggered on slot 4)
-        if (Config.ShowRadar) {
+        if (Config.ShowRadar && !primaryMonitorOccluded) {
             int rBmpW = 310;
             int rBmpH = 330;
             if (hudRadarBmp == null) {
@@ -13540,27 +14171,31 @@ public class HackerWallpaperForm : Form {
 
         // 4. Render Collapsible System Telemetry HUD (Cached in VRAM Texture) & Secondary Bars
         if (Config.ShowTelemetry) {
-            if (hudTelemetryBmp == null) {
-                hudTelemetryBmp = new Bitmap(hudW + 4, hudH + 4, PixelFormat.Format32bppArgb);
-            }
-            if (lastHudTelemetryCycle != telemetryCycles || lastHudTheme != Config.ThemeIndex || hudTelemetryTexId == 0 || hudTelemetryDirty) {
-                using (Graphics gTel = Graphics.FromImage(hudTelemetryBmp)) {
-                    gTel.Clear(Color.FromArgb(0, 0, 0, 0));
-                    gTel.SmoothingMode = SmoothingMode.AntiAlias;
-                    gTel.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-                    DrawTelemetryHUD(gTel, 2, 2, hudW, hudH, c1, c2, c3);
+            if (!primaryMonitorOccluded) {
+                if (hudTelemetryBmp == null) {
+                    hudTelemetryBmp = new Bitmap(hudW + 4, hudH + 4, PixelFormat.Format32bppArgb);
                 }
-                GpuGl.UploadBitmapToTexture(hudTelemetryBmp, ref hudTelemetryTexId, ref hudTelemetryTexW, ref hudTelemetryTexH);
-                lastHudTelemetryCycle = telemetryCycles;
-                lastHudTheme = Config.ThemeIndex;
-                hudTelemetryDirty = false;
+                if (lastHudTelemetryCycle != telemetryCycles || lastHudTheme != Config.ThemeIndex || hudTelemetryTexId == 0 || hudTelemetryDirty) {
+                    using (Graphics gTel = Graphics.FromImage(hudTelemetryBmp)) {
+                        gTel.Clear(Color.FromArgb(0, 0, 0, 0));
+                        gTel.SmoothingMode = SmoothingMode.AntiAlias;
+                        gTel.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+                        DrawTelemetryHUD(gTel, 2, 2, hudW, hudH, c1, c2, c3);
+                    }
+                    GpuGl.UploadBitmapToTexture(hudTelemetryBmp, ref hudTelemetryTexId, ref hudTelemetryTexW, ref hudTelemetryTexH);
+                    lastHudTelemetryCycle = telemetryCycles;
+                    lastHudTheme = Config.ThemeIndex;
+                    hudTelemetryDirty = false;
+                }
+                GpuGl.DrawTexturedQuad(hudTelemetryTexId, hudX - 2, hudY - 2, hudW + 4, hudH + 4);
             }
-            GpuGl.DrawTexturedQuad(hudTelemetryTexId, hudX - 2, hudY - 2, hudW + 4, hudH + 4);
             DrawSecondaryMonitorTelemetryBarsOpenGL(c1, c2, c3);
         }
 
         // 5. Render Fullscreen 3D FlyWire Drosophila Brain Overlay on Primary Monitor when brain3DFullscreen is Active!
-        if (Config.ShowPorygon && brain3DFullscreen && !brain3DCollapsed) {
+        if (Config.ShowPorygon && brain3DFullscreen && !brain3DCollapsed && !primaryMonitorOccluded && IsFlyWireReady()) {
+            DrawFlyWirePanelGL(GetCurrentBrain3DRect(), true, c1, c2, c3);
+        } else if (Config.ShowPorygon && brain3DFullscreen && !brain3DCollapsed && !primaryMonitorOccluded) {
             Rectangle fullRect = GetCurrentBrain3DRect();
             int fbW = 942;
             int fbH = 507;
@@ -13616,6 +14251,7 @@ public class HackerWallpaperForm : Form {
         if (Config.RainSpeed > 0) {
             for (int i = 0; i < columns.Count; i++) {
                 RainColumn col = columns[i];
+                if (IsMonitorOccluded(col.MonitorIndex)) continue;
                 int cStep = col.CharStep > 0 ? col.CharStep : 16;
                 Font f = col.IsForeground ? fontRainFg : fontRainBg;
                 int maxAlpha = (col.DepthLayer == 2) ? 245 : (col.DepthLayer == 1 ? 160 : 80);
@@ -13681,6 +14317,7 @@ public class HackerWallpaperForm : Form {
         Color txtCol = Color.FromArgb(230, 226, 232, 240);
 
         for (int mIdx = 0; mIdx < monitorRects.Count; mIdx++) {
+            if (IsMonitorOccluded(mIdx)) continue;
             Rectangle m = monitorRects[mIdx];
             if (m == primaryMonRect) continue;
 
@@ -13965,16 +14602,20 @@ public class HackerWallpaperForm : Form {
                 g.DrawLine(cornerPen, hudX + hudW, hudY + actualH, hudX + hudW, hudY + actualH - Math.Min(20, actualH));
             }
 
-            // Row 1: Non-overlapping Header with GPU Model, [GAMER] 0% GPU Button, [BG:1/2/3] Scene Button, Terminal Opacity Controls & Fold Button
+            // Row 1: Non-overlapping Header with GPU Model, [TRM:XX%], [GAMER] 0% GPU Button, [BG:1/2/3] Scene Button, [OP-]/[OP+] & Fold Button
             g.DrawString(string.Format(">> SYS_HUD // {0} [{1}] | {2}", shortNic, locIp, shortGpu),
                 fontHudBold, c1Brush, hudX + 10, hudY + 7);
-            g.DrawString(string.Format("TRM:{0}%", terminalOpacityPct),
-                fontHudSmall, c3Brush, hudX + hudW - 256, hudY + 8);
             using (SolidBrush opBtnBg = new SolidBrush(Color.FromArgb(135, 10, 22, 18)))
             using (SolidBrush gmrActiveBg = new SolidBrush(Color.FromArgb(195, 22, 92, 62)))
             using (Pen opBtnBor = new Pen(Color.FromArgb(140, c1.R, c1.G, c1.B), 1.0f))
             using (Pen gmrActiveBor = new Pen(Color.FromArgb(235, 68, 232, 156), 1.3f))
             using (SolidBrush gmrActiveTxt = new SolidBrush(Color.FromArgb(245, 165, 255, 210))) {
+                // [TRM:XX%] Clickable 1-Click Opacity Toggle (100% Solid <-> 50% Cyber, or Ctrl+Alt+O)
+                g.FillRectangle(opBtnBg, hudX + hudW - 260, hudY + 5, 54, 18);
+                g.DrawRectangle(opBtnBor, hudX + hudW - 260, hudY + 5, 54, 18);
+                g.DrawString(string.Format("TRM:{0}%", terminalOpacityPct),
+                    fontHudSmall, c3Brush, hudX + hudW - 257, hudY + 7);
+
                 // [GAMER / GMR:ON] Clickable 0.0% GPU Hibernation Button (Ctrl+Alt+G)
                 g.FillRectangle(locGamer ? gmrActiveBg : opBtnBg, hudX + hudW - 202, hudY + 5, 58, 18);
                 g.DrawRectangle(locGamer ? gmrActiveBor : opBtnBor, hudX + hudW - 202, hudY + 5, 58, 18);
@@ -14027,11 +14668,13 @@ public class HackerWallpaperForm : Form {
                 g.FillRectangle(sb, spX + 3 + i * 8, rowY + 31 - bh, 5, bh);
             }
 
-            // Row 3: Network Live Throughput + Active 3D Background Scene + CPU Evolutionary Rate (or Gamer Mode Banner)
+            // Row 3: Network Live Throughput + Active 3D Background Scene + CPU Evolutionary Rate (or Gamer / High-GPU Banner)
             int netY = hudY + 76;
             if (locGamer) {
-                g.DrawString("MODO GAMER ACTIVO // 0.0% GPU — HIBERNACIÓN TOTAL [Click GMR:ON o Ctrl+Alt+G]",
-                    fontHudBold, c2Brush, hudX + 12, netY);
+                string gmrMsg = autoHighGpuDetected
+                    ? string.Format("AUTO-PAUSA GPU >90% [{0}] // 0.0% GPU — Reanudación Automática", highGpuProcessName)
+                    : "MODO GAMER ACTIVO // 0.0% GPU — HIBERNACIÓN TOTAL [Click GMR:ON o Ctrl+Alt+G]";
+                g.DrawString(gmrMsg, fontHudBold, c2Brush, hudX + 12, netY);
             } else {
                 int evoRate = (porygon != null) ? porygon.CpuTrainingStepsPerSec : 18750;
                 string bgName = GetBgSceneModeShortName(Config.BgSceneMode);
@@ -14175,6 +14818,455 @@ public class HackerWallpaperForm : Form {
         }
     }
 
+
+    // =====================================================================================================
+    // FLYWIRE NATIVE OPENGL PANEL (Codex / Virtual Fly Brain style): chrome + 3D connectome + GL text overlay
+    // =====================================================================================================
+    private FlyWireBrain flyWire = null;
+    private System.Diagnostics.Stopwatch flyWireClock = new System.Diagnostics.Stopwatch();
+    private double flyWireLastT = 0;
+    private int brainHoverClientX = -1, brainHoverClientY = -1;
+    private int fwLastSiemTotal = -1, fwLastIpsTotal = -1, fwLastVtQueries = -1, fwLastVtHits = -1;
+    private double fwLastTrafficT = 0, fwLastPollT = 0, fwLastVtLookupT = -10, fwLastExfilT = -20;
+    private float fwUpEma = 50f;
+    private float brain3DPanX = 0f, brain3DPanY = 0f, brain3DDragStartPanX = 0f, brain3DDragStartPanY = 0f;
+    private bool brain3DPanDrag = false;
+    private Rectangle brain3DLastArea = Rectangle.Empty;
+    private volatile string brainSnapshotPath = null;
+    private DateTime brainForceVisibleUntil = DateTime.MinValue;
+    private static readonly string[] FwLabelNeuropils = new string[] { "ME", "LO", "LOP", "AL", "CA", "PED", "FB", "EB", "PB", "LH", "GNG", "AVLP", "SMP", "LAL" };
+
+    private void ApplyBrainWheelZoom(int wheelDelta, Point cursor) {
+        float oldZ = brain3DZoom;
+        float newZ = (float)(oldZ * Math.Pow(1.18, wheelDelta / 120.0));
+        newZ = Math.Max(0.6f, Math.Min(9.0f, newZ));
+        if (Math.Abs(newZ - oldZ) < 0.0001f) return;
+        if (IsFlyWireReady() && brain3DLastArea.Width > 0 && brain3DLastArea.Contains(cursor)) {
+            // Zoom toward the cursor: keep the brain point under the mouse fixed on screen
+            float k = newZ / oldZ;
+            float cx = flyWire.DefCX + brain3DPanX, cy = flyWire.DefCY + brain3DPanY;
+            float ncx = cursor.X - (cursor.X - cx) * k;
+            float ncy = cursor.Y - (cursor.Y - cy) * k;
+            brain3DPanX = ncx - flyWire.DefCX;
+            brain3DPanY = ncy - flyWire.DefCY;
+        }
+        brain3DZoom = newZ;
+        ClampBrainPan();
+        hudBrain3DDirty = true;
+    }
+
+    private void ClampBrainPan() {
+        Rectangle a = brain3DLastArea;
+        if (a.Width <= 0) { brain3DPanX = 0f; brain3DPanY = 0f; return; }
+        float mx = Math.Max(0f, (brain3DZoom - 0.75f)) * a.Width * 0.55f;
+        float my = Math.Max(0f, (brain3DZoom - 0.75f)) * a.Height * 0.55f;
+        brain3DPanX = Math.Max(-mx, Math.Min(mx, brain3DPanX));
+        brain3DPanY = Math.Max(-my, Math.Min(my, brain3DPanY));
+    }
+
+    private bool IsFlyWireReady() {
+        return flyWire != null && flyWire.Loaded && !flyWire.Failed;
+    }
+
+    private void InitFlyWireBrain() {
+        try {
+            string p1 = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Models", "flywire_brain.bin");
+            flyWire = new FlyWireBrain();
+            flyWire.LoadAsync(p1);
+            flyWireClock.Start();
+            PorygonCyberDefenseEngine.OnBrainApi = HandleBrainApi;
+            BrainWheelHook.Start();
+        } catch { flyWire = null; }
+    }
+
+    private string HandleBrainApi(string route, Dictionary<string, string> qp) {
+        JavaScriptSerializer ser = new JavaScriptSerializer();
+        Dictionary<string, object> d = new Dictionary<string, object>();
+        if (flyWire == null) { d["loaded"] = false; d["status"] = "DISABLED"; return ser.Serialize(d); }
+        if (route == "/api/brain/stimulate") {
+            string kind = qp.ContainsKey("kind") ? qp["kind"] : "anomaly";
+            float sev = 0.8f;
+            if (qp.ContainsKey("sev")) float.TryParse(qp["sev"], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out sev);
+            flyWire.Enqueue(kind, "API_TEST:" + kind.ToUpperInvariant(), sev);
+            hudBrain3DDirty = true;
+            d["queued"] = kind;
+        } else if (route == "/api/brain/bench") {
+            int sec = 12;
+            if (qp.ContainsKey("sec")) int.TryParse(qp["sec"], out sec);
+            brain3DFullscreen = true; brain3DCollapsed = false;
+            brainForceVisibleUntil = DateTime.Now.AddSeconds(Math.Max(3, Math.Min(60, sec)));
+            d["benchUntil"] = brainForceVisibleUntil.ToString("HH:mm:ss");
+        } else if (route == "/api/brain/snapshot") {
+            if (qp.ContainsKey("full")) { brain3DFullscreen = qp["full"] == "1"; brain3DCollapsed = false; }
+            string outPath = Path.Combine(Path.GetTempPath(), "flywire_brain_snapshot.png");
+            try { if (File.Exists(outPath)) File.Delete(outPath); } catch { }
+            brainSnapshotPath = outPath;
+            hudBrain3DDirty = true;
+            d["snapshot"] = outPath;
+        }
+        d["loaded"] = flyWire.Loaded;
+        d["listsBuilt"] = flyWire.ListsBuilt;
+        d["status"] = flyWire.Status;
+        d["neurons"] = flyWire.Neurons.Count;
+        d["edges"] = flyWire.Edges.Count;
+        d["neuropils"] = flyWire.Neuropils.Count;
+        d["pulses"] = flyWire.Pulses.Count;
+        d["events"] = flyWire.TotalEvents;
+        d["cascadeHops"] = flyWire.TotalCascadeHops;
+        List<string> st = new List<string>();
+        for (int s = 0; s < FlyWireBrain.NStages; s++) st.Add(FlyWireBrain.StageNames[s] + "=" + flyWire.StageAct[s].ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) + " (n=" + flyWire.StageCount[s] + ")");
+        d["stages"] = st;
+        List<string> tr = new List<string>();
+        lock (flyWire.Traces) {
+            for (int i = 0; i < flyWire.Traces.Count; i++) tr.Add(flyWire.Traces[i].Label + " :: " + string.Join(" > ", flyWire.Traces[i].Hops.ToArray()));
+        }
+        d["traces"] = tr;
+        d["attribution"] = flyWire.Attribution;
+        return ser.Serialize(d);
+    }
+
+    // Poll IDS / SIEM / IPS / VirusTotal counters and route them through anatomical pathways
+    private void PumpFlyWireIdsEvents(double now) {
+        if (!IsFlyWireReady()) return;
+        if (now - fwLastPollT < 0.4) return;
+        fwLastPollT = now;
+        try {
+            int siemTot = PorygonCyberDefenseEngine.TotalSiemAlerts;
+            int ipsTot = PorygonCyberDefenseEngine.TotalIpsActions;
+            if (fwLastSiemTotal < 0) { fwLastSiemTotal = siemTot; fwLastIpsTotal = ipsTot; }
+            if (siemTot > fwLastSiemTotal) {
+                int newCount = Math.Min(4, siemTot - fwLastSiemTotal);
+                lock (PorygonCyberDefenseEngine.SyncLock) {
+                    var lst = PorygonCyberDefenseEngine.RecentSiemEvents;
+                    for (int i = Math.Max(0, lst.Count - newCount); i < lst.Count; i++) {
+                        var e = lst[i];
+                        string mod = (e.Module ?? "").ToUpperInvariant();
+                        string sev = (e.Severity ?? "").ToUpperInvariant();
+                        string kind;
+                        string sumU = ((e.Summary ?? "") + " " + (e.MitreId ?? "")).ToUpperInvariant();
+                        if (sumU.Contains("EXFIL") || sumU.Contains("UPLOAD") || sumU.Contains("TUNNEL") || sumU.Contains("T1041") || sumU.Contains("T1048") || sumU.Contains("T1567")) kind = "exfil";
+                        else if (sev == "CRITICAL") kind = "critical";
+                        else if (mod.StartsWith("IPS")) kind = "block";
+                        else if (mod == "SOAR") kind = "decision";
+                        else if (mod.StartsWith("AV") || mod.StartsWith("YARA")) kind = "malware";
+                        else if (mod == "CTI_IOC") kind = "reputation";
+                        else if (sev == "HIGH") kind = "anomaly";
+                        else kind = "signature";
+                        string lbl = string.Format("{0}/{1} {2}", mod, sev, e.MitreId ?? "");
+                        flyWire.Enqueue(kind, lbl, Math.Max(0.2f, e.RiskScore));
+                    }
+                }
+                fwLastSiemTotal = siemTot;
+            }
+            if (ipsTot > fwLastIpsTotal) {
+                flyWire.Enqueue("block", "IPS_ACTION #" + ipsTot, 0.9f);
+                fwLastIpsTotal = ipsTot;
+            }
+            if (porygon != null) {
+                int vq = porygon.VtApiQueries, vh = porygon.VtMaliciousHits;
+                if (fwLastVtQueries < 0) { fwLastVtQueries = vq; fwLastVtHits = vh; }
+                if (vh > fwLastVtHits) { flyWire.Enqueue("malware", "VIRUSTOTAL_IOC x" + (vh - fwLastVtHits), 0.95f); fwLastVtHits = vh; }
+                else if (vq > fwLastVtQueries && now - fwLastVtLookupT > 8.0) { flyWire.Enqueue("reputation", "VIRUSTOTAL_LOOKUP", 0.4f); fwLastVtLookupT = now; }
+                fwLastVtQueries = vq;
+            }
+            // Upload spike -> auditory/mechanosensory exfiltration pathway (Johnston organ > AMMC > Giant Fiber)
+            fwUpEma = fwUpEma * 0.96f + netUpKbps * 0.04f;
+            if (netUpKbps > Math.Max(900f, fwUpEma * 4f) && now - fwLastExfilT > 10.0) {
+                fwLastExfilT = now;
+                flyWire.Enqueue("exfil", string.Format("UPLOAD_SPIKE {0:0} KB/s (base {1:0})", netUpKbps, fwUpEma), Math.Min(1f, netUpKbps / 4000f + 0.4f));
+            }
+            // Network traffic -> optic ingress (rate scales with throughput)
+            float kbps = netDownKbps + netUpKbps;
+            double interval = Math.Max(0.35, 2.2 - Math.Min(1.8, kbps / 900.0));
+            if (now - fwLastTrafficT > interval) {
+                fwLastTrafficT = now;
+                flyWire.Enqueue("traffic", "NET", Math.Min(1f, kbps / 1500f));
+            }
+        } catch { }
+    }
+
+    private float[] GetBaselineRegionGlow() {
+        float[] g = new float[4];
+        if (porygon == null || porygon.Agents.Count == 0) return g;
+        FlyBrainConnectome br = porygon.Agents[porygon.SelectedBrainAgentIndex % porygon.Agents.Count].Brain;
+        int[] cnt = new int[4];
+        for (int i = 0; i < FlyBrainConnectome.N; i++) {
+            int r = Math.Max(0, Math.Min(3, br.NeuronRegion[i]));
+            g[r] += br.SpikeGlow[i]; cnt[r]++;
+        }
+        for (int r = 0; r < 4; r++) if (cnt[r] > 0) g[r] /= cnt[r];
+        return g;
+    }
+
+    private static Color Fa(Color c, int a) { return Color.FromArgb(Math.Max(0, Math.Min(255, a)), c.R, c.G, c.B); }
+
+    private void GlText(string s, float x, float y, Color c) {
+        GpuGl.DrawText(s, x, y, c, GpuGl.FONT_LIST_HUD_SMALL);
+    }
+
+    private void GlTextBox(string s, float x, float y, Color fg, Color bg) {
+        float w = s.Length * 6.6f + 6f;
+        GpuGl.FillRect(x - 3f, y - 2f, w, 14f, bg);
+        GlText(s, x, y, fg);
+    }
+
+    private void DrawFlyWirePanelGL(Rectangle r, bool isFull, Color c1, Color c2, Color c3) {
+        int px = r.X, py = r.Y, pw = r.Width, ph = r.Height;
+
+
+        Color gold = Color.FromArgb(230, 196, 156, 48);
+        Color txt = Color.FromArgb(225, 206, 218, 214);
+        Color dim = Color.FromArgb(170, 150, 170, 165);
+
+        // Panel chrome
+        GpuGl.FillRect(px, py, pw, ph, Color.FromArgb(isFull ? 250 : 222, 2, 6, 7));
+        GpuGl.DrawRect(px, py, pw, ph, Fa(c1, 135), isFull ? 1.7f : 1.2f);
+        GpuGl.DrawLine(px, py, px + 18, py, Fa(c2, 190), 2f);
+        GpuGl.DrawLine(px, py, px, py + 18, Fa(c2, 190), 2f);
+        GpuGl.DrawLine(px + pw, py + ph, px + pw - 18, py + ph, Fa(c2, 190), 2f);
+        GpuGl.DrawLine(px + pw, py + ph, px + pw, py + ph - 18, Fa(c2, 190), 2f);
+
+        string title = isFull
+            ? ">> FLYWIRE CONNECTOME // JRC2018U (VFB_00101567) // IDS NEURO-PATHWAY INSPECTOR [CTRL+ALT+B]"
+            : ">> FLYWIRE // JRC2018U REAL";
+        GlText(title, px + 10, py + 8, Fa(c1, 235));
+
+        int fullBtnW = isFull ? 66 : 44;
+        int fullBtnX = px + pw - 30 - fullBtnW - 4;
+        GpuGl.FillRect(fullBtnX, py + 5, fullBtnW, 18, Color.FromArgb(150, 10, 22, 18));
+        GpuGl.DrawRect(fullBtnX, py + 5, fullBtnW, 18, Fa(c1, 150), 1f);
+        GlText(isFull ? "[EXIT]" : "[FULL]", fullBtnX + 5, py + 8, gold);
+        int foldBtnX = px + pw - 28;
+        GpuGl.FillRect(foldBtnX, py + 5, 22, 18, Color.FromArgb(150, 10, 22, 18));
+        GpuGl.DrawRect(foldBtnX, py + 5, 22, 18, Fa(c1, 150), 1f);
+        GlText("-", foldBtnX + 8, py + 8, gold);
+
+        Porygon3DAvatar.PorygonAgent ag = porygon.Agents[porygon.SelectedBrainAgentIndex % porygon.Agents.Count];
+        string sub = isFull
+            ? string.Format("AGENT:[{0}] G{1} {2} | F2:{3:0.0}% | {4}", ag.Name, ag.Brain.Generation, ag.Brain.GetLifeStageLabel(), ag.Brain.F2Score, flyWire.Status)
+            : string.Format("[{0}] {1} NEURONAS FLYWIRE | {2} AP", ag.Name, flyWire.Neurons.Count, flyWire.Pulses.Count);
+        GlText(sub, px + 10, py + 25, Fa(ag.AuraColor, 230));
+
+        // 3D viewport
+        int topPad = isFull ? 44 : 40;
+        int botPad = isFull ? 48 : 46;
+        Rectangle area = new Rectangle(px + 2, py + topPad, pw - 4, ph - topPad - botPad);
+        float yaw = GetEffectiveBrainYaw();
+        float pitch = GetEffectiveBrainPitch();
+        flyWire.SetupCamera(area, screenW, screenH, yaw, pitch, brain3DZoom, brain3DPanX, brain3DPanY);
+        brain3DLastArea = area;
+        bool hoverIn = brainHoverClientX >= area.X && brainHoverClientX < area.Right && brainHoverClientY >= area.Y && brainHoverClientY < area.Bottom && !brain3DDragging;
+        flyWire.Pick(brainHoverClientX, brainHoverClientY, hoverIn);
+        flyWire.RenderGL(area, screenW, screenH, isFull, gpuEcoMode, true);
+
+        // Anatomical neuropil labels anchored to real JRC2018U neuropil centroids
+        if (isFull) {
+            for (int k = 0; k < flyWire.Neuropils.Count; k++) {
+                FlyWireBrain.Neuropil p = flyWire.Neuropils[k];
+                if (Array.IndexOf(FwLabelNeuropils, p.Name) < 0) continue;
+                for (int side = 0; side < 2; side++) {
+                    if (side == 0 && !(p.HasL && (p.Name == "ME" || p.Name == "LO" || p.Name == "AL"))) continue;
+                    if (side == 1 && !p.HasR && !p.HasL) continue;
+                    float x = side == 0 ? p.LX : (p.HasR ? p.RX : p.CX);
+                    float y = side == 0 ? p.LY : (p.HasR ? p.RY : p.CY);
+                    float z = side == 0 ? p.LZ : (p.HasR ? p.RZ : p.CZ);
+                    float sx, sy, dep;
+                    if (!flyWire.Project(x, y, z, out sx, out sy, out dep)) continue;
+                    if (sx < area.X + 8 || sx > area.Right - 60 || sy < area.Y + 8 || sy > area.Bottom - 10) continue;
+                    Color pc = Color.FromArgb(255, p.R, p.G, p.B);
+                    int a = (int)(150 + 105 * Math.Min(1f, p.Act * 2f));
+                    GpuGl.FillEllipse(sx, sy, 2.4f, 2.4f, Fa(pc, a), 8);
+                    GpuGl.DrawLine(sx, sy, sx + 10, sy - 10, Fa(pc, a - 40), 1f);
+                    GlTextBox(p.Name, sx + 12, sy - 17, Color.FromArgb(Math.Min(255, a), 228, 236, 240), Color.FromArgb(150, 2, 6, 8));
+                }
+            }
+        }
+
+        // Legend: IDS alert -> real anatomical pathway stages
+        if (isFull) {
+            int lgX = px + 14, lgY = py + 52, lgW = 404;
+            GpuGl.FillRect(lgX - 6, lgY - 6, lgW, 22 + FlyWireBrain.NStages * 30, Color.FromArgb(150, 2, 6, 8));
+            GpuGl.DrawRect(lgX - 6, lgY - 6, lgW, 22 + FlyWireBrain.NStages * 30, Fa(c1, 80), 1f);
+            GlText("ALERTA IDS -> VIA ANATOMICA REAL (FLYWIRE)", lgX, lgY, Fa(c2, 235));
+            for (int s = 0; s < FlyWireBrain.NStages; s++) {
+                int yy = lgY + 18 + s * 30;
+                Color sc = FlyWireBrain.StageColors[s];
+                float act = Math.Min(1f, flyWire.StageAct[s]);
+                GpuGl.FillEllipse(lgX + 4, yy + 6, 4f, 4f, sc, 12);
+                GlText(string.Format("{0} [{1}]", FlyWireBrain.StageNames[s], flyWire.StageCount[s]), lgX + 14, yy, Fa(sc, 240));
+                GpuGl.FillRect(lgX + 250, yy + 3, 120, 6, Color.FromArgb(90, 40, 56, 60));
+                GpuGl.FillRect(lgX + 250, yy + 3, Math.Max(1f, 120f * act), 6, Fa(sc, 230));
+                GlText(FlyWireBrain.StageDesc[s], lgX + 14, yy + 13, dim);
+            }
+        }
+
+        // Pathway trace (last routed alerts with the real cell types reached)
+        if (isFull) {
+            int tw = 470, tX = px + pw - tw - 14, tY = py + 52;
+            List<FlyWireBrain.PathTrace> snap;
+            lock (flyWire.Traces) { snap = new List<FlyWireBrain.PathTrace>(flyWire.Traces); }
+            int rows = Math.Max(1, Math.Min(5, snap.Count));
+            GpuGl.FillRect(tX - 6, tY - 6, tw, 22 + rows * 30, Color.FromArgb(150, 2, 6, 8));
+            GpuGl.DrawRect(tX - 6, tY - 6, tw, 22 + rows * 30, Fa(c1, 80), 1f);
+            GlText(string.Format("PATHWAY TRACE // EVENTOS:{0} SALTOS SINAPTICOS:{1}", flyWire.TotalEvents, flyWire.TotalCascadeHops), tX, tY, Fa(c2, 235));
+            if (snap.Count == 0) {
+                GlText("Esperando alertas IDS / SIEM / IPS...", tX, tY + 18, dim);
+            }
+            int shown = 0;
+            for (int i = snap.Count - 1; i >= 0 && shown < 5; i--, shown++) {
+                FlyWireBrain.PathTrace t = snap[i];
+                int yy = tY + 18 + shown * 30;
+                Color tc = t.MaxStageReached >= 0 ? FlyWireBrain.StageColors[t.MaxStageReached] : txt;
+                string head = string.Format("[{0}] {1}", t.At.ToString("HH:mm:ss"), t.Label);
+                if (head.Length > 68) head = head.Substring(0, 68);
+                GlText(head, tX, yy, Fa(tc, 235));
+                string hops = t.Hops.Count > 0 ? string.Join(" > ", t.Hops.ToArray()) : "(propagando...)";
+                if (hops.Length > 68) hops = hops.Substring(0, 66) + "..";
+                GlText(hops, tX + 8, yy + 13, txt);
+            }
+        }
+
+        // Hover inspector (neuron or neuropil)
+        if (flyWire.HoverNeuron >= 0) {
+            FlyWireBrain.Neuron n = flyWire.Neurons[flyWire.HoverNeuron];
+            Color nc = Color.FromArgb(255, n.R, n.G, n.B);
+            string np = (n.NeuropilIdx >= 0) ? flyWire.Neuropils[n.NeuropilIdx].Name : "?";
+            string[] lines = new string[] {
+                string.Format("{0}  //  {1}", n.Short, FlyWireBrain.StageNames[n.Stage]),
+                n.CellType.Length > 56 ? n.CellType.Substring(0, 56) : n.CellType,
+                string.Format("FlyWire:{0}  VFB:{1}", n.FlyWireId, n.VfbId),
+                string.Format("NT:{0}  NEUROPILO:{1}  ACT:{2:0}%", n.Nt, np, Math.Min(1f, n.Act) * 100f),
+                string.Format("SINAPSIS OUT:{0} ({1} ar.)  IN:{2} ({3} ar.)", n.SynOut, n.Out.Count, n.SynIn, n.In.Count),
+                flyWire.HasRealSynapses ? string.Format("SINAPSIS REALES v783: {0:N0} salida / {1:N0} entrada", n.RealSynOut, n.RealSynIn) : "SINAPSIS REALES: (no cargadas)",
+                "CIAN = SALIDA  |  AMBAR = ENTRADA"
+            };
+            DrawGlTooltip(lines, brainHoverClientX + 16, brainHoverClientY + 12, nc, r);
+        } else if (flyWire.HoverNeuropil >= 0) {
+            FlyWireBrain.Neuropil p = flyWire.Neuropils[flyWire.HoverNeuropil];
+            Color pc = Color.FromArgb(255, p.R, p.G, p.B);
+            int resident = 0;
+            for (int i = 0; i < flyWire.Neurons.Count; i++) if (flyWire.Neurons[i].NeuropilIdx == flyWire.HoverNeuropil) resident++;
+            string[] lines = new string[] {
+                string.Format("NEUROPILO {0}", p.Name),
+                string.Format("VFB:{0}  (JRC2018Unisex)", p.VfbId),
+                string.Format("NEURONAS SELECCIONADAS AQUI: {0}  ACT:{1:0}%", resident, p.Act * 100f)
+            };
+            DrawGlTooltip(lines, brainHoverClientX + 16, brainHoverClientY + 12, pc, r);
+        }
+
+        // Status line + attribution
+        int yawDeg = (int)Math.Round(yaw * 180.0 / Math.PI);
+        int pitchDeg = (int)Math.Round(pitch * 180.0 / Math.PI);
+        string status = isFull
+            ? string.Format("AP EN VUELO:{0} | YAW {1:+000;-000;000} PITCH {2:+00;-00;00} ZOOM {3:0.00}x | ARRASTRA=ROTAR  RUEDA=ZOOM  CLIC-DER=MOVER  HOVER=INSPECCIONAR | Data: FlyWire Consortium / VFB (CC BY-NC)",
+                flyWire.Pulses.Count, yawDeg, pitchDeg, brain3DZoom)
+            : string.Format("AP:{0} | YAW:{1:+000;-000;000} | FlyWire/VFB", flyWire.Pulses.Count, yawDeg);
+        GlText(status, px + 10, py + ph - 41, Fa(c1, 220));
+
+        // Toolbar (same hit zones as HandleBrain3DClick)
+        string[] btnLabels = new string[] { "< ROT", "ROT >", string.Format("ZM {0:0.0}x", brain3DZoom), brain3DAutoRotate ? "AUTO:ON" : "FREE:3D", "NEXT >>" };
+        float[] zoneStarts = new float[] { 0.02f, 0.19f, 0.37f, 0.57f, 0.77f };
+        float[] zoneWidths = new float[] { 0.15f, 0.16f, 0.18f, 0.18f, 0.21f };
+        int barY = py + ph - 23;
+        for (int b = 0; b < 5; b++) {
+            int bxBtn = px + (int)(pw * zoneStarts[b]);
+            int bwBtn = (int)(pw * zoneWidths[b]);
+            GpuGl.FillRect(bxBtn, barY, bwBtn, 18, Color.FromArgb(150, 10, 22, 18));
+            GpuGl.DrawRect(bxBtn, barY, bwBtn, 18, Fa(c1, 150), 1f);
+            Color bt = (b == 3 && !brain3DAutoRotate) ? gold : (b == 4 ? Fa(c2, 230) : txt);
+            GlText(btnLabels[b], bxBtn + 5, barY + 3, bt);
+        }
+
+        // Optional verification snapshot (requested via /api/brain/snapshot)
+        string snapPath = brainSnapshotPath;
+        if (snapPath != null) {
+            brainSnapshotPath = null;
+            try { SaveGlRegionPng(r, snapPath); } catch { }
+        }
+    }
+
+    private void DrawGlTooltip(string[] lines, float x, float y, Color accent, Rectangle bounds) {
+        int maxLen = 0;
+        for (int i = 0; i < lines.Length; i++) if (lines[i].Length > maxLen) maxLen = lines[i].Length;
+        float w = maxLen * 6.6f + 14f, h = lines.Length * 14f + 8f;
+        if (x + w > bounds.Right - 6) x = x - w - 30f;
+        if (y + h > bounds.Bottom - 52) y = bounds.Bottom - 52 - h;
+        if (x < bounds.X + 6) x = bounds.X + 6;
+        GpuGl.FillRect(x, y, w, h, Color.FromArgb(225, 3, 9, 12));
+        GpuGl.DrawRect(x, y, w, h, Fa(accent, 210), 1.3f);
+        for (int i = 0; i < lines.Length; i++) {
+            GlText(lines[i], x + 7f, y + 5f + i * 14f, i == 0 ? Fa(accent, 245) : Color.FromArgb(230, 214, 226, 222));
+        }
+    }
+
+    private void SaveGlRegionPng(Rectangle r, string path) {
+        int w = r.Width, h = r.Height;
+        byte[] buf = new byte[w * h * 4];
+        GCHandle hb = GCHandle.Alloc(buf, GCHandleType.Pinned);
+        try {
+            GlBrain.glReadPixels(r.X, screenH - r.Bottom, w, h, GpuGl.GL_BGRA_EXT, GpuGl.GL_UNSIGNED_BYTE, hb.AddrOfPinnedObject());
+        } finally { hb.Free(); }
+        using (Bitmap bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb)) {
+            BitmapData bd = bmp.LockBits(new Rectangle(0, 0, w, h), ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+            try {
+                for (int row = 0; row < h; row++) {
+                    int srcRow = h - 1 - row;
+                    Marshal.Copy(buf, srcRow * w * 4, IntPtr.Add(bd.Scan0, row * bd.Stride), w * 4);
+                }
+            } finally { bmp.UnlockBits(bd); }
+            // force opaque alpha for viewing
+            using (Bitmap opaque = new Bitmap(w, h, PixelFormat.Format24bppRgb))
+            using (Graphics g = Graphics.FromImage(opaque)) {
+                g.Clear(Color.Black);
+                g.DrawImageUnscaled(bmp, 0, 0);
+                opaque.Save(path, ImageFormat.Png);
+            }
+        }
+    }
+
+    private static float BrainDepthK(float rz) {
+        float k = (rz + 80f) / 160f;
+        if (k < 0f) k = 0f;
+        if (k > 1f) k = 1f;
+        return 0.40f + 0.60f * k;
+    }
+
+    private static int BrainA(float v) {
+        if (v < 0f) return 0;
+        if (v > 255f) return 255;
+        return (int)v;
+    }
+
+    // Color of a neuron by anatomical region (idx < 0 => region base color without special-cased golden VT neurons)
+    private static Color BrainNeuronColor(int idx, int region) {
+        if (idx >= 0 && (idx == 0 || idx == 8 || idx == 11 || (region == 0 && (idx % 8) < 4))) return Color.FromArgb(255, 252, 212, 32);
+        if (region == 0) return Color.FromArgb(255, 248, 52, 122);
+        if (region == 1) return Color.FromArgb(255, 42, 242, 178);
+        if (region == 2) return Color.FromArgb(255, 56, 168, 252);
+        return Color.FromArgb(255, 52, 246, 86);
+    }
+
+    private void DrawBrainTag(Graphics g, string text, float ax, float ay, int ox, int oy, int side, Color col, float k, int minX, int maxX, int minY, int maxY) {
+        SizeF sz = g.MeasureString(text, fontHudSmall);
+        float tx = ax + ox;
+        if (side < 0) tx -= sz.Width; else if (side == 0) tx -= sz.Width * 0.5f;
+        float ty = ay + oy - sz.Height * 0.5f;
+        tx = Math.Max(minX, Math.Min(maxX - sz.Width, tx));
+        ty = Math.Max(minY, Math.Min(maxY - sz.Height, ty));
+        float lx, ly;
+        if (side < 0) { lx = tx + sz.Width; ly = ty + sz.Height * 0.5f; }
+        else if (side > 0) { lx = tx; ly = ty + sz.Height * 0.5f; }
+        else { lx = tx + sz.Width * 0.5f; ly = (oy < 0) ? (ty + sz.Height) : ty; }
+        using (Pen lp = new Pen(Color.FromArgb(BrainA(120f * k), col.R, col.G, col.B), 1.0f))
+        using (SolidBrush bg = new SolidBrush(Color.FromArgb(BrainA(150f * k), 2, 6, 8)))
+        using (SolidBrush tb = new SolidBrush(Color.FromArgb(BrainA(225f * k), col.R, col.G, col.B))) {
+            g.DrawLine(lp, ax, ay, lx, ly);
+            g.FillEllipse(tb, ax - 2.2f, ay - 2.2f, 4.4f, 4.4f);
+            g.FillRectangle(bg, tx - 2f, ty, sz.Width + 2f, sz.Height);
+            g.DrawString(text, fontHudSmall, tb, tx, ty);
+        }
+    }
+
     private struct Neuron3DProj {
         public int Index;
         public int Region;
@@ -14254,7 +15346,7 @@ public class HackerWallpaperForm : Form {
             float cosP = (float)Math.Cos(effPitch);
             float sinP = (float)Math.Sin(effPitch);
 
-            float sizeRatio = Math.Min((float)pw / 356.0f, (float)ph / 246.0f);
+            float sizeRatio = isFull ? Math.Min((float)pw / 350.0f, (float)ph / 200.0f) : Math.Min((float)pw / 356.0f, (float)ph / 246.0f);
             float modelScale = 1.22f * sizeRatio * brain3DZoom;
 
             // Project static 3D FlyWire Cortical Wireframe Mesh + Cobalt-Blue Mushroom Body Mesh
@@ -14276,45 +15368,11 @@ public class HackerWallpaperForm : Form {
                 shellRZ[v] = rz;
             }
 
-            // Pass 1: Back-Hemisphere 3D Triangulated Cortical Wireframe Shell (Dark Silver-Gray 3D Mesh Cradle + Inner Amber Antennal Lobes)
-            PointF[] triPoly = new PointF[3];
-            using (SolidBrush backFill = new SolidBrush(Color.FromArgb(24, 82, 94, 112)))
-            using (Pen backWire = new Pen(Color.FromArgb(52, 122, 132, 148), isFull ? 0.90f : 0.70f))
-            using (Pen amberWire = new Pen(Color.FromArgb(48, 218, 156, 32), isFull ? 0.85f : 0.65f)) {
-                for (int t = 0; t < FlyBrainConnectome.ShellTris.Count; t++) {
-                    FlyBrainConnectome.BrainTri3D tri = FlyBrainConnectome.ShellTris[t];
-                    if (tri.PartKind == 3) continue; // Mushroom body rendered in Pass 2
-                    triPoly[0] = shellPts[tri.I0];
-                    triPoly[1] = shellPts[tri.I1];
-                    triPoly[2] = shellPts[tri.I2];
-                    if (tri.PartKind == 4) {
-                        g.DrawPolygon(amberWire, triPoly);
-                        continue;
-                    }
-                    float avgZ = (shellRZ[tri.I0] + shellRZ[tri.I1] + shellRZ[tri.I2]) * 0.3333f;
-                    if (avgZ > 2.0f) continue;
-                    g.FillPolygon(backFill, triPoly);
-                    g.DrawPolygon(backWire, triPoly);
-                }
-            }
-
-            // Pass 2: Central 3D Cobalt-Blue Mushroom Body Lobes (Pedunculus, Bulbous Alpha Cap & Medial Lobes)
-            using (SolidBrush mbFill = new SolidBrush(Color.FromArgb(118, 14, 86, 198)))
-            using (Pen mbWire = new Pen(Color.FromArgb(195, 42, 148, 248), isFull ? 1.20f : 0.85f)) {
-                for (int t = 0; t < FlyBrainConnectome.ShellTris.Count; t++) {
-                    FlyBrainConnectome.BrainTri3D tri = FlyBrainConnectome.ShellTris[t];
-                    if (tri.PartKind != 3) continue;
-                    triPoly[0] = shellPts[tri.I0];
-                    triPoly[1] = shellPts[tri.I1];
-                    triPoly[2] = shellPts[tri.I2];
-                    g.FillPolygon(mbFill, triPoly);
-                    g.DrawPolygon(mbWire, triPoly);
-                }
-            }
-
-            // Project all 64 Spiking Neurons in 1:1 Anatomical Coordinates
+            // Project all 64 Spiking Neurons in 1:1 Anatomical Coordinates (needed first for hover-picking, region activity & edge budget)
             Neuron3DProj[] proj = new Neuron3DProj[FlyBrainConnectome.N];
             int activeSpikes = 0;
+            float[] regSum = new float[4];
+            int[] regCnt = new int[4];
             for (int i = 0; i < FlyBrainConnectome.N; i++) {
                 float nx = br.NeuronX[i];
                 float ny = br.NeuronY[i];
@@ -14334,9 +15392,78 @@ public class HackerWallpaperForm : Form {
                 proj[i].Scale = persp * Math.Max(1.0f, sizeRatio * 0.65f);
                 proj[i].Glow = br.SpikeGlow[i];
                 if (br.SpikeGlow[i] > 0.25f) activeSpikes++;
+                int rg = Math.Max(0, Math.Min(3, br.NeuronRegion[i]));
+                regSum[rg] += br.SpikeGlow[i];
+                regCnt[rg]++;
             }
 
-            // Pass 3: Dense Multi-Color 3D Dendritic Arborizations & Curved Optic Tracts (Zero per-branch Pen/Brush allocation!)
+            // Live region-activity smoothing + spike-rate history (one sample per rendered frame)
+            if (brainActHistFrame != frameCount) {
+                brainActHistFrame = frameCount;
+                for (int r = 0; r < 4; r++) {
+                    float avgR = (regCnt[r] > 0) ? (regSum[r] / regCnt[r]) : 0f;
+                    brainRegionAct[r] = brainRegionAct[r] * 0.72f + avgR * 0.28f;
+                }
+                brainActHist[brainActHistPos] = activeSpikes;
+                brainActHistPos = (brainActHistPos + 1) % brainActHist.Length;
+            }
+
+            // Hover-picking of the nearest neuron under the mouse cursor (fullscreen inspector only)
+            int hoverIdx = -1;
+            if (isFull && brain3DHoverX >= 0) {
+                float bestD2 = 16f * 16f;
+                for (int i = 0; i < FlyBrainConnectome.N; i++) {
+                    float hdx = proj[i].SX - brain3DHoverX;
+                    float hdy = proj[i].SY - brain3DHoverY;
+                    float hd2 = hdx * hdx + hdy * hdy;
+                    if (hd2 < bestD2) { bestD2 = hd2; hoverIdx = i; }
+                }
+            }
+
+            float actNorm = Math.Max(0f, Math.Min(1f, activeSpikes / 22f));
+
+            // Pass 1: Back-Hemisphere 3D Triangulated Cortical Wireframe Shell (Optic lobes drawn much fainter so the central brain pops)
+            PointF[] triPoly = new PointF[3];
+            using (SolidBrush backFill = new SolidBrush(Color.FromArgb(24, 82, 94, 112)))
+            using (Pen backWire = new Pen(Color.FromArgb(52, 122, 132, 148), isFull ? 0.90f : 0.70f))
+            using (Pen lobeBackWire = new Pen(Color.FromArgb(26, 104, 118, 140), isFull ? 0.75f : 0.60f))
+            using (Pen amberWire = new Pen(Color.FromArgb(48, 218, 156, 32), isFull ? 0.85f : 0.65f)) {
+                for (int t = 0; t < FlyBrainConnectome.ShellTris.Count; t++) {
+                    FlyBrainConnectome.BrainTri3D tri = FlyBrainConnectome.ShellTris[t];
+                    if (tri.PartKind == 3) continue; // Mushroom body rendered in Pass 2
+                    triPoly[0] = shellPts[tri.I0];
+                    triPoly[1] = shellPts[tri.I1];
+                    triPoly[2] = shellPts[tri.I2];
+                    if (tri.PartKind == 4) {
+                        g.DrawPolygon(amberWire, triPoly);
+                        continue;
+                    }
+                    float avgZ = (shellRZ[tri.I0] + shellRZ[tri.I1] + shellRZ[tri.I2]) * 0.3333f;
+                    if (avgZ > 2.0f) continue;
+                    if (tri.PartKind == 1) {
+                        g.DrawPolygon(lobeBackWire, triPoly);
+                        continue;
+                    }
+                    g.FillPolygon(backFill, triPoly);
+                    g.DrawPolygon(backWire, triPoly);
+                }
+            }
+
+            // Pass 2: Central 3D Cobalt-Blue Mushroom Body Lobes (Pedunculus, Bulbous Alpha Cap & Medial Lobes)
+            using (SolidBrush mbFill = new SolidBrush(Color.FromArgb(104, 14, 86, 198)))
+            using (Pen mbWire = new Pen(Color.FromArgb(185, 42, 148, 248), isFull ? 1.10f : 0.80f)) {
+                for (int t = 0; t < FlyBrainConnectome.ShellTris.Count; t++) {
+                    FlyBrainConnectome.BrainTri3D tri = FlyBrainConnectome.ShellTris[t];
+                    if (tri.PartKind != 3) continue;
+                    triPoly[0] = shellPts[tri.I0];
+                    triPoly[1] = shellPts[tri.I1];
+                    triPoly[2] = shellPts[tri.I2];
+                    g.FillPolygon(mbFill, triPoly);
+                    g.DrawPolygon(mbWire, triPoly);
+                }
+            }
+
+            // Pass 3: Dendritic Arborizations & Curved Optic Tracts (depth-cued; dimmed when another neuron is inspected)
             float lineScale = isFull ? 1.35f : 0.95f;
             using (Pen arborPen = new Pen(Color.White, 1.0f))
             using (SolidBrush tipB = new SolidBrush(Color.White)) {
@@ -14360,21 +15487,39 @@ public class HackerWallpaperForm : Form {
                     float sx1 = cx + rx1 * modelScale * p1Scale;
                     float sy1 = cy - ry1 * modelScale * p1Scale;
 
-                    int alpha = (int)Math.Min(248f, 112f + glow * 136f);
+                    float dkSeg = BrainDepthK((rz0 + rz1) * 0.5f);
+                    float aF = (96f + glow * 140f) * dkSeg;
+                    float wF = seg.Thickness * (0.80f + glow * 0.55f) * lineScale;
+                    if (hoverIdx >= 0) {
+                        if (seg.NeuronIdx == hoverIdx) { aF = 250f; wF *= 1.45f; }
+                        else aF *= 0.40f;
+                    }
+                    int alpha = BrainA(aF);
                     arborPen.Color = Color.FromArgb(alpha, seg.R, seg.G, seg.B);
-                    arborPen.Width = seg.Thickness * (0.80f + glow * 0.55f) * lineScale;
+                    arborPen.Width = wF;
                     g.DrawLine(arborPen, sx0, sy0, sx1, sy1);
 
                     if (seg.IsTip && (glow > 0.28f || (d % 2 == 0))) {
-                        float tipR = ((glow > 0.45f) ? 1.65f : 1.05f) * lineScale;
-                        tipB.Color = Color.FromArgb(Math.Min(255, alpha + 25), seg.R, seg.G, seg.B);
+                        float tipR = ((glow > 0.45f) ? 1.65f : 1.05f) * lineScale * (0.80f + 0.30f * dkSeg);
+                        tipB.Color = Color.FromArgb(BrainA(alpha + 25), seg.R, seg.G, seg.B);
                         g.FillEllipse(tipB, sx1 - tipR, sy1 - tipR, tipR * 2f, tipR * 2f);
                     }
                 }
             }
 
-            // Pass 4: Internal Curved Synaptic Axons + 64 Neural Somata (Zero per-synapse Pen/Brush allocation!)
+            // Pass 4: Curved Synaptic Axons (decluttered: active-edge budget + sparse idle edges + presynaptic-region colors + depth cue)
+            int activeEdges = 0;
+            for (int pre = 0; pre < FlyBrainConnectome.N; pre++) {
+                for (int post = 0; post < FlyBrainConnectome.N; post++) {
+                    if (Math.Abs(br.W[pre, post]) < 0.16f) continue;
+                    if (Math.Max(proj[pre].Glow, proj[post].Glow * 0.85f) >= 0.30f) activeEdges++;
+                }
+            }
+            int activeStride = Math.Max(1, activeEdges / (isFull ? 220 : 130));
+            int idleStride = isFull ? 17 : 29;
+            int hovOut = 0, hovIn = 0, hovExc = 0, hovInh = 0;
             int synIdx = 0;
+            PointF[] curvePts = new PointF[3];
             using (Pen synPen = new Pen(Color.White, 1.0f))
             using (SolidBrush pulseB = new SolidBrush(Color.FromArgb(245, 255, 255, 255))) {
                 for (int pre = 0; pre < FlyBrainConnectome.N; pre++) {
@@ -14385,7 +15530,16 @@ public class HackerWallpaperForm : Form {
                         float gPre = proj[pre].Glow;
                         float gPost = proj[post].Glow;
                         float act = Math.Max(gPre, gPost * 0.85f);
-                        if (act < 0.30f && (synIdx % 11 != 0)) continue;
+                        bool isActive = act >= 0.30f;
+                        bool touchesHover = (hoverIdx >= 0 && (pre == hoverIdx || post == hoverIdx));
+                        if (touchesHover) {
+                            if (pre == hoverIdx) hovOut++; else hovIn++;
+                            if (w >= 0f) hovExc++; else hovInh++;
+                        } else if (isActive) {
+                            if (activeStride > 1 && (synIdx % activeStride) != 0) continue;
+                        } else if ((synIdx % idleStride) != 0) {
+                            continue;
+                        }
 
                         float mx3 = (br.NeuronX[pre] + br.NeuronX[post]) * 0.36f;
                         float my3 = (br.NeuronY[pre] + br.NeuronY[post]) * 0.42f + 1.5f;
@@ -14401,24 +15555,40 @@ public class HackerWallpaperForm : Form {
                         float msx = cx + mrx * modelScale * mPersp;
                         float msy = cy - mry * modelScale * mPersp;
 
-                        int alpha = (int)Math.Min(210f, 26f + act * 175f);
+                        float dkE = BrainDepthK((proj[pre].SZ + proj[post].SZ + mrz) * 0.3333f);
+                        float aE = (isActive ? (34f + act * 168f) : 17f) * dkE;
+                        float wE = (act > 0.5f ? 1.20f : 0.72f) * lineScale;
                         Color synCol;
-                        if (pre == 11 || post == 11) {
-                            synCol = Color.FromArgb(alpha, 250, 208, 28);
-                        } else if (proj[post].Region == 3 && act > 0.35f) {
-                            synCol = Color.FromArgb(alpha, 48, 245, 92);
-                        } else if (w >= 0f) {
-                            synCol = Color.FromArgb(alpha, 45, 238, 188);
+                        if (touchesHover) {
+                            // Inspector colors: outgoing = cyan-white, incoming = amber
+                            aE = 150f + act * 100f;
+                            wE = 1.55f * lineScale;
+                            synCol = (pre == hoverIdx) ? Color.FromArgb(BrainA(aE), 140, 255, 240) : Color.FromArgb(BrainA(aE), 255, 190, 70);
                         } else {
-                            synCol = Color.FromArgb(alpha, 178, 95, 255);
+                            if (hoverIdx >= 0) aE *= 0.30f;
+                            if (pre == 11 || post == 11) {
+                                synCol = Color.FromArgb(BrainA(aE), 250, 208, 28);
+                            } else if (w < 0f) {
+                                synCol = Color.FromArgb(BrainA(aE), 178, 95, 255);
+                            } else if (proj[pre].Region == 0) {
+                                synCol = Color.FromArgb(BrainA(aE), 252, 196, 52);
+                            } else if (proj[pre].Region == 1) {
+                                synCol = Color.FromArgb(BrainA(aE), 45, 238, 188);
+                            } else if (proj[pre].Region == 2) {
+                                synCol = Color.FromArgb(BrainA(aE), 56, 168, 252);
+                            } else {
+                                synCol = Color.FromArgb(BrainA(aE), 52, 246, 96);
+                            }
                         }
 
                         synPen.Color = synCol;
-                        synPen.Width = (act > 0.5f ? 1.25f : 0.78f) * lineScale;
-                        g.DrawLine(synPen, proj[pre].SX, proj[pre].SY, msx, msy);
-                        g.DrawLine(synPen, msx, msy, proj[post].SX, proj[post].SY);
+                        synPen.Width = wE;
+                        curvePts[0] = new PointF(proj[pre].SX, proj[pre].SY);
+                        curvePts[1] = new PointF(msx, msy);
+                        curvePts[2] = new PointF(proj[post].SX, proj[post].SY);
+                        g.DrawCurve(synPen, curvePts, 0.55f);
 
-                        if (gPre > 0.42f && (synIdx % 2 == 0)) {
+                        if (gPre > 0.42f && (touchesHover || (synIdx % 2 == 0))) {
                             float tPulse = ((frameCount * 0.14f + synIdx * 0.19f) % 1.0f);
                             float pxp, pyp;
                             if (tPulse < 0.5f) {
@@ -14430,7 +15600,7 @@ public class HackerWallpaperForm : Form {
                                 pxp = msx + (proj[post].SX - msx) * u;
                                 pyp = msy + (proj[post].SY - msy) * u;
                             }
-                            float pr = 1.45f * lineScale;
+                            float pr = 1.45f * lineScale * (0.85f + 0.25f * dkE);
                             g.FillEllipse(pulseB, pxp - pr, pyp - pr, pr * 2f, pr * 2f);
                         }
                     }
@@ -14441,32 +15611,32 @@ public class HackerWallpaperForm : Form {
             Array.Copy(proj, sorted, FlyBrainConnectome.N);
             Array.Sort(sorted, (a, b) => a.SZ.CompareTo(b.SZ)); // Back-to-front by Z
 
+            int labeledTop = 0;
             using (SolidBrush haloB = new SolidBrush(Color.White))
             using (SolidBrush coreB = new SolidBrush(Color.White))
-            using (SolidBrush sparkB = new SolidBrush(Color.FromArgb(250, 255, 255, 255))) {
+            using (SolidBrush sparkB = new SolidBrush(Color.FromArgb(250, 255, 255, 255)))
+            using (Pen ripplePen = new Pen(Color.White, 1.0f))
+            using (Pen hoverPen = new Pen(Color.FromArgb(235, 255, 255, 255), 1.5f)) {
                 for (int i = 0; i < sorted.Length; i++) {
                     Neuron3DProj np = sorted[i];
-                    Color nCol;
-                    if (np.Index == 0 || np.Index == 8 || np.Index == 11 || (np.Region == 0 && (np.Index % 8) < 4)) {
-                        nCol = Color.FromArgb(255, 252, 212, 32);
-                    } else if (np.Region == 0) {
-                        nCol = Color.FromArgb(255, 248, 52, 122);
-                    } else if (np.Region == 1) {
-                        nCol = Color.FromArgb(255, 42, 242, 178);
-                    } else if (np.Region == 2) {
-                        nCol = Color.FromArgb(255, 56, 168, 252);
-                    } else {
-                        nCol = Color.FromArgb(255, 52, 246, 86);
-                    }
+                    Color nCol = BrainNeuronColor(np.Index, np.Region);
+                    float dkN = BrainDepthK(np.SZ);
 
-                    float baseR = (1.35f + np.Glow * 1.65f) * np.Scale;
-                    int coreAlpha = (int)Math.Min(255f, 155f + np.Glow * 100f);
+                    float baseR = (1.30f + np.Glow * 1.70f) * np.Scale * (0.80f + 0.30f * dkN);
+                    int coreAlpha = BrainA((150f + np.Glow * 105f) * (0.58f + 0.42f * dkN));
 
                     if (np.Glow > 0.25f || np.Index == 11) {
                         float haloR = baseR * 1.85f;
-                        int haloAlpha = (int)Math.Min(115f, 32f + np.Glow * 80f);
+                        int haloAlpha = BrainA(Math.Min(115f, 32f + np.Glow * 80f) * (0.6f + 0.4f * dkN));
                         haloB.Color = Color.FromArgb(haloAlpha, nCol.R, nCol.G, nCol.B);
                         g.FillEllipse(haloB, np.SX - haloR, np.SY - haloR, haloR * 2f, haloR * 2f);
+                    }
+
+                    // Expanding spike-ripple ring for actively firing neurons
+                    if (np.Glow > 0.38f) {
+                        float rr = baseR * (1.9f + (1.0f - np.Glow) * 3.6f);
+                        ripplePen.Color = Color.FromArgb(BrainA(np.Glow * 150f * dkN), nCol.R, nCol.G, nCol.B);
+                        g.DrawEllipse(ripplePen, np.SX - rr, np.SY - rr, rr * 2f, rr * 2f);
                     }
 
                     coreB.Color = Color.FromArgb(coreAlpha, nCol.R, nCol.G, nCol.B);
@@ -14476,12 +15646,27 @@ public class HackerWallpaperForm : Form {
                         float spR = 0.95f * lineScale;
                         g.FillEllipse(sparkB, np.SX - spR, np.SY - spR, spR * 2f, spR * 2f);
                     }
+
+                    if (np.Index == hoverIdx) {
+                        float hr = baseR + 5.0f;
+                        g.DrawEllipse(hoverPen, np.SX - hr, np.SY - hr, hr * 2f, hr * 2f);
+                        float hr2 = hr + 4.0f;
+                        ripplePen.Color = Color.FromArgb(120, nCol.R, nCol.G, nCol.B);
+                        g.DrawEllipse(ripplePen, np.SX - hr2, np.SY - hr2, hr2 * 2f, hr2 * 2f);
+                    } else if (isFull && np.Glow > 0.72f && labeledTop < 5) {
+                        labeledTop++;
+                        g.DrawString("N" + np.Index.ToString(), fontHudSmall, txtB, np.SX + baseR + 3f, np.SY - baseR - 12f);
+                    }
                 }
             }
 
-            // Pass 5: Front-Hemisphere 3D Triangulated Silver-Gray Cortical Wireframe Shell (Encases the Arbors in 3D!)
-            using (Pen frontWire = new Pen(Color.FromArgb(68, 154, 166, 184), isFull ? 0.95f : 0.72f))
-            using (Pen rimWire = new Pen(Color.FromArgb(124, 194, 206, 224), isFull ? 1.25f : 0.92f)) {
+            // Pass 5: Front-Hemisphere 3D Triangulated Silver-Gray Cortical Wireframe Shell (rim tints with live network activity)
+            int rimR = (int)(194 - 74 * actNorm);
+            int rimG = (int)(206 + 49 * actNorm);
+            int rimB = (int)(224 - 10 * actNorm);
+            using (Pen frontWire = new Pen(Color.FromArgb(62, 154, 166, 184), isFull ? 0.95f : 0.72f))
+            using (Pen lobeFrontWire = new Pen(Color.FromArgb(34, 130, 142, 162), isFull ? 0.80f : 0.62f))
+            using (Pen rimWire = new Pen(Color.FromArgb(BrainA(116f + actNorm * 90f), rimR, rimG, rimB), isFull ? 1.25f : 0.92f)) {
                 for (int t = 0; t < FlyBrainConnectome.ShellTris.Count; t++) {
                     FlyBrainConnectome.BrainTri3D tri = FlyBrainConnectome.ShellTris[t];
                     if (tri.PartKind == 3 || tri.PartKind == 4) continue;
@@ -14490,15 +15675,114 @@ public class HackerWallpaperForm : Form {
                     triPoly[0] = shellPts[tri.I0];
                     triPoly[1] = shellPts[tri.I1];
                     triPoly[2] = shellPts[tri.I2];
+                    if (tri.PartKind == 1) { g.DrawPolygon(lobeFrontWire, triPoly); continue; }
                     g.DrawPolygon((avgZ < 10.0f) ? rimWire : frontWire, triPoly);
                 }
             }
 
-            // Anatomical Labels & Live 3D Orientation Readout
-            g.DrawString("OPTIC_LOBE_L", fontHudSmall, c1B, px + 10, py + 42);
-            g.DrawString("OPTIC_LOBE_R", fontHudSmall, c1B, px + pw - 86, py + 42);
-            g.DrawString("SEZ_MOTOR", fontHudSmall, c2B, px + pw - 72, py + ph - 58);
+            // Anatomical Labels: anchored to projected 3D landmarks with leader lines (fullscreen) or compact corner tags (card)
+            if (isFull) {
+                string[] aLbl = new string[] { "OPTIC_LOBE_L", "OPTIC_LOBE_R", "MUSHROOM_BODY", "ANTENNAL_LOBE", "CENTRAL_COMPLEX", "PARS_INTERCEREBRALIS", "SEZ_MOTOR" };
+                float[] aX = new float[] { -76f, 76f, 26f, -33f, 0f, 0f, 0f };
+                float[] aY = new float[] { 32f, 32f, 36f, -20f, -2f, 31f, -38f };
+                float[] aZ = new float[] { -2f, -2f, -3f, 3f, 8f, 0f, 0f };
+                int[] aOx = new int[] { -34, 34, 40, -50, 150, 0, 0 };
+                int[] aOy = new int[] { -24, -24, -30, 54, 98, -30, 40 };
+                int[] aSide = new int[] { -1, 1, 1, -1, 1, 0, 0 };
+                int[] aReg = new int[] { 0, 0, 1, 2, 2, 0, 3 };
+                for (int lb = 0; lb < aLbl.Length; lb++) {
+                    float lrx = aX[lb] * cosY - aZ[lb] * sinY;
+                    float lrz1 = aX[lb] * sinY + aZ[lb] * cosY;
+                    float lry = aY[lb] * cosP - lrz1 * sinP;
+                    float lrz = aY[lb] * sinP + lrz1 * cosP;
+                    float lpers = 260f / Math.Max(110f, 260f - lrz);
+                    float lsx = cx + lrx * modelScale * lpers;
+                    float lsy = cy - lry * modelScale * lpers;
+                    Color lc = BrainNeuronColor(aReg[lb] == 0 ? 1 : -1, aReg[lb]);
+                    DrawBrainTag(g, aLbl[lb], lsx, lsy, aOx[lb], aOy[lb], aSide[lb], lc, 0.55f + 0.45f * BrainDepthK(lrz), px + 4, px + pw - 4, py + 154, py + ph - 64);
+                }
+            } else {
+                g.DrawString("OPTIC_LOBE_L", fontHudSmall, c1B, px + 10, py + 42);
+                g.DrawString("OPTIC_LOBE_R", fontHudSmall, c1B, px + pw - 86, py + 42);
+                g.DrawString("SEZ_MOTOR", fontHudSmall, c2B, px + pw - 72, py + ph - 58);
+            }
             g.DrawString(string.Format("VT_N[11]:{0:0}%", proj[11].Glow * 100f), fontHudSmall, goldB, px + 10, py + ph - 58);
+
+            // Fullscreen-only: Live region-activity legend + spike-rate sparkline + neuron hover inspector
+            if (isFull) {
+                string[] rgName = new string[] { "SENSORY / OPTIC / PI", "MUSHROOM BODY (KC)", "CENTRAL COMPLEX", "MOTOR / SEZ / VNC" };
+                int lgX = px + 12;
+                int lgY = py + 64;
+                using (SolidBrush lgBg = new SolidBrush(Color.FromArgb(120, 2, 6, 8)))
+                using (Pen lgBor = new Pen(Color.FromArgb(70, c1.R, c1.G, c1.B), 1.0f))
+                using (SolidBrush barTrack = new SolidBrush(Color.FromArgb(70, 40, 56, 60))) {
+                    g.FillRectangle(lgBg, lgX - 4, lgY - 4, 238, 20 + 4 * 17);
+                    g.DrawRectangle(lgBor, lgX - 4, lgY - 4, 238, 20 + 4 * 17);
+                    g.DrawString("REGION_ACTIVITY (LIVE)", fontHudSmall, c2B, lgX, lgY - 2);
+                    for (int r = 0; r < 4; r++) {
+                        Color rc = BrainNeuronColor(r == 0 ? 1 : -1, r);
+                        int ry0 = lgY + 16 + r * 17;
+                        float act01 = Math.Max(0f, Math.Min(1f, brainRegionAct[r] * 1.6f));
+                        using (SolidBrush rb = new SolidBrush(rc)) {
+                            g.FillEllipse(rb, lgX, ry0 + 3, 8, 8);
+                            g.DrawString(rgName[r], fontHudSmall, txtB, lgX + 13, ry0);
+                            g.FillRectangle(barTrack, lgX + 142, ry0 + 4, 64, 6);
+                            g.FillRectangle(rb, lgX + 142, ry0 + 4, Math.Max(1, (int)(64 * act01)), 6);
+                            g.DrawString(((int)(act01 * 100f)).ToString() + "%", fontHudSmall, txtB, lgX + 208, ry0);
+                        }
+                    }
+                }
+
+                // Spike-rate sparkline (right side)
+                int spW = 188, spH = 46;
+                int spX = px + pw - spW - 14;
+                int spY = py + 64;
+                using (SolidBrush spBg = new SolidBrush(Color.FromArgb(120, 2, 6, 8)))
+                using (Pen spBor = new Pen(Color.FromArgb(70, c1.R, c1.G, c1.B), 1.0f))
+                using (Pen spLine = new Pen(Color.FromArgb(230, c2.R, c2.G, c2.B), 1.4f)) {
+                    g.FillRectangle(spBg, spX, spY, spW, spH + 18);
+                    g.DrawRectangle(spBor, spX, spY, spW, spH + 18);
+                    g.DrawString(string.Format("SPIKE_RATE {0}/64", activeSpikes), fontHudSmall, c2B, spX + 6, spY + 1);
+                    int hN = brainActHist.Length;
+                    float maxH = 16f;
+                    for (int k = 0; k < hN; k++) { if (brainActHist[k] > maxH) maxH = brainActHist[k]; }
+                    PointF[] sp = new PointF[hN];
+                    for (int k = 0; k < hN; k++) {
+                        int hi = (brainActHistPos + k) % hN;
+                        sp[k] = new PointF(spX + 4 + k * ((spW - 8) / (float)(hN - 1)), spY + 18 + spH - 4 - (brainActHist[hi] / maxH) * (spH - 8));
+                    }
+                    g.DrawLines(spLine, sp);
+                }
+
+                // Hover inspector tooltip
+                if (hoverIdx >= 0) {
+                    string[] rgFull = new string[] { "SENSORY/OPTIC (PI-SLP-LH)", "MUSHROOM_BODY (KENYON CELLS)", "CENTRAL_COMPLEX", "MOTOR / SEZ / VNC" };
+                    int hrg = Math.Max(0, Math.Min(3, proj[hoverIdx].Region));
+                    Color hc = BrainNeuronColor(hoverIdx, proj[hoverIdx].Region);
+                    string[] tipLines = new string[] {
+                        string.Format("NEURON N[{0}] // {1}", hoverIdx, rgFull[hrg]),
+                        string.Format("V:{0:0.00}  SPIKE_GLOW:{1:0}%  XYZ:[{2:0},{3:0},{4:0}]", br.V[hoverIdx], proj[hoverIdx].Glow * 100f, br.NeuronX[hoverIdx], br.NeuronY[hoverIdx], br.NeuronZ[hoverIdx]),
+                        string.Format("SYNAPSES  OUT:{0}  IN:{1}  (EXC:{2} / INH:{3})", hovOut, hovIn, hovExc, hovInh),
+                        "CYAN = OUTGOING  |  AMBER = INCOMING"
+                    };
+                    float tipW = 336f;
+                    float tipH = 8f + tipLines.Length * 14f;
+                    float tipX = proj[hoverIdx].SX + 18f;
+                    float tipY = proj[hoverIdx].SY + 14f;
+                    if (tipX + tipW > px + pw - 6) tipX = proj[hoverIdx].SX - tipW - 18f;
+                    if (tipY + tipH > py + ph - 62) tipY = py + ph - 62 - tipH;
+                    if (tipX < px + 6) tipX = px + 6;
+                    using (SolidBrush tipBg = new SolidBrush(Color.FromArgb(214, 3, 9, 12)))
+                    using (Pen tipBor = new Pen(Color.FromArgb(200, hc.R, hc.G, hc.B), 1.3f))
+                    using (SolidBrush tipTx = new SolidBrush(Color.FromArgb(240, hc.R, hc.G, hc.B))) {
+                        g.FillRectangle(tipBg, tipX, tipY, tipW, tipH);
+                        g.DrawRectangle(tipBor, tipX, tipY, tipW, tipH);
+                        for (int tl = 0; tl < tipLines.Length; tl++) {
+                            g.DrawString(tipLines[tl], fontHudSmall, tl == 0 ? tipTx : txtB, tipX + 6f, tipY + 4f + tl * 14f);
+                        }
+                    }
+                }
+            }
 
             int yawDeg = (int)Math.Round(effYaw * 180.0 / Math.PI);
             int pitchDeg = (int)Math.Round(effPitch * 180.0 / Math.PI);
@@ -14720,8 +16004,8 @@ public class HackerWallpaperForm : Form {
         configForm.Controls.Add(tbScale);
 
         CheckBox chkAutoGamer = new CheckBox {
-            Text = "Auto-Activar Modo Gamer (0.0% GPU) en Videojuegos Pantalla Completa",
-            Location = new Point(24, 396),
+            Text = "Auto-Pausar (0.0% GPU) en Juegos Fullscreen o si otra App usa > 90% GPU",
+            Location = new Point(24, 392),
             AutoSize = true,
             ForeColor = Color.FromArgb(110, 242, 188),
             Checked = Config.AutoGamerOnFullscreenGame
@@ -14735,7 +16019,7 @@ public class HackerWallpaperForm : Form {
 
         CheckBox chkTrain = new CheckBox {
             Text = "Modo Entrenamiento Intensivo Continuo (Más Orbes Dorados y Anomalías)",
-            Location = new Point(24, 424),
+            Location = new Point(24, 417),
             AutoSize = true,
             ForeColor = Color.FromArgb(250, 204, 21),
             Checked = Config.TrainingMode
@@ -14744,7 +16028,7 @@ public class HackerWallpaperForm : Form {
 
         CheckBox chkFollowMouse = new CheckBox {
             Text = "Seguir el cursor del mouse (Desactivado por defecto — 100% Independientes)",
-            Location = new Point(24, 452),
+            Location = new Point(24, 442),
             AutoSize = true,
             Checked = Config.FollowMouse
         };
@@ -14752,7 +16036,7 @@ public class HackerWallpaperForm : Form {
 
         CheckBox chkTel = new CheckBox {
             Text = "Mostrar Terminal de Telemetría Real (CPU, GPU, RAM, Red, Ping)",
-            Location = new Point(24, 480),
+            Location = new Point(24, 467),
             AutoSize = true,
             Checked = Config.ShowTelemetry
         };
@@ -14760,7 +16044,7 @@ public class HackerWallpaperForm : Form {
 
         CheckBox chkRad = new CheckBox {
             Text = "Mostrar Radar Sonar 360° de Conexiones de Red",
-            Location = new Point(24, 508),
+            Location = new Point(24, 492),
             AutoSize = true,
             Checked = Config.ShowRadar
         };
@@ -14768,11 +16052,59 @@ public class HackerWallpaperForm : Form {
 
         CheckBox chkPory = new CheckBox {
             Text = "Activar Enjambre 3D (Porygon + Porygon2 + Porygon-Z)",
-            Location = new Point(24, 536),
+            Location = new Point(24, 517),
             AutoSize = true,
             Checked = Config.ShowPorygon
         };
         chkPory.CheckedChanged += (s, ev) => { Config.ShowPorygon = chkPory.Checked; Config.Save(); };
+
+        // Quick Terminal Opacity Control Row (Y = 544)
+        Label lblTermOp = new Label {
+            Text = string.Format("Opacidad Terminal ({0}%):", terminalOpacityPct),
+            Location = new Point(24, 550),
+            AutoSize = true,
+            ForeColor = Color.FromArgb(148, 226, 213),
+            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold)
+        };
+        Button btnOpMinus = new Button {
+            Text = "➖ -15%",
+            Location = new Point(190, 544),
+            Size = new Size(74, 28),
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(20, 34, 42),
+            ForeColor = Color.FromArgb(186, 230, 253),
+            Font = new Font("Segoe UI", 8.2f, FontStyle.Bold)
+        };
+        Button btnOpPlus = new Button {
+            Text = "➕ +15% Opacidad",
+            Location = new Point(268, 544),
+            Size = new Size(122, 28),
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(22, 48, 40),
+            ForeColor = Color.FromArgb(110, 242, 188),
+            Font = new Font("Segoe UI", 8.2f, FontStyle.Bold)
+        };
+        Button btnOpMax = new Button {
+            Text = "100%↔50% (Ctrl+Alt+O)",
+            Location = new Point(394, 544),
+            Size = new Size(96, 28),
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(44, 34, 18),
+            ForeColor = Color.FromArgb(250, 204, 21),
+            Font = new Font("Segoe UI", 7.5f, FontStyle.Bold)
+        };
+        btnOpMinus.Click += (s, ev) => {
+            AdjustTerminalOpacity(-15);
+            lblTermOp.Text = string.Format("Opacidad Terminal ({0}%):", terminalOpacityPct);
+        };
+        btnOpPlus.Click += (s, ev) => {
+            AdjustTerminalOpacity(15);
+            lblTermOp.Text = string.Format("Opacidad Terminal ({0}%):", terminalOpacityPct);
+        };
+        btnOpMax.Click += (s, ev) => {
+            ToggleTerminalOpacityQuick();
+            lblTermOp.Text = string.Format("Opacidad Terminal ({0}%):", terminalOpacityPct);
+        };
 
         Button btnOpenSiem = new Button {
             Text = "🛡️ Centro SIEM / IPS / AV (Ctrl+Alt+S)",
@@ -14803,6 +16135,10 @@ public class HackerWallpaperForm : Form {
         configForm.Controls.Add(chkTel);
         configForm.Controls.Add(chkRad);
         configForm.Controls.Add(chkPory);
+        configForm.Controls.Add(lblTermOp);
+        configForm.Controls.Add(btnOpMinus);
+        configForm.Controls.Add(btnOpPlus);
+        configForm.Controls.Add(btnOpMax);
         configForm.Controls.Add(btnOpenSiem);
         configForm.Controls.Add(btnClose);
 
@@ -15603,19 +16939,37 @@ public class HackerWallpaperForm : Form {
             Environment.Exit(0);
             return;
         }
-        bool wantWeb    = (args != null && args.Length > 0 && (args[0].ToLowerInvariant().Contains("web") || args[0].ToLowerInvariant().Contains("soc")));
-        bool wantConfig = (args != null && args.Length > 0 && args[0].ToLowerInvariant().Contains("config"));
-        bool wantGamer  = (args != null && args.Length > 0 && args[0].ToLowerInvariant().Contains("gamer"));
+        string arg0 = (args != null && args.Length > 0) ? args[0].ToLowerInvariant() : "";
+        bool wantWeb     = arg0.Contains("web") || arg0.Contains("soc");
+        bool wantConfig  = arg0.Contains("config");
+        bool wantGamer   = arg0.Contains("gamer");
+        bool wantOpacity = arg0.Contains("opacity");
+
+        if (wantOpacity) {
+            try {
+                string opCmd = "toggle";
+                if (arg0.Contains("up") || arg0.Contains("plus") || arg0.Contains("inc")) opCmd = "up";
+                else if (arg0.Contains("down") || arg0.Contains("minus") || arg0.Contains("dec")) opCmd = "down";
+                else if (arg0.Contains("max") || arg0.Contains("100")) opCmd = "max";
+                else if (arg0.Contains("50") || arg0.Contains("half")) opCmd = "50";
+                File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "opacity_cmd.flag"), opCmd);
+            } catch { }
+        }
+
         bool createdNew;
         EventWaitHandle evt = new EventWaitHandle(false, EventResetMode.AutoReset, "Global\\AntigravityHackerWallpaperConfigEvent", out createdNew);
         bool createdGamerNew;
         EventWaitHandle gamerEvt = new EventWaitHandle(false, EventResetMode.AutoReset, "Global\\AntigravityHackerWallpaperGamerEvent", out createdGamerNew);
+        bool createdOpacityNew;
+        EventWaitHandle opacityEvt = new EventWaitHandle(false, EventResetMode.AutoReset, "Global\\AntigravityHackerWallpaperOpacityEvent", out createdOpacityNew);
 
         bool mutexNew;
         using (Mutex mutex = new Mutex(true, "Global\\AntigravityHackerWallpaperMutex", out mutexNew)) {
             if (!mutexNew) {
                 if (wantWeb) {
                     PorygonCyberDefenseEngine.OpenWebSocInBrowser();
+                } else if (wantOpacity) {
+                    opacityEvt.Set();
                 } else if (wantGamer) {
                     gamerEvt.Set();
                 } else if (wantConfig) {
@@ -15628,8 +16982,871 @@ public class HackerWallpaperForm : Form {
             }
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new HackerWallpaperForm(evt, wantConfig, gamerEvt, wantGamer));
+            HackerWallpaperForm mainForm = new HackerWallpaperForm(evt, wantConfig, gamerEvt, wantGamer, opacityEvt);
+            if (wantOpacity) mainForm.ProcessOpacityFlagOrDefault();
+            Application.Run(mainForm);
         }
     }
 }
 
+// =====================================================================================================
+// FLYWIRE / VIRTUAL FLY BRAIN NATIVE OPENGL CONNECTOME VISUALIZER
+//  - Real JRC2018Unisex template (VFB_00101567) + 46 VFB neuropil meshes
+//  - ~270 real FlyWire (FAFB v783) neurons registered to JRC2018U, selected along real synaptic pathways
+//  - IDS alerts are routed through REAL anatomical pathways:
+//      traffic -> optic ingress (L1 > Mi1/Tm3 > T4/T5)          | anomaly -> looming (LPLC2/LC4) > Giant Fiber
+//      recon/signature -> olfactory (ORN > PN) > Mushroom Body  | reputation (VirusTotal) -> PAM/PPL1 dopamine > KC
+//      SOAR/IPS decision -> central complex (ER > EPG > PFN)    | block/quarantine -> descending neurons (MDN / DN / GF)
+//  Data: FlyWire Consortium (CC BY-NC 4.0) / Virtual Fly Brain. Assets built by tools/build_flywire_brain.py
+// =====================================================================================================
+public static class GlBrain {
+    public const uint GL_COMPILE = 0x1300;
+    public const uint GL_LIGHTING = 0x0B50;
+    public const uint GL_LIGHT0 = 0x4000;
+    public const uint GL_POSITION = 0x1203;
+    public const uint GL_DIFFUSE = 0x1201;
+    public const uint GL_AMBIENT = 0x1200;
+    public const uint GL_SPECULAR = 0x1202;
+    public const uint GL_LIGHT_MODEL_TWO_SIDE = 0x0B52;
+    public const uint GL_LIGHT_MODEL_AMBIENT = 0x0B53;
+    public const uint GL_COLOR_MATERIAL = 0x0B57;
+    public const uint GL_FRONT_AND_BACK = 0x0408;
+    public const uint GL_AMBIENT_AND_DIFFUSE = 0x1602;
+    public const uint GL_NORMALIZE = 0x0BA1;
+    public const uint GL_SCISSOR_TEST = 0x0C11;
+    public const uint GL_POINT_SMOOTH = 0x0B10;
+    public const uint GL_VERTEX_ARRAY = 0x8074;
+    public const uint GL_NORMAL_ARRAY = 0x8075;
+    public const uint GL_FLOAT = 0x1406;
+    public const uint GL_UNSIGNED_INT = 0x1405;
+    public const uint GL_ONE = 1;
+    public const uint GL_S = 0x2000;
+    public const uint GL_T = 0x2001;
+    public const uint GL_TEXTURE_GEN_MODE = 0x2500;
+    public const uint GL_SPHERE_MAP = 0x2402;
+    public const uint GL_TEXTURE_GEN_S = 0x0C60;
+    public const uint GL_TEXTURE_GEN_T = 0x0C61;
+    public const uint GL_TEXTURE_ENV = 0x2300;
+    public const uint GL_TEXTURE_ENV_MODE = 0x2200;
+    public const int GL_MODULATE = 0x2100;
+    public const uint GL_CULL_FACE = 0x0B44;
+
+    [DllImport("opengl32.dll")] public static extern uint glGenLists(int range);
+    [DllImport("opengl32.dll")] public static extern void glNewList(uint list, uint mode);
+    [DllImport("opengl32.dll")] public static extern void glEndList();
+    [DllImport("opengl32.dll")] public static extern void glCallList(uint list);
+    [DllImport("opengl32.dll")] public static extern void glDeleteLists(uint list, int range);
+    [DllImport("opengl32.dll")] public static extern void glLoadMatrixf(float[] m);
+    [DllImport("opengl32.dll")] public static extern void glPushMatrix();
+    [DllImport("opengl32.dll")] public static extern void glPopMatrix();
+    [DllImport("opengl32.dll")] public static extern void glLightfv(uint light, uint pname, float[] p);
+    [DllImport("opengl32.dll")] public static extern void glLightModelfv(uint pname, float[] p);
+    [DllImport("opengl32.dll")] public static extern void glLightModeli(uint pname, int p);
+    [DllImport("opengl32.dll")] public static extern void glColorMaterial(uint face, uint mode);
+    [DllImport("opengl32.dll")] public static extern void glPointSize(float size);
+    [DllImport("opengl32.dll")] public static extern void glScissor(int x, int y, int w, int h);
+    [DllImport("opengl32.dll")] public static extern void glEnableClientState(uint arr);
+    [DllImport("opengl32.dll")] public static extern void glDisableClientState(uint arr);
+    [DllImport("opengl32.dll")] public static extern void glVertexPointer(int size, uint type, int stride, IntPtr ptr);
+    [DllImport("opengl32.dll")] public static extern void glNormalPointer(uint type, int stride, IntPtr ptr);
+    [DllImport("opengl32.dll")] public static extern void glDrawElements(uint mode, int count, uint type, IntPtr indices);
+    [DllImport("opengl32.dll")] public static extern void glDrawArrays(uint mode, int first, int count);
+    [DllImport("opengl32.dll")] public static extern void glTexGeni(uint coord, uint pname, int param);
+    [DllImport("opengl32.dll")] public static extern void glTexEnvi(uint target, uint pname, int param);
+    [DllImport("opengl32.dll")] public static extern void glReadPixels(int x, int y, int w, int h, uint format, uint type, IntPtr data);
+}
+
+public class FlyWireBrain {
+    public const int NStages = 7;
+    public static readonly string[] StageNames = new string[] { "INGRESS/OPTIC", "SIGNATURE/OLFACT", "THREAT/LOOMING", "MEMORY/MUSHROOM", "DECISION/CX", "ACTION/DESCEND", "AUDITORY/EXFIL" };
+    public static readonly string[] StageDesc = new string[] {
+        "trafico de red -> lamina/medula (L1 > Mi1/Tm3 > T4/T5)",
+        "firma/puerto -> antena (ORN Or67d > PN DA1)",
+        "anomalia -> lobula (LPLC2/LC4 detectores de amenaza)",
+        "reputacion/memoria -> cuerpo fungiforme (KC > MBON, DAN)",
+        "decision SOAR -> complejo central (ER > EPG > PFN)",
+        "accion IPS -> neuronas descendentes (MDN / DN / Giant Fiber)",
+        "exfiltracion -> organo de Johnston > AMMC > WED / Giant Fiber"
+    };
+    public static readonly Color[] StageColors = new Color[] {
+        Color.FromArgb(255, 70, 160, 255), Color.FromArgb(255, 60, 235, 215), Color.FromArgb(255, 255, 84, 96),
+        Color.FromArgb(255, 255, 100, 210), Color.FromArgb(255, 255, 200, 60), Color.FromArgb(255, 140, 255, 90),
+        Color.FromArgb(255, 255, 150, 40)
+    };
+
+    public class Neuropil {
+        public string Name, VfbId; public int Group; public byte R, G, B;
+        public float[] V, N; public int[] F;
+        public float CX, CY, CZ;          // whole centroid
+        public float LX, LY, LZ, RX, RY, RZ; public bool HasL, HasR; // per-hemisphere centroids
+        public float Radius;
+        public uint List; public float Act;
+    }
+    public class Neuron {
+        public string VfbId, FlyWireId, CellType, Short, Nt; public int Stage, Side;
+        public float RootX, RootY, RootZ, CX, CY, CZ;
+        public float[] Segs, Main;
+        public uint List; public float Act; public float Refract; public float FireT = -1f;
+        public byte R, G, B; public List<int> Out = new List<int>(); public List<int> In = new List<int>();
+        public int NeuropilIdx = -1; public int SynOut, SynIn; public float DensityK = 1f;
+        public int RealSynOut, RealSynIn; public float[] SynOutPts, SynInPts; public uint SynOutList, SynInList;
+    }
+    public class Edge { public int Pre, Post, W; public float[] Path; }
+    public class Pulse { public int Edge; public float T; public float Speed; public float Strength; public int Depth; public int TraceId; }
+    public class PathTrace { public int Id; public string Label; public float Severity; public DateTime At; public List<string> Hops = new List<string>(); public int MaxStageReached = -1; public bool[] StageSeen = new bool[FlyWireBrain.NStages]; }
+    private class Scheduled { public float At; public int Stage; public string Sub; public float Strength; public int TraceId; public int Count; }
+    public class IdsEvent { public string Kind; public string Label; public float Severity; }
+
+    public bool Loaded, Failed, ListsBuilt; public string Status = "LOADING"; public string Attribution = "";
+    public float Extent = 580f;
+    public float NeuronAlphaScale = 1f;
+    public bool HasRealSynapses = false; public int RealSynDots = 0; public long RealSynTotal = 0;
+    public float[] TplV, TplN; public int[] TplF;
+    public List<Neuropil> Neuropils = new List<Neuropil>();
+    public List<Neuron> Neurons = new List<Neuron>();
+    public List<Edge> Edges = new List<Edge>();
+    public List<Pulse> Pulses = new List<Pulse>();
+    public float[] StageAct = new float[NStages];
+    public int[] StageCount = new int[NStages];
+    public List<PathTrace> Traces = new List<PathTrace>();
+    public System.Collections.Concurrent.ConcurrentQueue<IdsEvent> EventQueue = new System.Collections.Concurrent.ConcurrentQueue<IdsEvent>();
+    public int TotalEvents, TotalPulsesFired, TotalCascadeHops;
+    private List<Scheduled> schedule = new List<Scheduled>();
+    private List<int>[] stageNeurons = new List<int>[NStages];
+    private uint tplList, rimTex; private float simTime; private Random rng = new Random(783);
+    private int nextTraceId = 1;
+
+    // Camera / projection state (shared by GL renderer and CPU overlay projection)
+    public float CamCX, CamCY, CamF, CamS, CosY, SinY, CosP, SinP;
+    public float[] ProjM = new float[16], ModelM = new float[16];
+    public int HoverNeuron = -1, HoverNeuropil = -1;
+
+    public void LoadAsync(string path) {
+        System.Threading.ThreadPool.QueueUserWorkItem(delegate {
+            try { Load(path); } catch (Exception ex) { Failed = true; Status = "LOAD_ERR: " + ex.Message; }
+        });
+    }
+
+    private static float[] RF(BinaryReader r) { int n = r.ReadInt32(); float[] a = new float[n]; byte[] b = r.ReadBytes(n * 4); Buffer.BlockCopy(b, 0, a, 0, n * 4); return a; }
+    private static int[] RI(BinaryReader r) { int n = r.ReadInt32(); int[] a = new int[n]; byte[] b = r.ReadBytes(n * 4); Buffer.BlockCopy(b, 0, a, 0, n * 4); return a; }
+    private static string RS(BinaryReader r) { int n = r.ReadInt32(); return Encoding.UTF8.GetString(r.ReadBytes(n)); }
+
+    private void Load(string path) {
+        if (!File.Exists(path)) { Failed = true; Status = "MISSING " + Path.GetFileName(path); return; }
+        using (BinaryReader r = new BinaryReader(new MemoryStream(File.ReadAllBytes(path)))) {
+            string magic = Encoding.ASCII.GetString(r.ReadBytes(4));
+            if (magic != "FWB1") { Failed = true; Status = "BAD_MAGIC"; return; }
+            r.ReadInt32();
+            Attribution = RS(r);
+            Extent = r.ReadSingle();
+            TplV = RF(r); TplN = RF(r); TplF = RI(r);
+            int np = r.ReadInt32();
+            for (int i = 0; i < np; i++) {
+                Neuropil p = new Neuropil();
+                p.Name = RS(r); p.VfbId = RS(r); p.Group = r.ReadByte(); p.R = r.ReadByte(); p.G = r.ReadByte(); p.B = r.ReadByte();
+                float[] c = RF(r); p.CX = c[0]; p.CY = c[1]; p.CZ = c[2];
+                p.V = RF(r); p.N = RF(r); p.F = RI(r);
+                double lx = 0, ly = 0, lz = 0, rx = 0, ry = 0, rz = 0; int ln = 0, rn = 0; float maxR = 0f;
+                for (int v = 0; v + 2 < p.V.Length; v += 3) {
+                    float x = p.V[v], y = p.V[v + 1], z = p.V[v + 2];
+                    if (x < 0f) { lx += x; ly += y; lz += z; ln++; } else { rx += x; ry += y; rz += z; rn++; }
+                }
+                int tot = ln + rn;
+                p.HasL = ln > tot * 0.2; p.HasR = rn > tot * 0.2;
+                if (ln > 0) { p.LX = (float)(lx / ln); p.LY = (float)(ly / ln); p.LZ = (float)(lz / ln); }
+                if (rn > 0) { p.RX = (float)(rx / rn); p.RY = (float)(ry / rn); p.RZ = (float)(rz / rn); }
+                for (int v = 0; v + 2 < p.V.Length; v += 3) {
+                    float ccx = (p.V[v] < 0f && p.HasL) ? p.LX : ((p.HasR) ? p.RX : p.CX);
+                    float ccy = (p.V[v] < 0f && p.HasL) ? p.LY : ((p.HasR) ? p.RY : p.CY);
+                    float ccz = (p.V[v] < 0f && p.HasL) ? p.LZ : ((p.HasR) ? p.RZ : p.CZ);
+                    float dx = p.V[v] - ccx, dy = p.V[v + 1] - ccy, dz = p.V[v + 2] - ccz;
+                    float d = (float)Math.Sqrt(dx * dx + dy * dy + dz * dz);
+                    if (d > maxR) maxR = d;
+                }
+                p.Radius = maxR;
+                Neuropils.Add(p);
+            }
+            int nn = r.ReadInt32();
+            for (int i = 0; i < NStages; i++) stageNeurons[i] = new List<int>();
+            Dictionary<string, int> typeIdx = new Dictionary<string, int>();
+            for (int i = 0; i < nn; i++) {
+                Neuron n = new Neuron();
+                n.VfbId = RS(r); n.FlyWireId = RS(r); n.CellType = RS(r); n.Short = RS(r); n.Nt = RS(r);
+                n.Stage = Math.Min(NStages - 1, (int)r.ReadByte()); n.Side = r.ReadByte();
+                float[] root = RF(r); n.RootX = root[0]; n.RootY = root[1]; n.RootZ = root[2];
+                float[] cen = RF(r); n.CX = cen[0]; n.CY = cen[1]; n.CZ = cen[2];
+                n.Segs = RF(r); n.Main = RF(r);
+                // Dense arbors (e.g. Kenyon cell calyx claws) saturate under additive blending -> attenuate by arbor size
+                n.DensityK = (float)Math.Max(0.32, Math.Min(1.0, Math.Sqrt(1800.0 / Math.Max(1, n.Segs.Length / 6))));
+                int ti;
+                if (!typeIdx.TryGetValue(n.Short, out ti)) { ti = typeIdx.Count; typeIdx[n.Short] = ti; }
+                Color sc = StageColors[n.Stage];
+                float jit = ((ti * 37) % 9 - 4) * 0.055f;
+                n.R = (byte)Math.Max(30, Math.Min(255, sc.R + (int)(jit * 255 * ((ti % 2 == 0) ? 1 : -0.6f))));
+                n.G = (byte)Math.Max(30, Math.Min(255, sc.G - (int)(jit * 160)));
+                n.B = (byte)Math.Max(30, Math.Min(255, sc.B + (int)(jit * 200 * ((ti % 3 == 0) ? -1 : 1))));
+                stageNeurons[n.Stage].Add(i);
+                // nearest neuropil (by hemisphere centroid) to the neuron centroid
+                float best = float.MaxValue;
+                for (int k = 0; k < Neuropils.Count; k++) {
+                    Neuropil p = Neuropils[k];
+                    float px = (n.CX < 0f && p.HasL) ? p.LX : (p.HasR ? p.RX : p.CX);
+                    float py = (n.CX < 0f && p.HasL) ? p.LY : (p.HasR ? p.RY : p.CY);
+                    float pz = (n.CX < 0f && p.HasL) ? p.LZ : (p.HasR ? p.RZ : p.CZ);
+                    float d = (px - n.CX) * (px - n.CX) + (py - n.CY) * (py - n.CY) + (pz - n.CZ) * (pz - n.CZ);
+                    if (d < best) { best = d; n.NeuropilIdx = k; }
+                }
+                Neurons.Add(n);
+                StageCount[n.Stage]++;
+            }
+            int ne = r.ReadInt32();
+            for (int i = 0; i < ne; i++) {
+                Edge e = new Edge(); e.Pre = r.ReadInt32(); e.Post = r.ReadInt32(); e.W = r.ReadInt32(); e.Path = RF(r);
+                if (e.Pre < 0 || e.Pre >= Neurons.Count || e.Post < 0 || e.Post >= Neurons.Count) continue;
+                Edges.Add(e);
+                Neurons[e.Pre].Out.Add(Edges.Count - 1); Neurons[e.Post].In.Add(Edges.Count - 1);
+                Neurons[e.Pre].SynOut += e.W; Neurons[e.Post].SynIn += e.W;
+            }
+            // Optional SYN1: real FlyWire v783 synapse locations (registered to JRC2018U, snapped onto each arbor)
+            if (r.BaseStream.Length - r.BaseStream.Position >= 4) {
+                string tag = Encoding.ASCII.GetString(r.ReadBytes(4));
+                if (tag == "SYN1") {
+                    for (int i = 0; i < Neurons.Count; i++) {
+                        Neuron sn = Neurons[i];
+                        sn.RealSynOut = r.ReadInt32(); sn.RealSynIn = r.ReadInt32();
+                        sn.SynOutPts = RF(r); sn.SynInPts = RF(r);
+                        RealSynDots += (sn.SynOutPts.Length + sn.SynInPts.Length) / 3;
+                        RealSynTotal += sn.RealSynOut + sn.RealSynIn;
+                    }
+                    HasRealSynapses = RealSynDots > 0;
+                }
+            }
+        }
+        NeuronAlphaScale = (float)Math.Max(0.68, Math.Min(1.0, Math.Sqrt(500.0 / Math.Max(1, Neurons.Count))));
+        Loaded = true;
+        Status = HasRealSynapses
+            ? string.Format("FLYWIRE v783 // {0} NEURONAS // {1} ARISTAS // {2:N0} SINAPSIS REALES ({3:N0} PUNTOS) // {4} NEUROPILOS", Neurons.Count, Edges.Count, RealSynTotal, RealSynDots, Neuropils.Count)
+            : string.Format("FLYWIRE v783 // {0} NEURONAS REALES // {1} SINAPSIS-ARISTAS // {2} NEUROPILOS", Neurons.Count, Edges.Count, Neuropils.Count);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // GL resources
+    // ---------------------------------------------------------------------------------------------
+    private static uint CompileMesh(float[] v, float[] n, int[] f) {
+        uint list = GlBrain.glGenLists(1);
+        GCHandle hv = GCHandle.Alloc(v, GCHandleType.Pinned);
+        GCHandle hn = GCHandle.Alloc(n, GCHandleType.Pinned);
+        GCHandle hf = GCHandle.Alloc(f, GCHandleType.Pinned);
+        try {
+            GlBrain.glEnableClientState(GlBrain.GL_VERTEX_ARRAY);
+            GlBrain.glEnableClientState(GlBrain.GL_NORMAL_ARRAY);
+            GlBrain.glVertexPointer(3, GlBrain.GL_FLOAT, 0, hv.AddrOfPinnedObject());
+            GlBrain.glNormalPointer(GlBrain.GL_FLOAT, 0, hn.AddrOfPinnedObject());
+            GlBrain.glNewList(list, GlBrain.GL_COMPILE);
+            GlBrain.glDrawElements(GpuGl.GL_TRIANGLES, f.Length, GlBrain.GL_UNSIGNED_INT, hf.AddrOfPinnedObject());
+            GlBrain.glEndList();
+            GlBrain.glDisableClientState(GlBrain.GL_NORMAL_ARRAY);
+            GlBrain.glDisableClientState(GlBrain.GL_VERTEX_ARRAY);
+        } finally { hv.Free(); hn.Free(); hf.Free(); }
+        return list;
+    }
+
+    private static uint CompileLines(float[] segs) {
+        uint list = GlBrain.glGenLists(1);
+        GCHandle hv = GCHandle.Alloc(segs, GCHandleType.Pinned);
+        try {
+            GlBrain.glEnableClientState(GlBrain.GL_VERTEX_ARRAY);
+            GlBrain.glVertexPointer(3, GlBrain.GL_FLOAT, 0, hv.AddrOfPinnedObject());
+            GlBrain.glNewList(list, GlBrain.GL_COMPILE);
+            GlBrain.glDrawArrays(GpuGl.GL_LINES, 0, segs.Length / 3);
+            GlBrain.glEndList();
+            GlBrain.glDisableClientState(GlBrain.GL_VERTEX_ARRAY);
+        } finally { hv.Free(); }
+        return list;
+    }
+
+    private static uint CompilePoints(float[] pts) {
+        if (pts == null || pts.Length < 3) return 0;
+        uint list = GlBrain.glGenLists(1);
+        GCHandle hv = GCHandle.Alloc(pts, GCHandleType.Pinned);
+        try {
+            GlBrain.glEnableClientState(GlBrain.GL_VERTEX_ARRAY);
+            GlBrain.glVertexPointer(3, GlBrain.GL_FLOAT, 0, hv.AddrOfPinnedObject());
+            GlBrain.glNewList(list, GlBrain.GL_COMPILE);
+            GlBrain.glDrawArrays(GpuGl.GL_POINTS, 0, pts.Length / 3);
+            GlBrain.glEndList();
+            GlBrain.glDisableClientState(GlBrain.GL_VERTEX_ARRAY);
+        } finally { hv.Free(); }
+        return list;
+    }
+
+    private void BuildLists() {
+        tplList = CompileMesh(TplV, TplN, TplF);
+        for (int i = 0; i < Neuropils.Count; i++) Neuropils[i].List = CompileMesh(Neuropils[i].V, Neuropils[i].N, Neuropils[i].F);
+        for (int i = 0; i < Neurons.Count; i++) {
+            Neurons[i].List = CompileLines(Neurons[i].Segs);
+            Neurons[i].SynOutList = CompilePoints(Neurons[i].SynOutPts);
+            Neurons[i].SynInList = CompilePoints(Neurons[i].SynInPts);
+            Neurons[i].SynOutPts = null; Neurons[i].SynInPts = null;
+        }
+        // Rim (fresnel) sphere-map texture: transparent center -> bright rim
+        using (Bitmap bmp = new Bitmap(128, 128, System.Drawing.Imaging.PixelFormat.Format32bppArgb)) {
+            for (int y = 0; y < 128; y++) {
+                for (int x = 0; x < 128; x++) {
+                    float dx = (x + 0.5f) / 64f - 1f, dy = (y + 0.5f) / 64f - 1f;
+                    float d = (float)Math.Sqrt(dx * dx + dy * dy);
+                    float t = Math.Max(0f, Math.Min(1f, (d - 0.55f) / 0.40f));
+                    t = t * t * (3f - 2f * t);
+                    if (d > 1f) t = 1f;
+                    bmp.SetPixel(x, y, Color.FromArgb((int)(t * 255f), 255, 255, 255));
+                }
+            }
+            int tw = 0, th = 0;
+            GpuGl.UploadBitmapToTexture(bmp, ref rimTex, ref tw, ref th);
+        }
+        // Free CPU-side mesh arrays that are only needed for list compilation (keeps ~10 MB less in RAM)
+        TplV = null; TplN = null; TplF = null;
+        for (int i = 0; i < Neuropils.Count; i++) { Neuropils[i].N = null; Neuropils[i].F = null; }
+        ListsBuilt = true;
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Camera
+    // ---------------------------------------------------------------------------------------------
+    public float DefCX, DefCY;
+    public void SetupCamera(Rectangle area, int canvasW, int canvasH, float yaw, float pitch, float zoom) {
+        SetupCamera(area, canvasW, canvasH, yaw, pitch, zoom, 0f, 0f);
+    }
+    public void SetupCamera(Rectangle area, int canvasW, int canvasH, float yaw, float pitch, float zoom, float panX, float panY) {
+        CosY = (float)Math.Cos(yaw); SinY = (float)Math.Sin(yaw);
+        CosP = (float)Math.Cos(pitch); SinP = (float)Math.Sin(pitch);
+        DefCX = area.X + area.Width * 0.5f;
+        DefCY = area.Y + area.Height * 0.53f;
+        CamCX = DefCX + panX;
+        CamCY = DefCY + panY;
+        CamS = Math.Min(area.Width * 0.92f / 590f, area.Height * 0.94f / 270f) * zoom;
+        CamF = 2.6f * 600f * CamS;
+        float f = CamF;
+        // Perspective P (eye at origin, brain translated to z=-f), rows applied to (ex,ey,ez',1)
+        float[] P = new float[] {
+            1f, 0f, -CamCX / f, 0f,
+            0f, -1f, -CamCY / f, 0f,
+            0f, 0f, 0.25f, 0.25f * f,
+            0f, 0f, -1f / f, 0f
+        };
+        float[] O = new float[] {
+            2f / canvasW, 0f, 0f, -1f,
+            0f, -2f / canvasH, 0f, 1f,
+            0f, 0f, -1f / 2000f, 0f,
+            0f, 0f, 0f, 1f
+        };
+        float[] OP = Mul(O, P);
+        ToColMajor(OP, ProjM);
+        // Model: eye = T(0,0,-f) * Rx(p) * Ry(y) * S(s)
+        float s = CamS;
+        float[] M = new float[16];
+        // Rx*Ry*S then translate z by -f
+        // Ry: x' = x cos - z sin ; z' = x sin + z cos
+        // Rx: y'' = y cos - z' sin ; z'' = y sin + z' cos
+        M[0] = CosY * s;          M[1] = 0f;         M[2] = -SinY * s;          M[3] = 0f;
+        M[4] = -SinP * SinY * s;  M[5] = CosP * s;   M[6] = -SinP * CosY * s;   M[7] = 0f;
+        M[8] = CosP * SinY * s;   M[9] = SinP * s;   M[10] = CosP * CosY * s;   M[11] = -f;
+        M[12] = 0f;               M[13] = 0f;        M[14] = 0f;                M[15] = 1f;
+        ToColMajor(M, ModelM);
+    }
+
+    private static float[] Mul(float[] a, float[] b) {
+        float[] c = new float[16];
+        for (int i = 0; i < 4; i++) for (int j = 0; j < 4; j++) {
+            float s = 0f; for (int k = 0; k < 4; k++) s += a[i * 4 + k] * b[k * 4 + j]; c[i * 4 + j] = s;
+        }
+        return c;
+    }
+    private static void ToColMajor(float[] rm, float[] cm) { for (int i = 0; i < 4; i++) for (int j = 0; j < 4; j++) cm[j * 4 + i] = rm[i * 4 + j]; }
+
+    // CPU projection identical to the GL pipeline; returns false if behind camera
+    public bool Project(float x, float y, float z, out float sx, out float sy, out float depth) {
+        float ex = (CosY * x - SinY * z) * CamS;
+        float z1 = (SinY * x + CosY * z);
+        float ey = (CosP * y - SinP * z1) * CamS;
+        float ez = (SinP * y + CosP * z1) * CamS;
+        float w = 1f - ez / CamF;
+        depth = ez;
+        if (w < 0.05f) { sx = sy = 0f; return false; }
+        sx = CamCX + ex / w; sy = CamCY - ey / w;
+        return true;
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Simulation: real-synapse cascades + scheduled polysynaptic relays along the IDS pathway
+    // ---------------------------------------------------------------------------------------------
+    public void Enqueue(string kind, string label, float severity) {
+        if (EventQueue.Count > 48) return;
+        IdsEvent e = new IdsEvent(); e.Kind = kind; e.Label = label; e.Severity = severity;
+        EventQueue.Enqueue(e);
+    }
+
+    private int[] StorySequence(string kind, out string actionSub) {
+        actionSub = "MDN";
+        switch (kind) {
+            case "traffic": return new int[] { 0 };
+            case "signature": return new int[] { 1, 3 };
+            case "anomaly": actionSub = "GF"; return new int[] { 0, 2, 5 };
+            case "malware": actionSub = "MDN"; return new int[] { 1, 3, 4, 5 };
+            case "reputation": return new int[] { 3 };
+            case "decision": actionSub = "DN"; return new int[] { 4, 5 };
+            case "block": actionSub = "MDN"; return new int[] { 4, 5 };
+            case "critical": actionSub = "GF"; return new int[] { 0, 2, 5 };
+            case "exfil": actionSub = "GF"; return new int[] { 6, 5 };
+            default: return new int[] { 1, 3 };
+        }
+    }
+
+    private void StartEvent(IdsEvent ev) {
+        if (!Loaded) return;
+        string sub;
+        int[] seq = StorySequence(ev.Kind, out sub);
+        PathTrace tr = null;
+        if (ev.Kind != "traffic") {
+            tr = new PathTrace(); tr.Id = nextTraceId++; tr.Label = ev.Label; tr.Severity = ev.Severity; tr.At = DateTime.Now;
+            lock (Traces) { Traces.Add(tr); while (Traces.Count > 6) Traces.RemoveAt(0); }
+            TotalEvents++;
+        }
+        float strength = 0.75f + Math.Min(0.6f, ev.Severity * 0.6f);
+        for (int s = 0; s < seq.Length; s++) {
+            Scheduled sc = new Scheduled();
+            sc.At = simTime + s * 0.75f; sc.Stage = seq[s]; sc.Strength = strength;
+            sc.TraceId = tr != null ? tr.Id : 0;
+            sc.Count = (ev.Kind == "traffic") ? 2 : (3 + (int)(ev.Severity * 3f));
+            sc.Sub = (seq[s] == 5) ? sub : null;
+            if (ev.Kind == "reputation") sc.Sub = "DAN";
+            schedule.Add(sc);
+        }
+    }
+
+    private PathTrace FindTrace(int id) {
+        if (id == 0) return null;
+        lock (Traces) { for (int i = Traces.Count - 1; i >= 0; i--) if (Traces[i].Id == id) return Traces[i]; }
+        return null;
+    }
+
+    private void Activate(int ni, float strength, int depth, int traceId) {
+        Neuron n = Neurons[ni];
+        if (n.Refract > 0f) { n.Act = Math.Min(1.6f, n.Act + strength * 0.3f); return; }
+        n.Act = Math.Min(1.6f, n.Act + strength);
+        if (n.Act < 0.55f) return;
+        n.Refract = 1.1f; n.FireT = 0f;
+        PathTrace tr = FindTrace(traceId);
+        if (tr != null && !tr.StageSeen[n.Stage]) {
+            tr.StageSeen[n.Stage] = true;
+            tr.Hops.Add(n.Short);
+            if (n.Stage > tr.MaxStageReached) tr.MaxStageReached = n.Stage;
+        }
+        if (depth >= 5) return;
+        int fired = 0;
+        for (int k = 0; k < n.Out.Count && fired < 3 && Pulses.Count < 130; k++) {
+            Edge e = Edges[n.Out[k]];
+            float pw = Math.Min(1f, e.W / 18f);
+            if (rng.NextDouble() > 0.18 + pw * 0.55) continue;
+            Pulse p = new Pulse(); p.Edge = n.Out[k]; p.T = 0f; p.Speed = 1.25f + (float)rng.NextDouble() * 0.6f;
+            p.Strength = strength * (0.45f + 0.45f * pw); p.Depth = depth + 1; p.TraceId = traceId;
+            Pulses.Add(p); fired++; TotalPulsesFired++;
+        }
+    }
+
+    private int PickInStage(int stage, string sub) {
+        List<int> lst = stageNeurons[stage];
+        if (lst == null || lst.Count == 0) return -1;
+        if (sub != null) {
+            List<int> cand = new List<int>();
+            for (int i = 0; i < lst.Count; i++) {
+                string s = Neurons[lst[i]].Short;
+                if ((sub == "GF" && s.StartsWith("GF")) || (sub == "MDN" && s == "MDN") || (sub == "DN" && s == "DN") ||
+                    (sub == "DAN" && s.Contains("DAN"))) cand.Add(lst[i]);
+            }
+            if (cand.Count > 0) return cand[rng.Next(cand.Count)];
+        }
+        // Prefer upstream-most types (those with few inputs from the same stage) for the seed
+        return lst[rng.Next(lst.Count)];
+    }
+
+    public void Step(float dt, float[] baselineRegionGlow) {
+        if (!Loaded) return;
+        dt = Math.Max(0.005f, Math.Min(0.25f, dt));
+        simTime += dt;
+        IdsEvent ev;
+        int guard = 0;
+        while (guard++ < 12 && EventQueue.TryDequeue(out ev)) StartEvent(ev);
+
+        for (int i = schedule.Count - 1; i >= 0; i--) {
+            Scheduled sc = schedule[i];
+            if (sc.At > simTime) continue;
+            schedule.RemoveAt(i);
+            for (int c = 0; c < sc.Count; c++) {
+                int ni = PickInStage(sc.Stage, (c == 0) ? sc.Sub : (sc.Stage == 5 ? sc.Sub : null));
+                if (ni >= 0) Activate(ni, sc.Strength, 0, sc.TraceId);
+            }
+        }
+
+        // Baseline: the 64-neuron IDS spiking sim drives sparse spontaneous activity in the mapped real stages
+        if (baselineRegionGlow != null && rng.NextDouble() < dt * 2.2) {
+            int region = rng.Next(4);
+            float g = baselineRegionGlow[region];
+            int stage = (region == 0) ? (rng.Next(2) == 0 ? 0 : 1) : (region == 1 ? 3 : (region == 2 ? 4 : 5));
+            if (g > 0.05f) {
+                int ni = PickInStage(stage, null);
+                if (ni >= 0) Activate(ni, 0.35f + g * 0.6f, 4, 0);
+            }
+        }
+
+        for (int i = Pulses.Count - 1; i >= 0; i--) {
+            Pulse p = Pulses[i];
+            p.T += dt * p.Speed;
+            if (p.T >= 1f) {
+                Pulses.RemoveAt(i);
+                TotalCascadeHops++;
+                Activate(Edges[p.Edge].Post, p.Strength, p.Depth, p.TraceId);
+            }
+        }
+
+        float decay = (float)Math.Exp(-dt * 2.4f);
+        for (int s = 0; s < NStages; s++) StageAct[s] *= (float)Math.Exp(-dt * 1.6f);
+        for (int i = 0; i < Neurons.Count; i++) {
+            Neuron n = Neurons[i];
+            n.Act *= decay;
+            if (n.Refract > 0f) n.Refract -= dt;
+            if (n.FireT >= 0f) { n.FireT += dt * 1.4f; if (n.FireT > 1f) n.FireT = -1f; }
+            float share = n.Act / Math.Max(1, StageCount[n.Stage]) * 6f;
+            if (share > StageAct[n.Stage]) StageAct[n.Stage] = Math.Min(1f, StageAct[n.Stage] + share * 0.25f);
+        }
+        float npDecay = (float)Math.Exp(-dt * 1.8f);
+        for (int k = 0; k < Neuropils.Count; k++) Neuropils[k].Act *= npDecay;
+        for (int i = 0; i < Neurons.Count; i++) {
+            Neuron n = Neurons[i];
+            if (n.Act > 0.3f && n.NeuropilIdx >= 0) {
+                Neuropil p = Neuropils[n.NeuropilIdx];
+                p.Act = Math.Min(1f, p.Act + n.Act * 0.08f);
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Hover picking (CPU, same projection as GL)
+    // ---------------------------------------------------------------------------------------------
+    public void Pick(int mx, int my, bool enabled) {
+        HoverNeuron = -1; HoverNeuropil = -1;
+        if (!enabled || !Loaded) return;
+        float best = 11f * 11f;
+        for (int i = 0; i < Neurons.Count; i++) {
+            Neuron n = Neurons[i];
+            float[] m = n.Main;
+            for (int k = 0; k + 2 < m.Length; k += 6) {
+                float sx, sy, d;
+                if (!Project(m[k], m[k + 1], m[k + 2], out sx, out sy, out d)) continue;
+                float dd = (sx - mx) * (sx - mx) + (sy - my) * (sy - my);
+                if (dd < best) { best = dd; HoverNeuron = i; }
+            }
+        }
+        if (HoverNeuron >= 0) return;
+        float bestNp = float.MaxValue;
+        for (int k = 0; k < Neuropils.Count; k++) {
+            Neuropil p = Neuropils[k];
+            for (int side = 0; side < 2; side++) {
+                if (side == 0 && !p.HasL) continue;
+                if (side == 1 && !p.HasR) continue;
+                float x = side == 0 ? p.LX : p.RX, y = side == 0 ? p.LY : p.RY, z = side == 0 ? p.LZ : p.RZ;
+                float sx, sy, d;
+                if (!Project(x, y, z, out sx, out sy, out d)) continue;
+                float rad = Math.Max(10f, p.Radius * CamS * 0.55f);
+                float dd = (float)Math.Sqrt((sx - mx) * (sx - mx) + (sy - my) * (sy - my));
+                if (dd < rad && dd / rad < bestNp) { bestNp = dd / rad; HoverNeuropil = k; }
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Native OpenGL render
+    // ---------------------------------------------------------------------------------------------
+    public void RenderGL(Rectangle area, int canvasW, int canvasH, bool isFull, bool eco, bool showNeuropils) {
+        if (!Loaded) return;
+        if (!ListsBuilt) BuildLists();
+
+        GpuGl.glEnable(GlBrain.GL_SCISSOR_TEST);
+        GlBrain.glScissor(area.X, canvasH - area.Bottom, area.Width, area.Height);
+
+        GpuGl.glMatrixMode(GpuGl.GL_PROJECTION); GlBrain.glPushMatrix(); GlBrain.glLoadMatrixf(ProjM);
+        GpuGl.glMatrixMode(GpuGl.GL_MODELVIEW); GlBrain.glPushMatrix(); GpuGl.glLoadIdentity();
+
+        // Headlight in eye space
+        GlBrain.glLightfv(GlBrain.GL_LIGHT0, GlBrain.GL_POSITION, new float[] { 0.25f, 0.55f, 1.0f, 0f });
+        GlBrain.glLightfv(GlBrain.GL_LIGHT0, GlBrain.GL_DIFFUSE, new float[] { 0.95f, 0.95f, 0.95f, 1f });
+        GlBrain.glLightfv(GlBrain.GL_LIGHT0, GlBrain.GL_AMBIENT, new float[] { 0.10f, 0.10f, 0.10f, 1f });
+        GlBrain.glLightModelfv(GlBrain.GL_LIGHT_MODEL_AMBIENT, new float[] { 0.18f, 0.18f, 0.20f, 1f });
+        GlBrain.glLightModeli(GlBrain.GL_LIGHT_MODEL_TWO_SIDE, 1);
+        GlBrain.glLoadMatrixf(ModelM);
+
+        GpuGl.glEnable(GpuGl.GL_BLEND);
+        GpuGl.glDisable(GpuGl.GL_DEPTH_TEST);
+
+        bool focus = HoverNeuron >= 0;
+        float dimOthers = focus ? 0.35f : 1f;
+
+        // --- 1. Template body (lit, faint) + fresnel rim (sphere-map)
+        GpuGl.glEnable(GlBrain.GL_LIGHTING); GpuGl.glEnable(GlBrain.GL_LIGHT0);
+        GpuGl.glEnable(GlBrain.GL_COLOR_MATERIAL); GlBrain.glColorMaterial(GlBrain.GL_FRONT_AND_BACK, GlBrain.GL_AMBIENT_AND_DIFFUSE);
+        GpuGl.glEnable(GlBrain.GL_NORMALIZE);
+        GpuGl.glBlendFunc(GpuGl.GL_SRC_ALPHA, GpuGl.GL_ONE_MINUS_SRC_ALPHA);
+        GpuGl.glColor4f(0.42f, 0.48f, 0.56f, 0.055f);
+        GlBrain.glCallList(tplList);
+        GpuGl.glDisable(GlBrain.GL_LIGHTING);
+
+        BeginRim();
+        GpuGl.glBlendFunc(GpuGl.GL_SRC_ALPHA, GlBrain.GL_ONE);
+        GpuGl.glColor4f(0.55f, 0.78f, 0.92f, 0.22f * (focus ? 0.6f : 1f));
+        GlBrain.glCallList(tplList);
+        EndRim();
+
+        // --- 2. Neuropils (lit translucent + coloured rim), brighten with routed activity / hover
+        if (showNeuropils) {
+            GpuGl.glEnable(GlBrain.GL_LIGHTING);
+            GpuGl.glBlendFunc(GpuGl.GL_SRC_ALPHA, GlBrain.GL_ONE);
+            for (int k = 0; k < Neuropils.Count; k++) {
+                Neuropil p = Neuropils[k];
+                float a = 0.022f + p.Act * 0.16f + (k == HoverNeuropil ? 0.14f : 0f);
+                GpuGl.glColor4f(p.R / 255f, p.G / 255f, p.B / 255f, a * dimOthers + (focus ? 0.01f : 0f));
+                GlBrain.glCallList(p.List);
+            }
+            GpuGl.glDisable(GlBrain.GL_LIGHTING);
+            if (!eco) {
+                BeginRim();
+                for (int k = 0; k < Neuropils.Count; k++) {
+                    Neuropil p = Neuropils[k];
+                    float a = 0.085f + p.Act * 0.50f + (k == HoverNeuropil ? 0.45f : 0f);
+                    GpuGl.glColor4f(p.R / 255f, p.G / 255f, p.B / 255f, a * dimOthers);
+                    GlBrain.glCallList(p.List);
+                }
+                EndRim();
+            }
+        }
+
+        // --- 3. Real FlyWire neuron skeletons (additive glow; active neurons get a wide halo pass)
+        GpuGl.glEnable(GpuGl.GL_LINE_SMOOTH);
+        GpuGl.glBlendFunc(GpuGl.GL_SRC_ALPHA, GlBrain.GL_ONE);
+        float baseW = isFull ? 1.0f : 0.85f;
+        if (!eco) {
+            for (int i = 0; i < Neurons.Count; i++) {
+                Neuron n = Neurons[i];
+                float act = Math.Min(1f, n.Act);
+                bool hot = (i == HoverNeuron) || act > 0.60f;
+                if (!hot) continue;
+                GpuGl.glLineWidth(isFull ? 4.2f : 3.0f);
+                float a = (i == HoverNeuron) ? 0.24f : 0.07f * act;
+                GpuGl.glColor4f(n.R / 255f, n.G / 255f, n.B / 255f, a);
+                GlBrain.glCallList(n.List);
+            }
+        }
+        for (int i = 0; i < Neurons.Count; i++) {
+            Neuron n = Neurons[i];
+            float act = Math.Min(1f, n.Act);
+            float a = (0.13f + act * 0.42f) * (0.55f + 0.45f * n.DensityK) * (0.45f + 0.55f * NeuronAlphaScale);
+            if (focus) {
+                if (i == HoverNeuron) a = 1f;
+                else if (IsLinked(HoverNeuron, i)) a = Math.Max(a, 0.65f);
+                else a *= 0.22f;
+            }
+            GpuGl.glLineWidth(baseW + act * 0.6f + (i == HoverNeuron ? 0.9f : 0f));
+            float boost = 1f + act * 0.22f;
+            GpuGl.glColor4f(Math.Min(1f, n.R / 255f * boost), Math.Min(1f, n.G / 255f * boost), Math.Min(1f, n.B / 255f * boost), a);
+            GlBrain.glCallList(n.List);
+        }
+
+        // --- 4. Hovered neuron: real synaptic partners (cyan = output, amber = input) drawn along contact paths
+        if (focus) {
+            Neuron h = Neurons[HoverNeuron];
+            GpuGl.glLineWidth(isFull ? 2.0f : 1.4f);
+            for (int k = 0; k < h.Out.Count; k++) DrawPath(Edges[h.Out[k]].Path, 0.55f, 1f, 0.94f, 0.85f, 1f);
+            for (int k = 0; k < h.In.Count; k++) DrawPath(Edges[h.In[k]].Path, 1f, 0.75f, 0.28f, 0.85f, 1f);
+        }
+
+        // --- 4b. REAL FlyWire v783 synapses as points: presynaptic release sites light up on firing neurons
+        GpuGl.glEnable(GlBrain.GL_POINT_SMOOTH);
+        if (HasRealSynapses) {
+            for (int i = 0; i < Neurons.Count; i++) {
+                Neuron n = Neurons[i];
+                bool hov = (i == HoverNeuron);
+                float act = Math.Min(1f, n.Act);
+                if (!hov && act < 0.48f) continue;
+                if (focus && !hov && !IsLinked(HoverNeuron, i)) continue;
+                if (n.SynOutList != 0) {
+                    GlBrain.glPointSize(hov ? (isFull ? 3.2f : 2.3f) : (isFull ? 2.1f : 1.5f));
+                    if (hov) GpuGl.glColor4f(0.45f, 1f, 0.92f, 0.82f);
+                    else {
+                        float pa = (0.10f + 0.24f * (act - 0.45f)) * (0.55f + 0.45f * n.DensityK) * NeuronAlphaScale;
+                        GpuGl.glColor4f(n.R / 255f, n.G / 255f, n.B / 255f, pa);
+                    }
+                    GlBrain.glCallList(n.SynOutList);
+                }
+                if (hov && n.SynInList != 0) {
+                    GlBrain.glPointSize(isFull ? 2.8f : 2.0f);
+                    GpuGl.glColor4f(1f, 0.72f, 0.22f, 0.78f);
+                    GlBrain.glCallList(n.SynInList);
+                }
+            }
+        }
+
+        // --- 5. Action potentials travelling along real pre-synaptic arbors to the synaptic contact
+        for (int i = 0; i < Pulses.Count; i++) {
+            Pulse p = Pulses[i];
+            Edge e = Edges[p.Edge];
+            Neuron pre = Neurons[e.Pre];
+            GpuGl.glLineWidth(isFull ? 2.4f : 1.7f);
+            DrawPathPartial(e.Path, Math.Max(0f, p.T - 0.35f), p.T, pre.R / 255f, pre.G / 255f, pre.B / 255f, 0.95f);
+            float hx, hy, hz;
+            PathPoint(e.Path, p.T, out hx, out hy, out hz);
+            GlBrain.glPointSize(isFull ? 6.5f : 4.5f);
+            GpuGl.glColor4f(1f, 1f, 1f, 0.95f);
+            GpuGl.glBegin(GpuGl.GL_POINTS); GpuGl.glVertex3f(hx, hy, hz); GpuGl.glEnd();
+        }
+        // Somata + firing "spark" along the neuron's main arbor
+        GlBrain.glPointSize(isFull ? 4.0f : 3.0f);
+        GpuGl.glBegin(GpuGl.GL_POINTS);
+        for (int i = 0; i < Neurons.Count; i++) {
+            Neuron n = Neurons[i];
+            float act = Math.Min(1f, n.Act);
+            float a = (0.30f + act * 0.70f) * ((focus && i != HoverNeuron && !IsLinked(HoverNeuron, i)) ? 0.25f : 1f);
+            GpuGl.glColor4f(n.R / 255f, n.G / 255f, n.B / 255f, a);
+            GpuGl.glVertex3f(n.RootX, n.RootY, n.RootZ);
+        }
+        GpuGl.glEnd();
+        GlBrain.glPointSize(isFull ? 7.0f : 5.0f);
+        GpuGl.glBegin(GpuGl.GL_POINTS);
+        for (int i = 0; i < Neurons.Count; i++) {
+            Neuron n = Neurons[i];
+            if (n.FireT < 0f) continue;
+            float x, y, z;
+            PathPoint(n.Main, n.FireT, out x, out y, out z);
+            GpuGl.glColor4f(1f, 1f, 1f, 0.9f * (1f - n.FireT * 0.6f));
+            GpuGl.glVertex3f(x, y, z);
+        }
+        GpuGl.glEnd();
+        GpuGl.glDisable(GlBrain.GL_POINT_SMOOTH);
+
+        GpuGl.glBlendFunc(GpuGl.GL_SRC_ALPHA, GpuGl.GL_ONE_MINUS_SRC_ALPHA);
+        GpuGl.glLineWidth(1f);
+        GpuGl.glDisable(GlBrain.GL_COLOR_MATERIAL);
+        GpuGl.glDisable(GlBrain.GL_NORMALIZE);
+        GpuGl.glDisable(GlBrain.GL_LIGHT0);
+        GpuGl.glMatrixMode(GpuGl.GL_PROJECTION); GlBrain.glPopMatrix();
+        GpuGl.glMatrixMode(GpuGl.GL_MODELVIEW); GlBrain.glPopMatrix();
+        GpuGl.glDisable(GlBrain.GL_SCISSOR_TEST);
+    }
+
+    private bool IsLinked(int a, int b) {
+        if (a < 0) return false;
+        Neuron n = Neurons[a];
+        for (int k = 0; k < n.Out.Count; k++) if (Edges[n.Out[k]].Post == b) return true;
+        for (int k = 0; k < n.In.Count; k++) if (Edges[n.In[k]].Pre == b) return true;
+        return false;
+    }
+
+    private void BeginRim() {
+        GpuGl.glEnable(GpuGl.GL_TEXTURE_2D);
+        GpuGl.glBindTexture(GpuGl.GL_TEXTURE_2D, rimTex);
+        GlBrain.glTexEnvi(GlBrain.GL_TEXTURE_ENV, GlBrain.GL_TEXTURE_ENV_MODE, GlBrain.GL_MODULATE);
+        GlBrain.glTexGeni(GlBrain.GL_S, GlBrain.GL_TEXTURE_GEN_MODE, (int)GlBrain.GL_SPHERE_MAP);
+        GlBrain.glTexGeni(GlBrain.GL_T, GlBrain.GL_TEXTURE_GEN_MODE, (int)GlBrain.GL_SPHERE_MAP);
+        GpuGl.glEnable(GlBrain.GL_TEXTURE_GEN_S); GpuGl.glEnable(GlBrain.GL_TEXTURE_GEN_T);
+        GpuGl.glBlendFunc(GpuGl.GL_SRC_ALPHA, GlBrain.GL_ONE);
+    }
+    private void EndRim() {
+        GpuGl.glDisable(GlBrain.GL_TEXTURE_GEN_S); GpuGl.glDisable(GlBrain.GL_TEXTURE_GEN_T);
+        GpuGl.glDisable(GpuGl.GL_TEXTURE_2D);
+    }
+
+    private static void DrawPath(float[] path, float r, float g, float b, float a, float w) {
+        GpuGl.glColor4f(r, g, b, a);
+        GpuGl.glBegin(GpuGl.GL_LINE_STRIP);
+        for (int k = 0; k + 2 < path.Length; k += 3) GpuGl.glVertex3f(path[k], path[k + 1], path[k + 2]);
+        GpuGl.glEnd();
+    }
+
+    private static void DrawPathPartial(float[] path, float t0, float t1, float r, float g, float b, float a) {
+        int n = path.Length / 3; if (n < 2) return;
+        float f0 = t0 * (n - 1), f1 = t1 * (n - 1);
+        int i0 = (int)Math.Floor(f0), i1 = (int)Math.Ceiling(f1);
+        GpuGl.glBegin(GpuGl.GL_LINE_STRIP);
+        for (int k = i0; k <= i1 && k < n; k++) {
+            float u = (n > 1) ? (float)k / (n - 1) : 0f;
+            float fade = (t1 - t0) > 0.001f ? Math.Max(0f, Math.Min(1f, (u - t0) / (t1 - t0))) : 1f;
+            GpuGl.glColor4f(r, g, b, a * (0.15f + 0.85f * fade));
+            float x, y, z;
+            if (k == i1) PathPoint(path, t1, out x, out y, out z); else { x = path[k * 3]; y = path[k * 3 + 1]; z = path[k * 3 + 2]; }
+            GpuGl.glVertex3f(x, y, z);
+        }
+        GpuGl.glEnd();
+    }
+
+    public static void PathPoint(float[] path, float t, out float x, out float y, out float z) {
+        int n = path.Length / 3;
+        if (n == 0) { x = y = z = 0f; return; }
+        if (n == 1) { x = path[0]; y = path[1]; z = path[2]; return; }
+        float f = Math.Max(0f, Math.Min(1f, t)) * (n - 1);
+        int i = Math.Min(n - 2, (int)f); float u = f - i;
+        x = path[i * 3] + (path[i * 3 + 3] - path[i * 3]) * u;
+        y = path[i * 3 + 1] + (path[i * 3 + 4] - path[i * 3 + 1]) * u;
+        z = path[i * 3 + 2] + (path[i * 3 + 5] - path[i * 3 + 2]) * u;
+    }
+}
+
+// Low-level mouse wheel hook on a DEDICATED background thread (never the UI/render thread -> no cursor stutter).
+// Only accumulates wheel deltas while the render thread has "armed" it (cursor over the brain viewport on the desktop).
+public static class BrainWheelHook {
+    private delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
+    [StructLayout(LayoutKind.Sequential)] private struct HPOINT { public int x, y; }
+    [StructLayout(LayoutKind.Sequential)] private struct MSLLHOOKSTRUCT { public HPOINT pt; public uint mouseData; public uint flags; public uint time; public IntPtr dwExtraInfo; }
+    [StructLayout(LayoutKind.Sequential)] private struct HMSG { public IntPtr hwnd; public uint message; public IntPtr wParam; public IntPtr lParam; public uint time; public HPOINT pt; }
+    [DllImport("user32.dll", SetLastError = true)] private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelMouseProc fn, IntPtr hMod, uint threadId);
+    [DllImport("user32.dll")] private static extern bool UnhookWindowsHookEx(IntPtr h);
+    [DllImport("user32.dll")] private static extern IntPtr CallNextHookEx(IntPtr h, int n, IntPtr w, IntPtr l);
+    [DllImport("user32.dll")] private static extern int GetMessage(out HMSG m, IntPtr hwnd, uint min, uint max);
+    [DllImport("kernel32.dll", CharSet = CharSet.Auto)] private static extern IntPtr GetModuleHandle(string name);
+
+    public static volatile bool Armed = false;
+    public static volatile int ScreenL, ScreenT, ScreenR, ScreenB;
+    private static int pending = 0;
+    private static LowLevelMouseProc procRef;
+    private static IntPtr hook = IntPtr.Zero;
+    private static Thread th;
+
+    public static void Start() {
+        if (th != null) return;
+        th = new Thread(Run);
+        th.IsBackground = true;
+        th.Name = "BrainWheelHook";
+        th.Priority = ThreadPriority.AboveNormal;
+        th.Start();
+    }
+
+    private static void Run() {
+        try {
+            procRef = Proc;
+            hook = SetWindowsHookEx(14, procRef, GetModuleHandle(null), 0);
+            HMSG m;
+            while (GetMessage(out m, IntPtr.Zero, 0, 0) > 0) { }
+        } catch { }
+        finally { if (hook != IntPtr.Zero) UnhookWindowsHookEx(hook); }
+    }
+
+    private static IntPtr Proc(int nCode, IntPtr wParam, IntPtr lParam) {
+        if (nCode >= 0 && Armed && wParam.ToInt64() == 0x020A) {
+            MSLLHOOKSTRUCT s = (MSLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(MSLLHOOKSTRUCT));
+            if (s.pt.x >= ScreenL && s.pt.x < ScreenR && s.pt.y >= ScreenT && s.pt.y < ScreenB) {
+                short delta = (short)((s.mouseData >> 16) & 0xFFFF);
+                Interlocked.Add(ref pending, delta);
+            }
+        }
+        return CallNextHookEx(hook, nCode, wParam, lParam);
+    }
+
+    public static int TakeDelta() { return Interlocked.Exchange(ref pending, 0); }
+}

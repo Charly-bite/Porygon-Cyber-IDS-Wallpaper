@@ -9,3 +9,7 @@ Thumbs.db
 desktop.ini
 .folder-icon.ico
 logs/
+
+tools/cache/
+
+__pycache__/
