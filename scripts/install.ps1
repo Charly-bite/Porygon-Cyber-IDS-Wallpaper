@@ -28,6 +28,9 @@ if (Test-Path "$repoRoot\Models\flywire_brain.bin") {
 }
 if (Test-Path "$repoRoot\web") {
     Copy-Item "$repoRoot\web\*" "$installDir\web\" -Recurse -Force
+    if (Test-Path "$repoRoot\web\soc_dashboard.html") {
+        Copy-Item "$repoRoot\web\soc_dashboard.html" "$installDir\soc_dashboard.html" -Force
+    }
 }
 
 # Register auto-start in HKCU Run, Startup Folder, Start Menu Hotkeys, and Interactive Scheduled Task
@@ -89,7 +92,7 @@ try {
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
 $trigger.Delay = "PT10S"
 $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Limited
-$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)
+$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero)
 
 $actionWp = New-ScheduledTaskAction -Execute "$installDir\HackerWallpaper.exe" -WorkingDirectory $installDir
 Register-ScheduledTask -TaskName "Porygon_Cyber_IDS_Wallpaper" -Action $actionWp -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null

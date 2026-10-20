@@ -1809,6 +1809,7 @@
               <option value="ALL">Todos los Hosts de Origen</option>
             </select>
             <input type="text" class="input" id="alertResSearch" placeholder="Buscar alerta por ID, host (DEVQB, QB_WFS_002), IP, dominio, proceso o cómo la resolvió Porygon..." oninput="renderAlertsResolutionPanel()" style="flex:1; min-width:220px;">
+            <button type="button" class="btn btn-sm" onclick="resetAllAlertFilters()" title="Restablecer filtros de categoría, agente, host, ventana horaria y búsqueda">Limpiar Filtros</button>
           </div>
           <div style="font-size:11px; color:var(--txt-secondary);">
             Tasa de Resolución Porygon: <strong id="lblAlertsResRate" style="color:var(--sig-emerald-txt)">100%</strong>
@@ -3643,6 +3644,36 @@
   let currentAlertResFilter = 'ALL';
   let currentRenderedAlerts = [];
 
+  function extractAlertHourSlot(ts) {
+    const s = String(ts || '').trim();
+    const m = s.match(/(?:^|\s)(\d{1,2}):\d{2}/);
+    if (!m) return -1;
+    const h = parseInt(m[1], 10);
+    return (isNaN(h) || h < 0 || h > 23) ? -1 : h;
+  }
+
+  function resetAllAlertFilters() {
+    currentAlertResFilter = 'ALL';
+    const mapBtn = {
+      ALL: 'fltAlertsAll',
+      RESOLVED_SOAR: 'fltAlertsSoar',
+      RESOLVED_AUTO: 'fltAlertsAuto',
+      RESOLVED_WHITELIST: 'fltAlertsWhite',
+      PENDING_ACTION: 'fltAlertsPend'
+    };
+    Object.keys(mapBtn).forEach(k => {
+      const el = document.getElementById(mapBtn[k]);
+      if (el) el.setAttribute('data-active', String(k === 'ALL'));
+    });
+    const selAgent = document.getElementById('alertAgentFilter');
+    if (selAgent) selAgent.value = 'ALL';
+    const selHost = document.getElementById('alertHostFilter');
+    if (selHost) selHost.value = 'ALL';
+    const inpSearch = document.getElementById('alertResSearch');
+    if (inpSearch) inpSearch.value = '';
+    renderAlertsResolutionPanel();
+  }
+
   function setAlertResFilter(filterKey) {
     currentAlertResFilter = filterKey || 'ALL';
     const mapBtn = {
@@ -3656,6 +3687,49 @@
       const el = document.getElementById(mapBtn[k]);
       if (el) el.setAttribute('data-active', String(k === currentAlertResFilter));
     });
+
+    const inpSearch = document.getElementById('alertResSearch');
+    if (inpSearch && (/^\d{1,2}:$/.test(inpSearch.value.trim()) || currentAlertResFilter === 'ALL')) {
+      if (/^\d{1,2}:$/.test(inpSearch.value.trim())) {
+        inpSearch.value = '';
+      }
+    }
+
+    const st = getEffectiveState();
+    if (st) {
+      const allAlerts = buildUnifiedPorygonAlertsList(st);
+      const catAlerts = currentAlertResFilter === 'ALL'
+        ? allAlerts
+        : allAlerts.filter(a => a.resolutionStatus === currentAlertResFilter);
+      if (catAlerts.length > 0) {
+        const selAgent = document.getElementById('alertAgentFilter');
+        const selHost = document.getElementById('alertHostFilter');
+        const agentVal = selAgent ? selAgent.value : 'ALL';
+        const hostVal = selHost ? selHost.value : 'ALL';
+        const qVal = inpSearch ? inpSearch.value.toLowerCase().trim() : '';
+        const subMatches = catAlerts.filter(a => {
+          if (agentVal !== 'ALL' && (a.resolvedBy || '').toUpperCase() !== agentVal) return false;
+          if (hostVal !== 'ALL' && extractAlertOriginHostKey(a) !== hostVal) return false;
+          if (!qVal) return true;
+          return (a.alertId || '').toLowerCase().includes(qVal) ||
+                 (a.timestamp || '').toLowerCase().includes(qVal) ||
+                 (a.process || '').toLowerCase().includes(qVal) ||
+                 (a.target || '').toLowerCase().includes(qVal) ||
+                 (a.summary || '').toLowerCase().includes(qVal) ||
+                 (a.module || '').toLowerCase().includes(qVal) ||
+                 (a.mitre || '').toLowerCase().includes(qVal) ||
+                 (a.resolvedBy || '').toLowerCase().includes(qVal) ||
+                 (a.resolutionMethod || '').toLowerCase().includes(qVal) ||
+                 (a.resolutionDetail || '').toLowerCase().includes(qVal);
+        });
+        if (subMatches.length === 0) {
+          if (selAgent) selAgent.value = 'ALL';
+          if (selHost) selHost.value = 'ALL';
+          if (inpSearch) inpSearch.value = '';
+        }
+      }
+    }
+
     renderAlertsResolutionPanel();
   }
 
@@ -3895,17 +3969,34 @@
       }
     }
 
+    const inpSearchEl = document.getElementById('alertResSearch');
+    let rawSearch = (inpSearchEl ? inpSearchEl.value : '').trim();
+    if (/^\d{1,2}:$/.test(rawSearch) && allAlerts.length > 0 && document.activeElement !== inpSearchEl) {
+      const targetHour = parseInt(rawSearch, 10);
+      const anyInHour = allAlerts.some(a => extractAlertHourSlot(a.timestamp) === targetHour &&
+        (currentAlertResFilter === 'ALL' || a.resolutionStatus === currentAlertResFilter));
+      if (!anyInHour) {
+        inpSearchEl.value = '';
+        rawSearch = '';
+      }
+    }
+
     // Render 24-Slot Temporal Burst Histogram (00h - 23h)
     renderAlertsTimelineHistogram(allAlerts);
 
     const agentF = (document.getElementById('alertAgentFilter') ? document.getElementById('alertAgentFilter').value : 'ALL');
-    const q = (document.getElementById('alertResSearch') ? document.getElementById('alertResSearch').value : '').toLowerCase().trim();
+    const q = (inpSearchEl ? inpSearchEl.value : '').toLowerCase().trim();
+    const isHourQuery = /^\d{1,2}:$/.test(q);
+    const queryHourNum = isHourQuery ? parseInt(q, 10) : -1;
 
     const filtered = allAlerts.filter(a => {
       if (currentAlertResFilter !== 'ALL' && a.resolutionStatus !== currentAlertResFilter) return false;
       if (agentF !== 'ALL' && (a.resolvedBy || '').toUpperCase() !== agentF) return false;
       if (hostF !== 'ALL' && extractAlertOriginHostKey(a) !== hostF) return false;
       if (!q) return true;
+      if (isHourQuery) {
+        return extractAlertHourSlot(a.timestamp) === queryHourNum;
+      }
       return (a.alertId || '').toLowerCase().includes(q) ||
              (a.timestamp || '').toLowerCase().includes(q) ||
              (a.process || '').toLowerCase().includes(q) ||
@@ -3926,10 +4017,11 @@
     if (!tb) return;
 
     if (filtered.length === 0) {
+      const qDesc = q ? ` / Búsqueda: "${esc(q)}"` : '';
       tb.innerHTML = `<tr><td colspan="6"><div class="empty-state">
-        <span>0 alertas coinciden con el filtro activo (${esc(currentAlertResFilter)} / ${esc(agentF)} / ${esc(hostF)}).</span>
+        <span>0 alertas coinciden con el filtro activo (${esc(currentAlertResFilter)} / ${esc(agentF)} / ${esc(hostF)}${qDesc}).</span>
         <div style="display:flex;gap:6px;justify-content:center;margin-top:6px;">
-          <button type="button" class="btn btn-sm btn-cyan" onclick="setAlertResFilter('ALL'); setAlertHostFilter('ALL');">Mostrar Todas las Alertas</button>
+          <button type="button" class="btn btn-sm btn-cyan" onclick="resetAllAlertFilters()">Mostrar Todas las Alertas</button>
           <button type="button" class="btn btn-sm btn-gold" onclick="probeOnlineC2Agents()">Ejecutar Sonda IDS C2 (:8002)</button>
         </div>
       </div></td></tr>`;
@@ -4023,10 +4115,8 @@
     }));
 
     (allAlerts || []).forEach(a => {
-      const ts = String(a.timestamp || '').trim();
-      const m = ts.match(/^(\d{1,2}):/);
-      let h = m ? parseInt(m[1], 10) : new Date().getHours();
-      if (isNaN(h) || h < 0 || h > 23) h = 0;
+      let h = extractAlertHourSlot(a.timestamp);
+      if (h < 0 || h > 23) h = new Date().getHours();
       slots[h].total++;
       if (a.severity === 'CRITICAL') slots[h].crit++;
       else if (a.severity === 'HIGH') slots[h].high++;
@@ -4056,19 +4146,22 @@
         : (s.crit > 0 ? '#EF4444' : (s.high > 0 ? '#F59E0B' : '#10B981'));
       const isSelected = curSearch === s.prefix;
       const tip = `${s.label} — ${s.total} alerta(s) [${s.crit} CRITICAL, ${s.high} HIGH, ${s.info} INFO]. Clic para filtrar.`;
-      return `<div onclick="filterAlertsByHourSlot('${s.prefix}')" title="${esc(tip)}" style="cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:2px;user-select:none;">
+      return `<div onclick="filterAlertsByHourSlot('${s.prefix}', ${s.total})" title="${esc(tip)}" style="cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:2px;user-select:none;">
         <div style="width:100%;height:${heightPct}%;background:${color};border-radius:2px 2px 0 0;opacity:${s.total === 0 ? '0.35' : (isSelected ? '1' : '0.88')};outline:${isSelected ? '2px solid var(--sig-cyan)' : 'none'};transition:height 160ms ease;"></div>
         <span class="mono" style="font-size:8.5px;color:${isSelected ? 'var(--sig-cyan-txt)' : 'var(--txt-muted)'};font-weight:${isSelected || s.total > 0 ? '700' : '400'};line-height:1;">${String(s.hour).padStart(2, '0')}</span>
       </div>`;
     }).join('');
   }
 
-  function filterAlertsByHourSlot(hourPrefix) {
+  function filterAlertsByHourSlot(hourPrefix, slotTotal) {
     const inp = document.getElementById('alertResSearch');
     if (!inp) return;
     if (inp.value.trim() === hourPrefix) {
       inp.value = '';
       showToast('Filtro horario restablecido (mostrando todas las horas).', false);
+    } else if (typeof slotTotal === 'number' && slotTotal === 0) {
+      inp.value = '';
+      showToast('Sin alertas registradas en la ventana ' + hourPrefix + '00–' + hourPrefix + '59 (mostrando vista activa).', false);
     } else {
       inp.value = hourPrefix;
       showToast('Filtrando alertas en ventana horaria ' + hourPrefix + '00–' + hourPrefix + '59...', false);

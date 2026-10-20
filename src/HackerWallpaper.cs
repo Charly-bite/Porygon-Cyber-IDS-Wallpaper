@@ -737,7 +737,12 @@ public static class PorygonCyberDefenseEngine {
     }
 
     public static string ProjectSiemJsonlPath {
-        get { return @"C:\Users\Admin\Porygon-Cyber-IDS-Wallpaper\logs\siem_security_events.jsonl"; }
+        get {
+            string uProf = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            string pUser = Path.Combine(uProf, "Porygon-Cyber-IDS-Wallpaper", "logs", "siem_security_events.jsonl");
+            if (Directory.Exists(Path.GetDirectoryName(pUser))) return pUser;
+            return @"C:\Users\Admin\Porygon-Cyber-IDS-Wallpaper\logs\siem_security_events.jsonl";
+        }
     }
 
     public static string QuarantineDir {
@@ -925,6 +930,93 @@ public static class PorygonCyberDefenseEngine {
                         if (slines.Length >= 8) SoarConfig.AlertWebhookEnabled = (slines[7] == "1");
                         if (slines.Length >= 9) SoarConfig.AlertWebhookUrl = slines[8] ?? "";
                         if (slines.Length >= 10 && !string.IsNullOrEmpty(slines[9])) SoarConfig.PorygonAutonomyMode = slines[9].Trim();
+                    }
+                }
+            }
+            HydrateRecentSiemEventsFromJsonl();
+        } catch { }
+    }
+
+    private static void HydrateRecentSiemEventsFromJsonl() {
+        try {
+            string path = File.Exists(SiemJsonlPath) ? SiemJsonlPath : (File.Exists(ProjectSiemJsonlPath) ? ProjectSiemJsonlPath : null);
+            if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;
+
+            string[] lines = File.ReadAllLines(path, Encoding.UTF8);
+            if (lines == null || lines.Length == 0) return;
+
+            string todayPrefix = DateTime.Now.ToString("yyyy-MM-dd");
+            string yesterdayPrefix = DateTime.Now.AddDays(-1).ToString("yyyy-MM-dd");
+            JavaScriptSerializer ser = new JavaScriptSerializer();
+            List<SiemSecurityEvent> hydrated = new List<SiemSecurityEvent>();
+            Dictionary<string, int> hourTargetBurstCap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            HashSet<string> seenChainHashes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            int startIdx = Math.Max(0, lines.Length - 2500);
+            for (int i = lines.Length - 1; i >= startIdx && hydrated.Count < 180; i--) {
+                string line = (lines[i] ?? "").Trim();
+                if (line.Length < 10 || !line.StartsWith("{")) continue;
+                try {
+                    var d = ser.Deserialize<Dictionary<string, object>>(line);
+                    if (d == null) continue;
+                    string tsRaw = d.ContainsKey("timestamp") && d["timestamp"] != null ? d["timestamp"].ToString().Trim() : "";
+                    if (tsRaw.Length >= 10 && tsRaw[4] == '-' && !tsRaw.StartsWith(todayPrefix) && !tsRaw.StartsWith(yesterdayPrefix)) {
+                        continue;
+                    }
+                    string shortTs = tsRaw.Length > 11 ? tsRaw.Substring(11).Trim() : tsRaw;
+                    string hourSlot = shortTs.Length >= 2 ? shortTs.Substring(0, 2) : "00";
+                    string mod = d.ContainsKey("module") && d["module"] != null ? d["module"].ToString() : "SIEM";
+                    string proc = d.ContainsKey("process") && d["process"] != null ? d["process"].ToString() : "system";
+                    string tgt = d.ContainsKey("target") && d["target"] != null ? d["target"].ToString() : "";
+                    string ch = d.ContainsKey("chainHash") && d["chainHash"] != null ? d["chainHash"].ToString() : "";
+                    if (!string.IsNullOrEmpty(ch) && seenChainHashes.Contains(ch)) continue;
+
+                    string burstKey = hourSlot + "|" + mod + "|" + tgt;
+                    int burstCnt = 0;
+                    hourTargetBurstCap.TryGetValue(burstKey, out burstCnt);
+                    if (burstCnt >= 3) continue;
+                    hourTargetBurstCap[burstKey] = burstCnt + 1;
+                    if (!string.IsNullOrEmpty(ch)) seenChainHashes.Add(ch);
+
+                    float riskVal = 0.75f;
+                    if (d.ContainsKey("risk") && d["risk"] != null) {
+                        float.TryParse(Convert.ToString(d["risk"], System.Globalization.CultureInfo.InvariantCulture),
+                            System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out riskVal);
+                    }
+
+                    SiemSecurityEvent ev = new SiemSecurityEvent {
+                        AlertId = d.ContainsKey("alertId") && d["alertId"] != null ? d["alertId"].ToString() : "",
+                        Timestamp = shortTs,
+                        AgentName = d.ContainsKey("agent") && d["agent"] != null ? d["agent"].ToString() : "PORYGON",
+                        Module = mod,
+                        Severity = d.ContainsKey("severity") && d["severity"] != null ? d["severity"].ToString() : "INFO",
+                        MitreId = d.ContainsKey("mitre") && d["mitre"] != null ? d["mitre"].ToString() : "T1071",
+                        ProcessInfo = proc,
+                        Target = tgt,
+                        Sha256 = d.ContainsKey("sha256") && d["sha256"] != null ? d["sha256"].ToString() : "",
+                        RiskScore = riskVal,
+                        Summary = d.ContainsKey("summary") && d["summary"] != null ? d["summary"].ToString() : "",
+                        ActionTaken = d.ContainsKey("action") && d["action"] != null ? d["action"].ToString() : "LOGGED",
+                        ChainHash = string.IsNullOrEmpty(ch) ? ComputeSiemHashChainLink("GENESIS", tsRaw, mod, tgt, proc) : ch,
+                        ResolutionStatus = d.ContainsKey("resolutionStatus") && d["resolutionStatus"] != null ? d["resolutionStatus"].ToString() : "",
+                        ResolvedByAgent = d.ContainsKey("resolvedBy") && d["resolvedBy"] != null ? d["resolvedBy"].ToString() : "",
+                        ResolutionMethod = d.ContainsKey("resolutionMethod") && d["resolutionMethod"] != null ? d["resolutionMethod"].ToString() : "",
+                        ResolvedAt = shortTs
+                    };
+                    PopulatePorygonAlertResolution(ev);
+                    hydrated.Add(ev);
+                } catch { }
+            }
+
+            if (hydrated.Count > 0) {
+                hydrated.Reverse();
+                lock (SyncLock) {
+                    RecentSiemEvents.Clear();
+                    for (int i = 0; i < hydrated.Count; i++) {
+                        TotalSiemAlerts++;
+                        hydrated[i].AlertId = "ALR-" + TotalSiemAlerts.ToString("0000");
+                        LastSiemChainHash = hydrated[i].ChainHash;
+                        RecentSiemEvents.Add(hydrated[i]);
                     }
                 }
             }
@@ -1960,14 +2052,26 @@ public static class PorygonCyberDefenseEngine {
         return string.Format("⚡ Enjambre Porygon resolvió automáticamente {0} alertas pendientes (Firewall IPS / Cuarentena .qz / Correlación Forense C2).", resolvedCount);
     }
 
+    private static Dictionary<string, DateTime> siemBurstDedupMap = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+
     public static void RecordSiemEvent(string agent, string module, string severity, string mitreId,
         string processInfo, string target, string sha256, float riskScore, string summary, string actionTaken) {
-        string ts = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
-        string shortTs = DateTime.Now.ToString("HH:mm:ss");
+        DateTime nowDt = DateTime.Now;
+        string ts = nowDt.ToString("yyyy-MM-dd HH:mm:ss");
+        string shortTs = nowDt.ToString("HH:mm:ss");
 
         string chainHash;
         int alertSeq;
         lock (SyncLock) {
+            if (string.Equals(module, "NIDS_EDR", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(module, "SIEM_PERSISTENCE", StringComparison.OrdinalIgnoreCase)) {
+                string dedupKey = (module ?? "") + "|" + (processInfo ?? "") + "|" + (target ?? "");
+                DateTime lastDt;
+                if (siemBurstDedupMap.TryGetValue(dedupKey, out lastDt) && (nowDt - lastDt).TotalSeconds < 300.0) {
+                    return;
+                }
+                siemBurstDedupMap[dedupKey] = nowDt;
+            }
             TotalSiemAlerts++;
             alertSeq = TotalSiemAlerts;
             chainHash = ComputeSiemHashChainLink(LastSiemChainHash, ts, mitreId ?? "T1071", target ?? "", summary ?? "");
@@ -1995,7 +2099,7 @@ public static class PorygonCyberDefenseEngine {
 
         lock (SyncLock) {
             RecentSiemEvents.Add(ev);
-            while (RecentSiemEvents.Count > 120) RecentSiemEvents.RemoveAt(0);
+            while (RecentSiemEvents.Count > 240) RecentSiemEvents.RemoveAt(0);
         }
 
         try {
