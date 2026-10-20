@@ -1787,9 +1787,9 @@ public static class PorygonCyberDefenseEngine {
         if (isTrustedTarget) {
             ev.ResolutionStatus = "RESOLVED_WHITELIST";
             ev.ResolvedByAgent = "PORYGON";
-            ev.ResolutionMethod = "Filtro Anti-Falsos Positivos (Lista Blanca / Authenticode)";
+            ev.ResolutionMethod = "Filtro Anti-Falsos Positivos (Lista Blanca Tailscale / RustDesk / Authenticode)";
             ev.ResolutionDetail = string.Format(
-                "Porygon (Gen G1 · NIDS/DNS) verificó que el destino [{0}] y el proceso [{1}] pertenecen a infraestructura legítima autorizada (Malla Tailscale 100.*, Relé DERP, DNS Corporativo o certificado QBOSS Code Signing), suprimiendo la alerta sin afectar la operación.",
+                "Porygon (Gen G1 · NIDS/DNS) verificó que el destino [{0}] y el proceso [{1}] pertenecen a infraestructura legítima autorizada (Malla Tailscale 100.*, Relés DERP, Servidor Rendezvous/Relay RustDesk :21114-21119, DNS Corporativo o certificado QBOSS Code Signing), suprimiendo el falso positivo sin afectar la operación.",
                 tgt, proc);
             return;
         }
@@ -2149,6 +2149,11 @@ public static class PorygonCyberDefenseEngine {
                s.Contains("porygon-sensor-agent") ||
                s.Contains("03-ciberseguridad-soc\\desencript") ||
                s.Contains("execute_stage2_compact") ||
+               s.Contains("dory_rustdesk_autostart") ||
+               s.Contains("start_all_services_hidden.vbs") ||
+               s.Contains("start_all_services_after_boot.ps1") ||
+               s.Contains("rustdesk") ||
+               s.Contains("tailscale") ||
                s.Contains("100.89.1.27:8002") ||
                s.Contains("192.168.2.222:8002");
     }
@@ -2163,17 +2168,26 @@ public static class PorygonCyberDefenseEngine {
         "205.147.105.", "102.67.165.", "102.67.167.", "103.6.84.", "157.180.28.", "162.248.221.", "167.235.72.",
         "172.105.166.", "172.105.169.", "172.105.179.", "172.237.28.", "172.237.61.", "172.237.66.", "172.237.72.", "172.238.6.",
         "176.58.88.", "176.58.90.", "176.58.92.", "176.58.93.", "178.156.134.", "178.156.152.", "185.34.3.", "185.40.234.",
-        "45.159.97.", "45.159.98.", "49.12.193.", "49.13.204.", "5.161.218.", "65.109.143.", "68.183.90.", "95.217.2."
+        "45.159.97.", "45.159.98.", "49.12.193.", "49.13.204.", "5.161.218.", "65.109.143.", "68.183.90.", "95.217.2.",
+        "209.250.254.15", "49.12.46.241"
     };
+
+    public static bool IsRustDeskPort(int port) {
+        return port >= 21114 && port <= 21119;
+    }
 
     public static bool IsTailscaleEndpointOrProcess(string targetOrIp, string processInfo) {
         string p = (processInfo ?? "").ToLowerInvariant();
-        if (p.Contains("tailscaled") || p.Contains("tailscale-ipn") || p.Contains("tailscale.exe") || p.Contains("tailscale-service")) {
+        if (p.Contains("tailscaled") || p.Contains("tailscale-ipn") || p.Contains("tailscale.exe") || p.Contains("tailscale-service") ||
+            p.Contains("rustdesk") || p.Contains("hbbs") || p.Contains("hbbr") || p.Contains("dory_rustdesk_autostart")) {
             return true;
         }
         string t = (targetOrIp ?? "").Trim().ToLowerInvariant();
         if (string.IsNullOrEmpty(t)) return false;
-        if (t.Contains(".tailscale.com") || t.Contains(".tailscale.io") || t.Contains(".ts.net") || t.EndsWith(":41641")) {
+        if (t.Contains(".tailscale.com") || t.Contains(".tailscale.io") || t.Contains(".ts.net") ||
+            t.Contains(".rustdesk.com") || t.Contains("dory_rustdesk_autostart") || t.Contains("start_all_services_hidden.vbs") ||
+            t.EndsWith(":41641") || t.EndsWith(":21114") || t.EndsWith(":21115") ||
+            t.EndsWith(":21116") || t.EndsWith(":21117") || t.EndsWith(":21118") || t.EndsWith(":21119")) {
             return true;
         }
         string cleanIp = t.Split(new char[] { ':', ' ', '-' }, StringSplitOptions.RemoveEmptyEntries)[0];
@@ -2181,6 +2195,9 @@ public static class PorygonCyberDefenseEngine {
             if (cleanIp.StartsWith(TailscaleDerpAndControlPrefixes[i], StringComparison.OrdinalIgnoreCase)) {
                 return true;
             }
+        }
+        lock (SyncLock) {
+            if (whitelistedC2FleetIps.Contains(cleanIp)) return true;
         }
         return false;
     }
@@ -2210,7 +2227,27 @@ public static class PorygonCyberDefenseEngine {
             }
         } catch { }
         try {
-            // Unblock any Tailscale DERP or whitelisted IP that was previously added to BlockedFirewallIps
+            lock (SyncLock) {
+                whitelistedC2FleetIps.Add("209.250.254.15"); // rs-ny.rustdesk.com / rs-us.rustdesk.com
+                whitelistedC2FleetIps.Add("49.12.46.241");   // api.rustdesk.com
+            }
+            string rdToml = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "RustDesk", "config", "RustDesk2.toml");
+            if (File.Exists(rdToml)) {
+                string tomlTxt = File.ReadAllText(rdToml, Encoding.UTF8);
+                var mRv = System.Text.RegularExpressions.Regex.Match(tomlTxt, "rendezvous_server\\s*=\\s*'([^':]+)");
+                if (mRv.Success) {
+                    string rvHost = mRv.Groups[1].Value.Trim();
+                    IPAddress[] addrs = Dns.GetHostAddresses(rvHost);
+                    lock (SyncLock) {
+                        for (int a = 0; a < addrs.Length; a++) {
+                            whitelistedC2FleetIps.Add(addrs[a].ToString());
+                        }
+                    }
+                }
+            }
+        } catch { }
+        try {
+            // Unblock any Tailscale DERP, RustDesk Rendezvous, or whitelisted IP that was previously added to BlockedFirewallIps
             List<string> toUnblock = new List<string>();
             lock (SyncLock) {
                 for (int i = BlockedFirewallIps.Count - 1; i >= 0; i--) {
@@ -2692,6 +2729,7 @@ public static class PorygonCyberDefenseEngine {
                                 curDomain.EndsWith(".live.com") || curDomain.EndsWith(".office.com") ||
                                 curDomain.EndsWith(".cloudflare.com") || curDomain.EndsWith(".tailscale.com") ||
                                 curDomain.EndsWith(".tailscale.io") || curDomain.EndsWith(".ts.net") ||
+                                curDomain.EndsWith(".rustdesk.com") ||
                                 curDomain.EndsWith(".github.com") || curDomain.EndsWith(".githubusercontent.com") ||
                                 curDomain.EndsWith(".akamai.net") || curDomain.EndsWith(".akamaiedge.net");
 
@@ -10756,6 +10794,7 @@ public class HackerWallpaperForm : Form {
                     string proto = ClassifyPortProtocol(remPort) + " // " + procShort;
                     bool isLan = remIp.StartsWith("192.168.") || remIp.StartsWith("10.") || remIp.StartsWith("172.") ||
                         remPort == 41641 || locPort == 41641 ||
+                        PorygonCyberDefenseEngine.IsRustDeskPort(remPort) || PorygonCyberDefenseEngine.IsRustDeskPort(locPort) ||
                         PorygonCyberDefenseEngine.IsSafeWhitelistedIp(remIp) ||
                         PorygonCyberDefenseEngine.IsTailscaleEndpointOrProcess(fullRem, procShort);
                     bool isStandardPort = (remPort == 443 || remPort == 80 || remPort == 53 || remPort == 123);
