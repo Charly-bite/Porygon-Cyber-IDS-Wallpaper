@@ -1166,10 +1166,19 @@ public static class PorygonCyberDefenseEngine {
         }
 
         if (lowerPath.Contains(@"\.cache\puppeteer\chrome\") ||
-            lowerPath.Contains(@"\02-plataformas-activas\") ||
             lowerPath.Contains(@"\ms-playwright\")) {
             info.IsSigned = true;
             info.SignerName = "Google Chrome for Testing (Puppeteer Bot)";
+        } else if (lowerPath.Contains(@"\01-quimica-boss\") ||
+                   lowerPath.Contains(@"\02-plataformas-activas\") ||
+                   lowerPath.Contains(@"\03-ciberseguridad-soc\") ||
+                   lowerPath.Contains(@"\04-clientes-y-web\") ||
+                   lowerPath.Contains(@"\05-archivo-y-respaldos\") ||
+                   lowerPath.Contains(@"\desktop\agentes\") ||
+                   lowerPath.Contains(@"\desktop\merlin\") ||
+                   lowerPath.Contains(@"scrcpy")) {
+            info.IsSigned = true;
+            info.SignerName = "Mr. Dev Authorized Workspace";
         } else if (!string.IsNullOrEmpty(info.ExePath) && File.Exists(info.ExePath)) {
             if (lowerPath.StartsWith(@"c:\windows\system32\") || lowerPath.StartsWith(@"c:\windows\syswow64\")) {
                 info.IsSigned = true;
@@ -2170,7 +2179,14 @@ public static class PorygonCyberDefenseEngine {
                s.Contains("start_all_services_hidden.vbs") ||
                s.Contains("start_all_services_after_boot.ps1") ||
                s.Contains(".cache\\puppeteer\\chrome") ||
+               s.Contains("01-quimica-boss") ||
                s.Contains("02-plataformas-activas") ||
+               s.Contains("03-ciberseguridad-soc") ||
+               s.Contains("04-clientes-y-web") ||
+               s.Contains("05-archivo-y-respaldos") ||
+               s.Contains("desktop\\agentes") ||
+               s.Contains("desktop\\merlin") ||
+               s.Contains("scrcpy") ||
                s.Contains(".wwebjs_auth") ||
                s.Contains("whatsapp-web") ||
                s.Contains("ms-playwright") ||
@@ -10429,6 +10445,7 @@ public class HackerWallpaperForm : Form {
         if (port == 80)  return "HTTP/WEB";
         if (port == 53)  return "DNS/UDP-TCP";
         if (port == 5228 || port == 5229 || port == 5230) return "GCM/FCM-PUSH";
+        if (port == 5555) return "ADB/SCRCPY";
         if (port == 41641) return "TAILSCALE/WG";
         if (port >= 21114 && port <= 21119) return "RUSTDESK/P2P";
         if (port == 22)  return "SSH/ADMIN";
@@ -10914,7 +10931,7 @@ public class HackerWallpaperForm : Form {
                         anomDetail = string.Format("Proceso {0} ({1}) en puerto inusual {2}", procTag, signBadge, fullRem);
                         anomScore = (remPort == 22 || remPort == 3389 || remPort == 4444 || remPort == 445) ? 0.94f : (procSec.IsSigned ? 0.74f : 0.88f);
                         anomalyHeadline = "PORT_ALERT: " + procShort + "->" + fullRem;
-                    } else if (st == TcpState.SynSent) {
+                    } else if (st == TcpState.SynSent && !(isLan && (remPort == 5555 || procShort.Equals("adb", StringComparison.OrdinalIgnoreCase) || procShort.Equals("scrcpy", StringComparison.OrdinalIgnoreCase)))) {
                         nodeKind = 2;
                         anomType = "HALF_OPEN_SYN";
                         anomDetail = string.Format("Handshake SYN_SENT saliente por {0}", procTag);
