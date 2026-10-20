@@ -1005,7 +1005,7 @@ public static class PorygonCyberDefenseEngine {
                         ResolutionMethod = d.ContainsKey("resolutionMethod") && d["resolutionMethod"] != null ? d["resolutionMethod"].ToString() : "",
                         ResolvedAt = shortTs
                     };
-                    PopulatePorygonAlertResolution(ev);
+                    PopulatePorygonAlertResolution(ev, false);
                     hydrated.Add(ev);
                 } catch { }
             }
@@ -1165,7 +1165,12 @@ public static class PorygonCyberDefenseEngine {
             info.IsUserTempOrDownloads = true;
         }
 
-        if (!string.IsNullOrEmpty(info.ExePath) && File.Exists(info.ExePath)) {
+        if (lowerPath.Contains(@"\.cache\puppeteer\chrome\") ||
+            lowerPath.Contains(@"\02-plataformas-activas\") ||
+            lowerPath.Contains(@"\ms-playwright\")) {
+            info.IsSigned = true;
+            info.SignerName = "Google Chrome for Testing (Puppeteer Bot)";
+        } else if (!string.IsNullOrEmpty(info.ExePath) && File.Exists(info.ExePath)) {
             if (lowerPath.StartsWith(@"c:\windows\system32\") || lowerPath.StartsWith(@"c:\windows\syswow64\")) {
                 info.IsSigned = true;
                 info.SignerName = "Microsoft Windows";
@@ -1757,7 +1762,7 @@ public static class PorygonCyberDefenseEngine {
             modeLabel, reEvaluated, autoContained);
     }
 
-    public static void PopulatePorygonAlertResolution(SiemSecurityEvent ev) {
+    public static void PopulatePorygonAlertResolution(SiemSecurityEvent ev, bool allowSideEffects = true) {
         if (ev == null) return;
         string mod = (ev.Module ?? "").ToUpperInvariant();
         string act = (ev.ActionTaken ?? "").ToUpperInvariant();
@@ -1784,12 +1789,22 @@ public static class PorygonCyberDefenseEngine {
             tgt.IndexOf(".microsoft.com", StringComparison.OrdinalIgnoreCase) >= 0 ||
             act.Contains("WHITELIST") || act.Contains("CLEAN_SIGNED");
 
+        if (act == "FW_UNBLOCKED" || act == "RESTORED") {
+            ev.ResolutionStatus = "RESOLVED_WHITELIST";
+            ev.ResolvedByAgent = "PORYGON-Z";
+            ev.ResolutionMethod = "Restitución Administrativa / Falso Positivo Desbloqueado";
+            ev.ResolutionDetail = string.Format(
+                "Porygon-Z restituyó el indicador [{0}] ({1}) eliminando la regla de bloqueo en Windows Firewall y actualizando la lista blanca operativa.",
+                tgt, proc);
+            return;
+        }
+
         if (isTrustedTarget) {
             ev.ResolutionStatus = "RESOLVED_WHITELIST";
             ev.ResolvedByAgent = "PORYGON";
             ev.ResolutionMethod = "Filtro Anti-Falsos Positivos (Lista Blanca Tailscale / RustDesk / Authenticode)";
             ev.ResolutionDetail = string.Format(
-                "Porygon (Gen G1 · NIDS/DNS) verificó que el destino [{0}] y el proceso [{1}] pertenecen a infraestructura legítima autorizada (Malla Tailscale 100.*, Relés DERP, Servidor Rendezvous/Relay RustDesk :21114-21119, DNS Corporativo o certificado QBOSS Code Signing), suprimiendo el falso positivo sin afectar la operación.",
+                "Porygon (Gen G1 · NIDS/DNS) verificó que el destino [{0}] y el proceso [{1}] pertenecen a infraestructura legítima autorizada (Malla Tailscale 100.*, Relés DERP, Servidor Rendezvous/Relay RustDesk :21114-21119, Bot WhatsApp/Puppeteer, DNS Corporativo o certificado QBOSS Code Signing), suprimiendo el falso positivo sin afectar la operación.",
                 tgt, proc);
             return;
         }
@@ -1849,9 +1864,11 @@ public static class PorygonCyberDefenseEngine {
 
         if (autonomyMode == "GRADUATED_2FA" && hasDoubleEvidence) {
             if (isExtIp2Fa) {
-                lock (SyncLock) {
-                    if (!BlockedFirewallIps.Contains(cleanIp2Fa)) {
-                        BlockedFirewallIps.Add(cleanIp2Fa);
+                if (allowSideEffects && !IsSafeWhitelistedIp(cleanIp2Fa)) {
+                    lock (SyncLock) {
+                        if (!BlockedFirewallIps.Contains(cleanIp2Fa)) {
+                            BlockedFirewallIps.Add(cleanIp2Fa);
+                        }
                     }
                 }
                 ev.ResolutionStatus = "RESOLVED_SOAR";
@@ -1872,7 +1889,7 @@ public static class PorygonCyberDefenseEngine {
                 return;
             }
         } else if (autonomyMode == "STRICT_AUTO_SOAR" && (ev.Severity == "CRITICAL" || ev.Severity == "HIGH") && !mod.Contains("IDS-001") && !mod.Contains("IDS-002")) {
-            if (isExtIp2Fa && !string.IsNullOrEmpty(cleanIp2Fa)) {
+            if (allowSideEffects && isExtIp2Fa && !string.IsNullOrEmpty(cleanIp2Fa) && !IsSafeWhitelistedIp(cleanIp2Fa)) {
                 lock (SyncLock) {
                     if (!BlockedFirewallIps.Contains(cleanIp2Fa)) BlockedFirewallIps.Add(cleanIp2Fa);
                 }
@@ -2152,6 +2169,11 @@ public static class PorygonCyberDefenseEngine {
                s.Contains("dory_rustdesk_autostart") ||
                s.Contains("start_all_services_hidden.vbs") ||
                s.Contains("start_all_services_after_boot.ps1") ||
+               s.Contains(".cache\\puppeteer\\chrome") ||
+               s.Contains("02-plataformas-activas") ||
+               s.Contains(".wwebjs_auth") ||
+               s.Contains("whatsapp-web") ||
+               s.Contains("ms-playwright") ||
                s.Contains("rustdesk") ||
                s.Contains("tailscale") ||
                s.Contains("100.89.1.27:8002") ||
@@ -2169,7 +2191,10 @@ public static class PorygonCyberDefenseEngine {
         "172.105.166.", "172.105.169.", "172.105.179.", "172.237.28.", "172.237.61.", "172.237.66.", "172.237.72.", "172.238.6.",
         "176.58.88.", "176.58.90.", "176.58.92.", "176.58.93.", "178.156.134.", "178.156.152.", "185.34.3.", "185.40.234.",
         "45.159.97.", "45.159.98.", "49.12.193.", "49.13.204.", "5.161.218.", "65.109.143.", "68.183.90.", "95.217.2.",
-        "209.250.254.15", "49.12.46.241"
+        "209.250.254.15", "49.12.46.241",
+        "44.193.88.212", "32.192.156.181", "20.0.1.9", "170.150.161.242",
+        "43.175.230.151", "43.175.230.138",
+        "157.240.", "172.253.", "142.250.", "142.251."
     };
 
     public static bool IsRustDeskPort(int port) {
@@ -2247,8 +2272,10 @@ public static class PorygonCyberDefenseEngine {
             }
         } catch { }
         try {
-            // Unblock any Tailscale DERP, RustDesk Rendezvous, or whitelisted IP that was previously added to BlockedFirewallIps
+            // Unblock any Tailscale DERP, RustDesk Rendezvous, or whitelisted IP that was previously added to BlockedFirewallIps,
+            // and prune any stale or whitelisted QuarantineRecord (e.g. Puppeteer Chromium)
             List<string> toUnblock = new List<string>();
+            bool quarantineChanged = false;
             lock (SyncLock) {
                 for (int i = BlockedFirewallIps.Count - 1; i >= 0; i--) {
                     string bip = BlockedFirewallIps[i];
@@ -2257,8 +2284,15 @@ public static class PorygonCyberDefenseEngine {
                         BlockedFirewallIps.RemoveAt(i);
                     }
                 }
+                for (int q = QuarantinedFiles.Count - 1; q >= 0; q--) {
+                    var qRec = QuarantinedFiles[q];
+                    if (qRec == null || !File.Exists(qRec.QuarantinePath) || IsTrustedUnifiedC2OrPorygonArtifact(qRec.OriginalPath)) {
+                        QuarantinedFiles.RemoveAt(q);
+                        quarantineChanged = true;
+                    }
+                }
             }
-            if (toUnblock.Count > 0) {
+            if (toUnblock.Count > 0 || quarantineChanged) {
                 SavePersistedIpsAndQuarantine();
                 for (int i = 0; i < toUnblock.Count; i++) {
                     UnblockRemoteIpInFirewall(toUnblock[i]);
@@ -10394,6 +10428,9 @@ public class HackerWallpaperForm : Form {
         if (port == 443) return "HTTPS/TLS";
         if (port == 80)  return "HTTP/WEB";
         if (port == 53)  return "DNS/UDP-TCP";
+        if (port == 5228 || port == 5229 || port == 5230) return "GCM/FCM-PUSH";
+        if (port == 41641) return "TAILSCALE/WG";
+        if (port >= 21114 && port <= 21119) return "RUSTDESK/P2P";
         if (port == 22)  return "SSH/ADMIN";
         if (port == 3389) return "RDP/REMOTE";
         if (port == 445) return "SMB/CIFS";
@@ -10797,7 +10834,7 @@ public class HackerWallpaperForm : Form {
                         PorygonCyberDefenseEngine.IsRustDeskPort(remPort) || PorygonCyberDefenseEngine.IsRustDeskPort(locPort) ||
                         PorygonCyberDefenseEngine.IsSafeWhitelistedIp(remIp) ||
                         PorygonCyberDefenseEngine.IsTailscaleEndpointOrProcess(fullRem, procShort);
-                    bool isStandardPort = (remPort == 443 || remPort == 80 || remPort == 53 || remPort == 123);
+                    bool isStandardPort = (remPort == 443 || remPort == 80 || remPort == 53 || remPort == 123 || remPort == 5228 || remPort == 5229 || remPort == 5230);
 
                     if (sampleConn == null) {
                         sampleConn = string.Format("TCP_{0} {1} -> {2}", st.ToString().ToUpper(), procTag, fullRem);
