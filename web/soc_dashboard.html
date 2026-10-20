@@ -3769,9 +3769,13 @@
       const resAt = e.resolvedAt || e.timestamp || '';
 
       if (!resStatus) {
+        const procLow = String(e.process || '').toLowerCase();
+        const tgtLow = tgt.toLowerCase();
         const isTrusted = tgt.startsWith('100.') || tgt.startsWith('192.200.0.') || tgt.startsWith('199.165.136.') ||
-          tgt.toLowerCase().includes('.googleapis.com') || tgt.toLowerCase().includes('.google.com') || tgt.toLowerCase().includes('.gstatic.com') ||
-          tgt.toLowerCase().includes('.microsoft.com') || tgt.toLowerCase().includes('.cloudflare.com');
+          tgt.startsWith('192.73.24') || tgt.startsWith('192.73.25') || tgt.startsWith('209.177.') ||
+          procLow.includes('tailscale') || tgtLow.includes('.tailscale.com') || tgtLow.includes('.tailscale.io') || tgtLow.includes('.ts.net') ||
+          tgtLow.includes('.googleapis.com') || tgtLow.includes('.google.com') || tgtLow.includes('.gstatic.com') ||
+          tgtLow.includes('.microsoft.com') || tgtLow.includes('.cloudflare.com');
         if (isTrusted) {
           resStatus = 'RESOLVED_WHITELIST';
           resBy = 'PORYGON';
@@ -3817,6 +3821,7 @@
     // Also include DNS DGA alerts from st.dnsAudits if not already present by domain target
     const existingTargets = new Set(baseEvents.map(x => (x.target || '').toLowerCase()));
     const TRUSTED_DNS_SUFFIXES = [
+      '.tailscale.com', '.tailscale.io', '.ts.net',
       '.googleapis.com', '.google.com', '.gstatic.com', '.gvt1.com', '.gvt2.com',
       '.run.app', '.1e100.net', '.googleusercontent.com', '.cloud.google.com',
       '.microsoft.com', '.windowsupdate.com', '.live.com', '.office.com', '.azure.com',

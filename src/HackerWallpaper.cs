@@ -933,6 +933,7 @@ public static class PorygonCyberDefenseEngine {
                     }
                 }
             }
+            HydrateTailscaleWhitelist();
             HydrateRecentSiemEventsFromJsonl();
         } catch { }
     }
@@ -968,6 +969,7 @@ public static class PorygonCyberDefenseEngine {
                     string mod = d.ContainsKey("module") && d["module"] != null ? d["module"].ToString() : "SIEM";
                     string proc = d.ContainsKey("process") && d["process"] != null ? d["process"].ToString() : "system";
                     string tgt = d.ContainsKey("target") && d["target"] != null ? d["target"].ToString() : "";
+                    if (mod == "SIGMA_EDR" && tgt.Contains(":") && !tgt.EndsWith(":4444")) continue;
                     string ch = d.ContainsKey("chainHash") && d["chainHash"] != null ? d["chainHash"].ToString() : "";
                     if (!string.IsNullOrEmpty(ch) && seenChainHashes.Contains(ch)) continue;
 
@@ -1771,8 +1773,7 @@ public static class PorygonCyberDefenseEngine {
         }
 
         // 1. Whitelisted Corporate / Tailscale / Authenticode / Cloud Run events
-        bool isTrustedTarget = tgt.StartsWith("100.") || tgt.StartsWith("192.200.0.") || tgt.StartsWith("199.165.136.") ||
-            tgt.StartsWith("209.177.158.") || tgt.StartsWith("192.73.248.") ||
+        bool isTrustedTarget = IsTailscaleEndpointOrProcess(tgt, proc) ||
             tgt.IndexOf(".googleapis.com", StringComparison.OrdinalIgnoreCase) >= 0 ||
             tgt.IndexOf(".google.com", StringComparison.OrdinalIgnoreCase) >= 0 ||
             tgt.IndexOf(".gstatic.com", StringComparison.OrdinalIgnoreCase) >= 0 ||
@@ -2152,6 +2153,83 @@ public static class PorygonCyberDefenseEngine {
                s.Contains("192.168.2.222:8002");
     }
 
+    private static readonly string[] TailscaleDerpAndControlPrefixes = new string[] {
+        "100.", "fd7a:115c:a1e0:",
+        "192.200.0.", "199.165.136.",
+        "192.73.240.", "192.73.242.", "192.73.243.", "192.73.244.", "192.73.248.", "192.73.252.",
+        "209.177.145.", "209.177.156.", "209.177.158.",
+        "199.38.181.", "199.38.182.",
+        "208.111.34.", "208.111.40.", "208.72.155.", "208.83.233.", "208.83.234.",
+        "205.147.105.", "102.67.165.", "102.67.167.", "103.6.84.", "157.180.28.", "162.248.221.", "167.235.72.",
+        "172.105.166.", "172.105.169.", "172.105.179.", "172.237.28.", "172.237.61.", "172.237.66.", "172.237.72.", "172.238.6.",
+        "176.58.88.", "176.58.90.", "176.58.92.", "176.58.93.", "178.156.134.", "178.156.152.", "185.34.3.", "185.40.234.",
+        "45.159.97.", "45.159.98.", "49.12.193.", "49.13.204.", "5.161.218.", "65.109.143.", "68.183.90.", "95.217.2."
+    };
+
+    public static bool IsTailscaleEndpointOrProcess(string targetOrIp, string processInfo) {
+        string p = (processInfo ?? "").ToLowerInvariant();
+        if (p.Contains("tailscaled") || p.Contains("tailscale-ipn") || p.Contains("tailscale.exe") || p.Contains("tailscale-service")) {
+            return true;
+        }
+        string t = (targetOrIp ?? "").Trim().ToLowerInvariant();
+        if (string.IsNullOrEmpty(t)) return false;
+        if (t.Contains(".tailscale.com") || t.Contains(".tailscale.io") || t.Contains(".ts.net") || t.EndsWith(":41641")) {
+            return true;
+        }
+        string cleanIp = t.Split(new char[] { ':', ' ', '-' }, StringSplitOptions.RemoveEmptyEntries)[0];
+        for (int i = 0; i < TailscaleDerpAndControlPrefixes.Length; i++) {
+            if (cleanIp.StartsWith(TailscaleDerpAndControlPrefixes[i], StringComparison.OrdinalIgnoreCase)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static void HydrateTailscaleWhitelist() {
+        try {
+            ProcessStartInfo psi = new ProcessStartInfo("tailscale.exe", "debug derp-map") {
+                CreateNoWindow = true,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                WindowStyle = ProcessWindowStyle.Hidden
+            };
+            using (Process p = Process.Start(psi)) {
+                if (p != null) {
+                    string json = p.StandardOutput.ReadToEnd();
+                    p.WaitForExit(3000);
+                    if (!string.IsNullOrEmpty(json)) {
+                        var matches = System.Text.RegularExpressions.Regex.Matches(json, "\"IPv4\"\\s*:\\s*\"([^\"]+)\"");
+                        lock (SyncLock) {
+                            foreach (System.Text.RegularExpressions.Match m in matches) {
+                                string ip = m.Groups[1].Value.Trim();
+                                if (!string.IsNullOrEmpty(ip)) whitelistedC2FleetIps.Add(ip);
+                            }
+                        }
+                    }
+                }
+            }
+        } catch { }
+        try {
+            // Unblock any Tailscale DERP or whitelisted IP that was previously added to BlockedFirewallIps
+            List<string> toUnblock = new List<string>();
+            lock (SyncLock) {
+                for (int i = BlockedFirewallIps.Count - 1; i >= 0; i--) {
+                    string bip = BlockedFirewallIps[i];
+                    if (IsSafeWhitelistedIp(bip) || IsTailscaleEndpointOrProcess(bip, "")) {
+                        toUnblock.Add(bip);
+                        BlockedFirewallIps.RemoveAt(i);
+                    }
+                }
+            }
+            if (toUnblock.Count > 0) {
+                SavePersistedIpsAndQuarantine();
+                for (int i = 0; i < toUnblock.Count; i++) {
+                    UnblockRemoteIpInFirewall(toUnblock[i]);
+                }
+            }
+        } catch { }
+    }
+
     public static bool IsSafeWhitelistedIp(string ip) {
         if (string.IsNullOrEmpty(ip)) return true;
         string cleanIp = ip.Split(':')[0].Trim();
@@ -2160,12 +2238,15 @@ public static class PorygonCyberDefenseEngine {
             cleanIp == "172.25.247.247") {
             return true;
         }
-        // Protect Loopback, Corporate LAN, Tailscale/WireGuard CGNAT (100.x.x.x -> office-pc 100.89.1.27), Tailscale DERP Relays, and Link-Local
+        // Protect Loopback, Corporate LAN, Tailscale/WireGuard CGNAT (100.x.x.x), Tailscale Control Plane & all 88 DERP Relays
         if (cleanIp.StartsWith("127.") || cleanIp.StartsWith("10.") || cleanIp.StartsWith("192.168.") ||
-            cleanIp.StartsWith("169.254.") || cleanIp.StartsWith("100.") ||
-            cleanIp.StartsWith("192.200.0.") || cleanIp.StartsWith("199.165.136.") ||
-            cleanIp.StartsWith("209.177.158.") || cleanIp.StartsWith("192.73.248.")) {
+            cleanIp.StartsWith("169.254.")) {
             return true;
+        }
+        for (int i = 0; i < TailscaleDerpAndControlPrefixes.Length; i++) {
+            if (cleanIp.StartsWith(TailscaleDerpAndControlPrefixes[i], StringComparison.OrdinalIgnoreCase)) {
+                return true;
+            }
         }
         if (cleanIp.StartsWith("172.")) {
             string[] parts = cleanIp.Split('.');
@@ -2490,10 +2571,11 @@ public static class PorygonCyberDefenseEngine {
                 if (!r.Enabled || string.IsNullOrEmpty(r.Pattern)) continue;
                 string pat = r.Pattern.ToLowerInvariant();
                 bool match = false;
+                if (IsTailscaleEndpointOrProcess(remIp + ":" + portStr, pLow)) continue;
                 if (string.Equals(r.TargetField, "PROCESS_NAME", StringComparison.OrdinalIgnoreCase)) {
                     match = pLow.Contains(pat);
                 } else if (string.Equals(r.TargetField, "REMOTE_PORT", StringComparison.OrdinalIgnoreCase)) {
-                    match = (portStr == pat || (remIp + ":" + portStr).Contains(pat));
+                    match = (portStr == pat);
                 }
                 if (match) {
                     r.HitsCount++;
@@ -2609,6 +2691,7 @@ public static class PorygonCyberDefenseEngine {
                                 curDomain.EndsWith(".microsoft.com") || curDomain.EndsWith(".windowsupdate.com") ||
                                 curDomain.EndsWith(".live.com") || curDomain.EndsWith(".office.com") ||
                                 curDomain.EndsWith(".cloudflare.com") || curDomain.EndsWith(".tailscale.com") ||
+                                curDomain.EndsWith(".tailscale.io") || curDomain.EndsWith(".ts.net") ||
                                 curDomain.EndsWith(".github.com") || curDomain.EndsWith(".githubusercontent.com") ||
                                 curDomain.EndsWith(".akamai.net") || curDomain.EndsWith(".akamaiedge.net");
 
@@ -3576,6 +3659,9 @@ public static class PorygonCyberDefenseEngine {
 
                                     string mitre = nType.Contains("LATERAL") ? "T1021.002" : "T1071";
                                     string epIpOnly = rEp.Contains(":") ? rEp.Split(':')[0] : rEp;
+                                    if (IsTailscaleEndpointOrProcess(rEp, nOriginProc + " " + nOriginLabel)) {
+                                        continue;
+                                    }
                                     string originHostLabel = !string.IsNullOrEmpty(nOriginLabel)
                                         ? nOriginLabel
                                         : (!string.IsNullOrEmpty(nOriginHost)
@@ -10668,7 +10754,10 @@ public class HackerWallpaperForm : Form {
 
                     string fullLoc = string.Format("{0}:{1} [{2} {3}]", ipv4, locPort, procTag, signBadge);
                     string proto = ClassifyPortProtocol(remPort) + " // " + procShort;
-                    bool isLan = remIp.StartsWith("192.168.") || remIp.StartsWith("10.") || remIp.StartsWith("172.") || PorygonCyberDefenseEngine.IsSafeWhitelistedIp(remIp);
+                    bool isLan = remIp.StartsWith("192.168.") || remIp.StartsWith("10.") || remIp.StartsWith("172.") ||
+                        remPort == 41641 || locPort == 41641 ||
+                        PorygonCyberDefenseEngine.IsSafeWhitelistedIp(remIp) ||
+                        PorygonCyberDefenseEngine.IsTailscaleEndpointOrProcess(fullRem, procShort);
                     bool isStandardPort = (remPort == 443 || remPort == 80 || remPort == 53 || remPort == 123);
 
                     if (sampleConn == null) {
