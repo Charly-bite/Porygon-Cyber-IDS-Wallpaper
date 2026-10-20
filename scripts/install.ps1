@@ -87,7 +87,7 @@ try {
 } catch { }
 
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
-$trigger.Delay = "PT4S"
+$trigger.Delay = "PT10S"
 $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Limited
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)
 

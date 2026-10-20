@@ -9941,13 +9941,11 @@ public class HackerWallpaperForm : Form {
         };
         PorygonCyberDefenseEngine.Initialize();
 
-        UpdateRealTelemetry(null);
-
         renderTimer = new System.Windows.Forms.Timer();
         renderTimer.Interval = 33; // Hardware GPU Batched target (~30 FPS active desktop / 20 FPS eco mode to minimize cross-GPU DWM copy)
         renderTimer.Tick += OnRenderTick;
 
-        telemetryTimer = new System.Threading.Timer(UpdateRealTelemetry, null, 1200, 2200);
+        telemetryTimer = new System.Threading.Timer(UpdateRealTelemetry, null, 250, 2200);
         // Single-Core Low-Overhead CPU Evolutionary Training Timer (runs every 800ms in background)
         cpuEvoTimer = new System.Threading.Timer(OnCpuEvolutionTimerTick, null, 800, 800);
 
@@ -11723,6 +11721,7 @@ public class HackerWallpaperForm : Form {
         }
 
         // Detect if multi-monitor topology expanded after Windows login (e.g. 1 monitor -> 5 monitors)
+        bool layoutChanged = false;
         if (frameCount >= 20) {
             List<Rectangle> newRects; List<string> newNames; Rectangle newPrim; int newW, newH;
             QueryPhysicalMonitors(out newRects, out newNames, out newPrim, out newW, out newH);
@@ -11736,8 +11735,15 @@ public class HackerWallpaperForm : Form {
                 hudRadarDirty = true;
                 hudConnectomeDirty = true;
                 hudBrain3DDirty = true;
-                defViewJustAppeared = true;
+                layoutChanged = true;
             }
+        }
+
+        // On Windows 11 24H2, resizing a WS_EX_LAYERED OpenGL child or attaching before SHELLDLL_DefView finishes logon
+        // requires stripping WS_EX_LAYERED, resizing with SWP_FRAMECHANGED, and re-applying WS_EX_LAYERED + LWA_ALPHA.
+        if (layoutChanged || defViewJustAppeared || frameCount == 160 || frameCount == 320) {
+            AttachToDesktopWorkerW();
+            return;
         }
 
         int exStyle = GetWindowLong(this.Handle, GWL_EXSTYLE);
@@ -11747,7 +11753,7 @@ public class HackerWallpaperForm : Form {
             if (cachedDefView != IntPtr.Zero) {
                 SetWindowPos(this.Handle, cachedDefView, 0, 0, screenW, screenH, SWP_NOACTIVATE | SWP_SHOWWINDOW);
             }
-        } else if ((frameCount <= 5 || frameCount == 25 || frameCount == 60 || defViewJustAppeared) && cachedDefView != IntPtr.Zero) {
+        } else if ((frameCount <= 5 || frameCount == 25 || frameCount == 60) && cachedDefView != IntPtr.Zero) {
             SetLayeredWindowAttributes(this.Handle, 0, 255, LWA_ALPHA);
             SetWindowPos(this.Handle, cachedDefView, 0, 0, screenW, screenH, SWP_NOACTIVATE | SWP_SHOWWINDOW);
         }
@@ -16980,12 +16986,49 @@ public class HackerWallpaperForm : Form {
             if (wantWeb) {
                 PorygonCyberDefenseEngine.OpenWebSocInBrowser();
             }
+            if (!wantWeb && !wantConfig && !wantGamer && !wantOpacity) {
+                WaitForDesktopShellReady();
+            }
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             HackerWallpaperForm mainForm = new HackerWallpaperForm(evt, wantConfig, gamerEvt, wantGamer, opacityEvt);
             if (wantOpacity) mainForm.ProcessOpacityFlagOrDefault();
             Application.Run(mainForm);
         }
+    }
+
+    private static void WaitForDesktopShellReady() {
+        try {
+            int mySession = Process.GetCurrentProcess().SessionId;
+            DateTime explorerStart = DateTime.MinValue;
+            Process[] exps = Process.GetProcessesByName("explorer");
+            for (int i = 0; i < exps.Length; i++) {
+                try {
+                    if (exps[i].SessionId == mySession) {
+                        explorerStart = exps[i].StartTime;
+                        break;
+                    }
+                } catch { }
+            }
+            // If launched at Windows logon (explorer.exe < 15s old), wait for explorer, SHELLDLL_DefView, and all monitors to settle
+            if (explorerStart != DateTime.MinValue && (DateTime.Now - explorerStart).TotalSeconds < 15.0) {
+                int lastMonCount = -1;
+                int stableTicks = 0;
+                for (int waitStep = 0; waitStep < 40; waitStep++) {
+                    double ageSec = (DateTime.Now - explorerStart).TotalSeconds;
+                    IntPtr pm = FindWindow("Progman", null);
+                    IntPtr dv = (pm != IntPtr.Zero) ? FindWindowEx(pm, IntPtr.Zero, "SHELLDLL_DefView", null) : IntPtr.Zero;
+                    int monCount = 1;
+                    try { monCount = Screen.AllScreens.Length; } catch { }
+                    if (monCount == lastMonCount) stableTicks++;
+                    else { lastMonCount = monCount; stableTicks = 0; }
+                    if (ageSec >= 12.0 && pm != IntPtr.Zero && dv != IntPtr.Zero && stableTicks >= 4) {
+                        break;
+                    }
+                    Thread.Sleep(500);
+                }
+            }
+        } catch { }
     }
 }
 
