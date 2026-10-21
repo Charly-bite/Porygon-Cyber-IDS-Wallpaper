@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -2192,6 +2192,13 @@ public static class PorygonCyberDefenseEngine {
                s.Contains("ms-playwright") ||
                s.Contains("rustdesk") ||
                s.Contains("tailscale") ||
+               s.Contains("homebridge2223") ||
+               s.Contains("homeusersshd") ||
+               s.Contains("merlin-web-9000") ||
+               s.Contains("poco-home-receiver") ||
+               s.Contains("orchestrator.ps1") ||
+               s.Contains("user_sshd_config") ||
+               s.Contains("openssh") ||
                s.Contains("100.89.1.27:8002") ||
                s.Contains("192.168.2.222:8002");
     }
@@ -2207,7 +2214,7 @@ public static class PorygonCyberDefenseEngine {
         "172.105.166.", "172.105.169.", "172.105.179.", "172.237.28.", "172.237.61.", "172.237.66.", "172.237.72.", "172.238.6.",
         "176.58.88.", "176.58.90.", "176.58.92.", "176.58.93.", "178.156.134.", "178.156.152.", "185.34.3.", "185.40.234.",
         "45.159.97.", "45.159.98.", "49.12.193.", "49.13.204.", "5.161.218.", "65.109.143.", "68.183.90.", "95.217.2.",
-        "209.250.254.15", "49.12.46.241",
+        "209.250.254.15", "209.250.", "49.12.46.241", "49.12.", "162.254.", "173.194.",
         "44.193.88.212", "32.192.156.181", "20.0.1.9", "170.150.161.242",
         "43.175.230.151", "43.175.230.138",
         "157.240.", "172.253.", "142.250.", "142.251."
@@ -2220,7 +2227,7 @@ public static class PorygonCyberDefenseEngine {
     public static bool IsTailscaleEndpointOrProcess(string targetOrIp, string processInfo) {
         string p = (processInfo ?? "").ToLowerInvariant();
         if (p.Contains("tailscaled") || p.Contains("tailscale-ipn") || p.Contains("tailscale.exe") || p.Contains("tailscale-service") ||
-            p.Contains("rustdesk") || p.Contains("hbbs") || p.Contains("hbbr") || p.Contains("dory_rustdesk_autostart")) {
+            p.Contains("rustdesk") || p.Contains("hbbs") || p.Contains("hbbr") || p.Contains("dory_rustdesk_autostart") || p.Contains("sshd") || p.Contains("ssh.exe") || p.Contains("antigravity")) {
             return true;
         }
         string t = (targetOrIp ?? "").Trim().ToLowerInvariant();
@@ -2228,7 +2235,7 @@ public static class PorygonCyberDefenseEngine {
         if (t.Contains(".tailscale.com") || t.Contains(".tailscale.io") || t.Contains(".ts.net") ||
             t.Contains(".rustdesk.com") || t.Contains("dory_rustdesk_autostart") || t.Contains("start_all_services_hidden.vbs") ||
             t.EndsWith(":41641") || t.EndsWith(":21114") || t.EndsWith(":21115") ||
-            t.EndsWith(":21116") || t.EndsWith(":21117") || t.EndsWith(":21118") || t.EndsWith(":21119")) {
+            t.EndsWith(":21116") || t.EndsWith(":21117") || t.EndsWith(":21118") || t.EndsWith(":21119") || t.EndsWith(":22") || t.EndsWith(":2222") || t.EndsWith(":2218") || t.EndsWith(":2223")) {
             return true;
         }
         string cleanIp = t.Split(new char[] { ':', ' ', '-' }, StringSplitOptions.RemoveEmptyEntries)[0];
@@ -2351,7 +2358,7 @@ public static class PorygonCyberDefenseEngine {
     public static void RegisterCandidateBlockIp(string remoteEndpoint, string processLabel, string reason, float score, bool allowAutoBlockInHybrid) {
         if (string.IsNullOrEmpty(remoteEndpoint)) return;
         string cleanIp = remoteEndpoint.Split(':')[0].Trim();
-        if (IsSafeWhitelistedIp(cleanIp)) return;
+        if (IsSafeWhitelistedIp(cleanIp) || IsTailscaleEndpointOrProcess(remoteEndpoint, processLabel)) return;
 
         lock (SyncLock) {
             if (score >= LastCandidateBlockScore || string.IsNullOrEmpty(LastCandidateBlockIp)) {
