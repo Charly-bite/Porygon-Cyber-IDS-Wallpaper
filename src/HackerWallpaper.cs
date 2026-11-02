@@ -164,6 +164,13 @@ public static class GpuGl {
     public const uint GL_MODELVIEW        = 0x1700;
     public const uint GL_RENDERER         = 0x1F01;
     public const uint GL_VERSION          = 0x1F02;
+    public const uint GL_FRAMEBUFFER      = 0x8D40;
+    public const uint GL_RENDERBUFFER     = 0x8D41;
+    public const uint GL_RGB8             = 0x8051;
+    public const uint GL_DEPTH_COMPONENT24 = 0x81A6;
+    public const uint GL_COLOR_ATTACHMENT0 = 0x8CE0;
+    public const uint GL_DEPTH_ATTACHMENT  = 0x8D00;
+    public const uint GL_FRAMEBUFFER_COMPLETE = 0x8CD5;
 
     public const uint FONT_LIST_RAIN_FG   = 1000;
     public const uint FONT_LIST_RAIN_BG   = 1300;
@@ -203,6 +210,21 @@ public static class GpuGl {
         public uint dwDamageMask;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    public struct BITMAPINFOHEADER {
+        public uint biSize;
+        public int biWidth;
+        public int biHeight;
+        public ushort biPlanes;
+        public ushort biBitCount;
+        public uint biCompression;
+        public uint biSizeImage;
+        public int biXPelsPerMeter;
+        public int biYPelsPerMeter;
+        public uint biClrUsed;
+        public uint biClrImportant;
+    }
+
     [DllImport("user32.dll")] public static extern IntPtr GetDC(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
     [DllImport("gdi32.dll")]  public static extern int ChoosePixelFormat(IntPtr hdc, ref PIXELFORMATDESCRIPTOR ppfd);
@@ -210,11 +232,50 @@ public static class GpuGl {
     [DllImport("gdi32.dll")]  public static extern bool SwapBuffers(IntPtr hdc);
     [DllImport("gdi32.dll")]  public static extern IntPtr SelectObject(IntPtr hdc, IntPtr hgdiobj);
     [DllImport("gdi32.dll")]  public static extern bool DeleteObject(IntPtr hObject);
+    [DllImport("gdi32.dll")]  public static extern int SetDIBitsToDevice(IntPtr hdc, int xDest, int yDest, uint w, uint h, int xSrc, int ySrc, uint startScan, uint cLines, IntPtr lpvBits, ref BITMAPINFOHEADER lpbmi, uint colorUse);
 
     [DllImport("opengl32.dll")] public static extern IntPtr wglCreateContext(IntPtr hdc);
     [DllImport("opengl32.dll")] public static extern bool wglMakeCurrent(IntPtr hdc, IntPtr hglrc);
     [DllImport("opengl32.dll")] public static extern bool wglDeleteContext(IntPtr hglrc);
+    [DllImport("opengl32.dll", CharSet = CharSet.Ansi)] public static extern IntPtr wglGetProcAddress(string name);
     [DllImport("opengl32.dll", CharSet = CharSet.Ansi)] public static extern bool wglUseFontBitmapsA(IntPtr hdc, uint first, uint count, uint listBase);
+
+    public delegate void glGenFramebuffersDelegate(int n, out uint framebuffers);
+    public delegate void glBindFramebufferDelegate(uint target, uint framebuffer);
+    public delegate void glDeleteFramebuffersDelegate(int n, ref uint framebuffers);
+    public delegate uint glCheckFramebufferStatusDelegate(uint target);
+    public delegate void glGenRenderbuffersDelegate(int n, out uint renderbuffers);
+    public delegate void glBindRenderbufferDelegate(uint target, uint renderbuffer);
+    public delegate void glRenderbufferStorageDelegate(uint target, uint internalformat, int width, int height);
+    public delegate void glFramebufferRenderbufferDelegate(uint target, uint attachment, uint renderbuffertarget, uint renderbuffer);
+    public delegate void glDeleteRenderbuffersDelegate(int n, ref uint renderbuffers);
+
+    public static glGenFramebuffersDelegate glGenFramebuffers;
+    public static glBindFramebufferDelegate glBindFramebuffer;
+    public static glDeleteFramebuffersDelegate glDeleteFramebuffers;
+    public static glCheckFramebufferStatusDelegate glCheckFramebufferStatus;
+    public static glGenRenderbuffersDelegate glGenRenderbuffers;
+    public static glBindRenderbufferDelegate glBindRenderbuffer;
+    public static glRenderbufferStorageDelegate glRenderbufferStorage;
+    public static glFramebufferRenderbufferDelegate glFramebufferRenderbuffer;
+    public static glDeleteRenderbuffersDelegate glDeleteRenderbuffers;
+
+    public static bool InitFboExtensions() {
+        try {
+            glGenFramebuffers = (glGenFramebuffersDelegate)Marshal.GetDelegateForFunctionPointer(wglGetProcAddress("glGenFramebuffers"), typeof(glGenFramebuffersDelegate));
+            glBindFramebuffer = (glBindFramebufferDelegate)Marshal.GetDelegateForFunctionPointer(wglGetProcAddress("glBindFramebuffer"), typeof(glBindFramebufferDelegate));
+            glDeleteFramebuffers = (glDeleteFramebuffersDelegate)Marshal.GetDelegateForFunctionPointer(wglGetProcAddress("glDeleteFramebuffers"), typeof(glDeleteFramebuffersDelegate));
+            glCheckFramebufferStatus = (glCheckFramebufferStatusDelegate)Marshal.GetDelegateForFunctionPointer(wglGetProcAddress("glCheckFramebufferStatus"), typeof(glCheckFramebufferStatusDelegate));
+            glGenRenderbuffers = (glGenRenderbuffersDelegate)Marshal.GetDelegateForFunctionPointer(wglGetProcAddress("glGenRenderbuffers"), typeof(glGenRenderbuffersDelegate));
+            glBindRenderbuffer = (glBindRenderbufferDelegate)Marshal.GetDelegateForFunctionPointer(wglGetProcAddress("glBindRenderbuffer"), typeof(glBindRenderbufferDelegate));
+            glRenderbufferStorage = (glRenderbufferStorageDelegate)Marshal.GetDelegateForFunctionPointer(wglGetProcAddress("glRenderbufferStorage"), typeof(glRenderbufferStorageDelegate));
+            glFramebufferRenderbuffer = (glFramebufferRenderbufferDelegate)Marshal.GetDelegateForFunctionPointer(wglGetProcAddress("glFramebufferRenderbuffer"), typeof(glFramebufferRenderbufferDelegate));
+            glDeleteRenderbuffers = (glDeleteRenderbuffersDelegate)Marshal.GetDelegateForFunctionPointer(wglGetProcAddress("glDeleteRenderbuffers"), typeof(glDeleteRenderbuffersDelegate));
+            return glGenFramebuffers != null && glBindFramebuffer != null && glRenderbufferStorage != null;
+        } catch {
+            return false;
+        }
+    }
     [DllImport("opengl32.dll")] public static extern IntPtr glGetString(uint name);
     [DllImport("opengl32.dll")] public static extern void glViewport(int x, int y, int width, int height);
     [DllImport("opengl32.dll")] public static extern void glMatrixMode(uint mode);
@@ -741,7 +802,7 @@ public static class PorygonCyberDefenseEngine {
             string uProf = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             string pUser = Path.Combine(uProf, "Porygon-Cyber-IDS-Wallpaper", "logs", "siem_security_events.jsonl");
             if (Directory.Exists(Path.GetDirectoryName(pUser))) return pUser;
-            return @"C:\Users\Admin\Porygon-Cyber-IDS-Wallpaper\logs\siem_security_events.jsonl";
+            return Path.Combine(uProf, @"Desktop\03-ciberseguridad-soc\porygon-cyber-ids-wallpaper\logs\siem_security_events.jsonl");
         }
     }
 
@@ -1287,7 +1348,7 @@ public static class PorygonCyberDefenseEngine {
     }
 
     public static AvScanReport InspectFileArtifact(string filePath, bool isManualScan) {
-        if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) return null;
+        if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath) || filePath.IndexOf("__PSScriptPolicyTest_", StringComparison.OrdinalIgnoreCase) >= 0) return null;
         try {
             FileInfo fi = new FileInfo(filePath);
             if (fi.Length <= 0 || fi.Length > 150 * 1024 * 1024) return null; // Skip empty or >150MB ISOs
@@ -1796,6 +1857,18 @@ public static class PorygonCyberDefenseEngine {
             tgt.IndexOf(".googleusercontent.com", StringComparison.OrdinalIgnoreCase) >= 0 ||
             tgt.IndexOf(".cloud.google.com", StringComparison.OrdinalIgnoreCase) >= 0 ||
             tgt.IndexOf(".microsoft.com", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            tgt.IndexOf(".trafficmanager.net", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            tgt.IndexOf(".azurefd.net", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            tgt.IndexOf(".ax-msedge.net", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            tgt.IndexOf(".tm-azurefd.net", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            tgt.IndexOf("104.21.", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            tgt.IndexOf("159.203.148.75", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            tgt.IndexOf("ntfy.sh", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            tgt.IndexOf(".xiaomi.com", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            tgt.IndexOf(".mi.com", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            sum.IndexOf("159.203.148.75", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            sum.IndexOf("waos-proxy-6002.cmd", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            sum.IndexOf("codync-windows-x64.exe", StringComparison.OrdinalIgnoreCase) >= 0 ||
             act.Contains("WHITELIST") || act.Contains("CLEAN_SIGNED");
 
         if (act == "FW_UNBLOCKED" || act == "RESTORED") {
@@ -2178,6 +2251,8 @@ public static class PorygonCyberDefenseEngine {
                s.Contains("dory_rustdesk_autostart") ||
                s.Contains("start_all_services_hidden.vbs") ||
                s.Contains("start_all_services_after_boot.ps1") ||
+               s.Contains("waos-proxy-6002.cmd") ||
+               s.Contains("codync-windows-x64.exe") ||
                s.Contains(".cache\\puppeteer\\chrome") ||
                s.Contains("01-quimica-boss") ||
                s.Contains("02-plataformas-activas") ||
@@ -2217,7 +2292,7 @@ public static class PorygonCyberDefenseEngine {
         "209.250.254.15", "209.250.", "49.12.46.241", "49.12.", "162.254.", "173.194.",
         "44.193.88.212", "32.192.156.181", "20.0.1.9", "170.150.161.242",
         "43.175.230.151", "43.175.230.138",
-        "157.240.", "172.253.", "142.250.", "142.251."
+        "157.240.", "172.253.", "142.250.", "142.251.", "104.21.", "159.203.148.75"
     };
 
     public static bool IsRustDeskPort(int port) {
@@ -2232,7 +2307,7 @@ public static class PorygonCyberDefenseEngine {
         }
         string t = (targetOrIp ?? "").Trim().ToLowerInvariant();
         if (string.IsNullOrEmpty(t)) return false;
-        if (t.Contains(".tailscale.com") || t.Contains(".tailscale.io") || t.Contains(".ts.net") ||
+        if (t.Contains(".tailscale.com") || t.Contains(".tailscale.io") || t.Contains(".ts.net") || t.Contains("ntfy.sh") || t.Contains("159.203.148.75") ||
             t.Contains(".rustdesk.com") || t.Contains("dory_rustdesk_autostart") || t.Contains("start_all_services_hidden.vbs") ||
             t.EndsWith(":41641") || t.EndsWith(":21114") || t.EndsWith(":21115") ||
             t.EndsWith(":21116") || t.EndsWith(":21117") || t.EndsWith(":21118") || t.EndsWith(":21119") || t.EndsWith(":22") || t.EndsWith(":2222") || t.EndsWith(":2218") || t.EndsWith(":2223")) {
@@ -2788,7 +2863,11 @@ public static class PorygonCyberDefenseEngine {
                                 curDomain.EndsWith(".tailscale.io") || curDomain.EndsWith(".ts.net") ||
                                 curDomain.EndsWith(".rustdesk.com") ||
                                 curDomain.EndsWith(".github.com") || curDomain.EndsWith(".githubusercontent.com") ||
-                                curDomain.EndsWith(".akamai.net") || curDomain.EndsWith(".akamaiedge.net");
+                                curDomain.EndsWith(".akamai.net") || curDomain.EndsWith(".akamaiedge.net") ||
+                                curDomain.EndsWith(".trafficmanager.net") || curDomain.EndsWith(".azurefd.net") ||
+                                curDomain.EndsWith(".ax-msedge.net") || curDomain.EndsWith(".tm-azurefd.net") ||
+                                curDomain.EndsWith("ntfy.sh") ||
+                                curDomain.EndsWith(".xiaomi.com") || curDomain.EndsWith(".mi.com");
 
                             if (ent >= 3.85f && curDomain.Length > 18 && !isTrustedCorpDomain) {
                                 risk = 84;
@@ -4509,7 +4588,7 @@ while ($true) {
                     return;
                 }
 
-                if (method == "GET" && cleanPath == "/api/state") {
+                if (method == "GET" && (cleanPath == "/api/state" || cleanPath == "/api/soc/unified")) {
                     Dictionary<string, object> st = BuildWebStateDictionary();
                     string json = ser.Serialize(st);
                     WriteHttpResponse(ns, "200 OK", "application/json; charset=utf-8", Encoding.UTF8.GetBytes(json));
@@ -9930,8 +10009,11 @@ public class HackerWallpaperForm : Form {
         }
     }
 
+    private Rectangle hudMonRect;
+
     private void RefreshMonitorLayout() {
         QueryPhysicalMonitors(out monitorRects, out monitorNames, out primaryMonRect, out screenW, out screenH);
+        hudMonRect = primaryMonRect;
         if (porygon != null) {
             porygon.RefreshMonitors(screenW, screenH);
         }
@@ -10227,10 +10309,10 @@ public class HackerWallpaperForm : Form {
         PorygonCyberDefenseEngine.Initialize();
 
         renderTimer = new System.Windows.Forms.Timer();
-        renderTimer.Interval = 33; // Hardware GPU Batched target (~30 FPS active desktop / 20 FPS eco mode to minimize cross-GPU DWM copy)
+        renderTimer.Interval = 25;
         renderTimer.Tick += OnRenderTick;
 
-        telemetryTimer = new System.Threading.Timer(UpdateRealTelemetry, null, 250, 2200);
+        telemetryTimer = new System.Threading.Timer(UpdateRealTelemetry, null, 250, 1000);
         // Single-Core Low-Overhead CPU Evolutionary Training Timer (runs every 800ms in background)
         cpuEvoTimer = new System.Threading.Timer(OnCpuEvolutionTimerTick, null, 800, 800);
 
@@ -11309,6 +11391,14 @@ public class HackerWallpaperForm : Form {
         base.OnShown(e);
         AttachToDesktopWorkerW();
         EnsureHotkeysRegistered();
+        try {
+            if (Process.GetProcessesByName("TrayAutoHide").Length == 0) {
+                string tahExe = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "TrayAutoHide.exe");
+                if (File.Exists(tahExe)) {
+                    Process.Start(new ProcessStartInfo(tahExe) { WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory, UseShellExecute = true });
+                }
+            }
+        } catch { }
         renderTimer.Start();
         if (Config.GamerMode) {
             UpdateGamerSuspensionState(true);
@@ -11589,6 +11679,8 @@ public class HackerWallpaperForm : Form {
         }
         try {
             GpuGl.wglMakeCurrent(glHdc, glContext);
+            EnsureGlFramebuffer();
+            GpuGl.glBindFramebuffer(GpuGl.GL_FRAMEBUFFER, glFboId);
             GpuGl.CanvasW = screenW;
             GpuGl.CanvasH = screenH;
             GpuGl.glViewport(0, 0, screenW, screenH);
@@ -11611,8 +11703,8 @@ public class HackerWallpaperForm : Form {
 
             int hudW = 584;
             int hudH = 228;
-            int hudX = primaryMonRect.Right - hudW - 22;
-            int hudY = primaryMonRect.Top + 22;
+            int hudX = hudMonRect.Right - hudW - 22;
+            int hudY = hudMonRect.Top + 22;
 
             if (Config.ShowTelemetry) {
                 if (hudTelemetryBmp == null) {
@@ -11628,16 +11720,15 @@ public class HackerWallpaperForm : Form {
                 hudTelemetryDirty = false;
             }
 
-            // Render static dark wallpaper + Gamer Mode HUD to both buffers, then detach OpenGL context completely (0.0% GPU!)
-            for (int pass = 0; pass < 2; pass++) {
-                GpuGl.DrawTexturedQuad(bgTexId, 0, 0, screenW, screenH);
-                if (Config.ShowTelemetry && hudTelemetryTexId != 0) {
-                    GpuGl.DrawTexturedQuad(hudTelemetryTexId, hudX - 2, hudY - 2, hudW + 4, hudH + 4);
-                }
-                GpuGl.SwapBuffers(glHdc);
+            GpuGl.DrawTexturedQuad(bgTexId, 0, 0, screenW, screenH);
+            if (Config.ShowTelemetry && hudTelemetryTexId != 0) {
+                GpuGl.DrawTexturedQuad(hudTelemetryTexId, hudX - 2, hudY - 2, hudW + 4, hudH + 4);
             }
+            ReadGlMonitorsFromFbo(true);
             GpuGl.wglMakeCurrent(IntPtr.Zero, IntPtr.Zero);
             gamerStaticFrameRendered = true;
+            this.Invalidate();
+            this.Update();
         } catch { }
     }
 
@@ -11812,16 +11903,25 @@ public class HackerWallpaperForm : Form {
         // causing cursor stutter/input lag whenever a multi-monitor OpenGL frame is rendering.
     }
 
+    private Rectangle GetHudMonitorForPoint(Point clientPt) {
+        for (int i = 0; i < monitorRects.Count; i++) {
+            Rectangle m = monitorRects[i];
+            if (m.Width >= 1000 && m.Contains(clientPt)) return m;
+        }
+        return hudMonRect;
+    }
+
     private Rectangle GetCurrentBrain3DRect() {
+        Rectangle mon = GetHudMonitorForPoint(this.PointToClient(Control.MousePosition));
         if (brain3DFullscreen && !brain3DCollapsed) {
-            return new Rectangle(primaryMonRect.Left + 108, primaryMonRect.Top + 18, primaryMonRect.Width - 126, primaryMonRect.Height - 68);
+            return new Rectangle(mon.Left + 108, mon.Top + 18, mon.Width - 126, mon.Height - 68);
         }
         int bw = 584;
-        int bx = primaryMonRect.Right - bw - 22;
+        int bx = mon.Right - bw - 22;
         int brainW = 356;
         int brainH = brain3DCollapsed ? 32 : 246;
         int brainX = bx - brainW - 14;
-        int brainY = primaryMonRect.Bottom - brainH - 54;
+        int brainY = mon.Bottom - brainH - 54;
         return new Rectangle(brainX, brainY, brainW, brainH);
     }
 
@@ -11907,10 +12007,114 @@ public class HackerWallpaperForm : Form {
     private uint hudRadarTexId = 0;
     private int hudRadarTexW = 0, hudRadarTexH = 0;
 
-    private void InitOpenGL() {
-        if (glEnabled) return;
+    private Form glHostForm = null;
+    private uint glFboId = 0;
+    private uint glRboColorId = 0;
+    private uint glRboDepthId = 0;
+    private int glFboW = 0, glFboH = 0;
+    private IntPtr[] glMonBufs = null;
+    private int[] glMonBufSizes = null;
+    private bool glFrameReady = false;
+
+    private void EnsureGlFramebuffer() {
+        if (screenW <= 0 || screenH <= 0) return;
+        if (glFboId == 0 || glFboW != screenW || glFboH != screenH) {
+            if (glFboId != 0) GpuGl.glDeleteFramebuffers(1, ref glFboId);
+            if (glRboColorId != 0) GpuGl.glDeleteRenderbuffers(1, ref glRboColorId);
+            if (glRboDepthId != 0) GpuGl.glDeleteRenderbuffers(1, ref glRboDepthId);
+
+            GpuGl.glGenFramebuffers(1, out glFboId);
+            GpuGl.glBindFramebuffer(GpuGl.GL_FRAMEBUFFER, glFboId);
+
+            GpuGl.glGenRenderbuffers(1, out glRboColorId);
+            GpuGl.glBindRenderbuffer(GpuGl.GL_RENDERBUFFER, glRboColorId);
+            GpuGl.glRenderbufferStorage(GpuGl.GL_RENDERBUFFER, 0x8058, screenW, screenH); // GL_RGBA8 for zero-conversion GL_BGRA_EXT glReadPixels
+            GpuGl.glFramebufferRenderbuffer(GpuGl.GL_FRAMEBUFFER, GpuGl.GL_COLOR_ATTACHMENT0, GpuGl.GL_RENDERBUFFER, glRboColorId);
+
+            GpuGl.glGenRenderbuffers(1, out glRboDepthId);
+            GpuGl.glBindRenderbuffer(GpuGl.GL_RENDERBUFFER, glRboDepthId);
+            GpuGl.glRenderbufferStorage(GpuGl.GL_RENDERBUFFER, GpuGl.GL_DEPTH_COMPONENT24, screenW, screenH);
+            GpuGl.glFramebufferRenderbuffer(GpuGl.GL_FRAMEBUFFER, GpuGl.GL_DEPTH_ATTACHMENT, GpuGl.GL_RENDERBUFFER, glRboDepthId);
+
+            glFboW = screenW;
+            glFboH = screenH;
+            glFrameReady = false;
+        }
+
+        int mCount = (monitorRects != null) ? monitorRects.Count : 0;
+        if (mCount <= 0) return;
+        if (glMonBufs == null || glMonBufs.Length != mCount) {
+            if (glMonBufs != null) {
+                for (int i = 0; i < glMonBufs.Length; i++) {
+                    if (glMonBufs[i] != IntPtr.Zero) Marshal.FreeHGlobal(glMonBufs[i]);
+                }
+            }
+            glMonBufs = new IntPtr[mCount];
+            glMonBufSizes = new int[mCount];
+        }
+        for (int i = 0; i < mCount; i++) {
+            int needed = Math.Max(4, monitorRects[i].Width * monitorRects[i].Height * 4);
+            if (glMonBufs[i] == IntPtr.Zero || glMonBufSizes[i] != needed) {
+                if (glMonBufs[i] != IntPtr.Zero) Marshal.FreeHGlobal(glMonBufs[i]);
+                glMonBufs[i] = Marshal.AllocHGlobal(needed);
+                glMonBufSizes[i] = needed;
+            }
+        }
+    }
+
+    private void ReadGlMonitorsFromFbo(bool forceAll) {
+        if (glMonBufs == null || monitorRects == null) return;
+        for (int mIdx = 0; mIdx < monitorRects.Count && mIdx < glMonBufs.Length; mIdx++) {
+            if (!forceAll && glFrameReady && frameCount > 5 && IsMonitorOccluded(mIdx)) continue;
+            Rectangle m = monitorRects[mIdx];
+            if (!forceAll && glFrameReady && frameCount > 5 && visibleMonitorCount > 1 && m != hudMonRect && ((frameCount + mIdx) & 1) != 0) continue;
+            IntPtr buf = glMonBufs[mIdx];
+            if (buf == IntPtr.Zero) continue;
+            GlBrain.glReadPixels(m.Left, screenH - m.Bottom, m.Width, m.Height, GpuGl.GL_BGRA_EXT, GpuGl.GL_UNSIGNED_BYTE, buf);
+        }
+        glFrameReady = true;
+    }
+
+    private void BlitOpenGLBuffersToHdc(Graphics g) {
+        if (glMonBufs == null || !glFrameReady || monitorRects == null) return;
+        IntPtr hdc = g.GetHdc();
         try {
-            glHdc = GpuGl.GetDC(this.Handle);
+            for (int mIdx = 0; mIdx < monitorRects.Count && mIdx < glMonBufs.Length; mIdx++) {
+                if (!isGamerSuspended && frameCount > 5 && IsMonitorOccluded(mIdx)) continue;
+                IntPtr buf = glMonBufs[mIdx];
+                if (buf == IntPtr.Zero) continue;
+                Rectangle m = monitorRects[mIdx];
+                GpuGl.BITMAPINFOHEADER bmi = new GpuGl.BITMAPINFOHEADER();
+                bmi.biSize = 40;
+                bmi.biWidth = m.Width;
+                bmi.biHeight = m.Height;
+                bmi.biPlanes = 1;
+                bmi.biBitCount = 32;
+                GpuGl.SetDIBitsToDevice(hdc, m.Left, m.Top, (uint)m.Width, (uint)m.Height, 0, 0, 0, (uint)m.Height, buf, ref bmi, 0);
+            }
+        } finally {
+            g.ReleaseHdc(hdc);
+        }
+    }
+
+    private void InitOpenGL() {
+        if (glEnabled) {
+            try {
+                GpuGl.wglMakeCurrent(glHdc, glContext);
+                EnsureGlFramebuffer();
+            } catch { }
+            return;
+        }
+        try {
+            if (glHostForm == null || glHostForm.IsDisposed) {
+                glHostForm = new Form {
+                    FormBorderStyle = FormBorderStyle.None,
+                    ShowInTaskbar = false,
+                    StartPosition = FormStartPosition.Manual,
+                    Bounds = new Rectangle(-32000, -32000, 16, 16)
+                };
+            }
+            glHdc = GpuGl.GetDC(glHostForm.Handle);
             if (glHdc == IntPtr.Zero) return;
 
             GpuGl.PIXELFORMATDESCRIPTOR pfd = new GpuGl.PIXELFORMATDESCRIPTOR();
@@ -11930,6 +12134,7 @@ public class HackerWallpaperForm : Form {
             glContext = GpuGl.wglCreateContext(glHdc);
             if (glContext == IntPtr.Zero) return;
             if (!GpuGl.wglMakeCurrent(glHdc, glContext)) return;
+            if (!GpuGl.InitFboExtensions()) return;
 
             IntPtr pRenderer = GpuGl.glGetString(GpuGl.GL_RENDERER);
             if (pRenderer != IntPtr.Zero) {
@@ -11940,6 +12145,7 @@ public class HackerWallpaperForm : Form {
             }
 
             GpuGl.InitFontAtlas();
+            EnsureGlFramebuffer();
 
             GpuGl.CanvasW = screenW;
             GpuGl.CanvasH = screenH;
@@ -11976,22 +12182,19 @@ public class HackerWallpaperForm : Form {
         }
 
         int exStyle = GetWindowLong(this.Handle, GWL_EXSTYLE);
-        exStyle = (exStyle & ~WS_EX_LAYERED) | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
+        exStyle |= WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
         SetWindowLong(this.Handle, GWL_EXSTYLE, exStyle);
+        SetLayeredWindowAttributes(this.Handle, 0, 255, LWA_ALPHA);
 
         // Progman spans the entire VirtualScreen (all 5 monitors), so (0, 0, screenW, screenH) covers all monitors!
         if (cachedDefView != IntPtr.Zero) {
             SetWindowPos(this.Handle, cachedDefView, 0, 0, screenW, screenH, SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_FRAMECHANGED);
+            SetWindowPos(this.Handle, cachedDefView, 0, 0, 0, 0, 0x0001 | 0x0002 | SWP_NOACTIVATE);
         } else {
             SetWindowPos(this.Handle, new IntPtr(1), 0, 0, screenW, screenH, SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_FRAMECHANGED);
         }
 
         InitOpenGL();
-        // Windows 11 24H2 Progman requires WS_EX_LAYERED + LWA_ALPHA on child windows to composite them;
-        // applying it AFTER InitOpenGL preserves hardware OpenGL on AMD Radeon RX 9060 XT while making Progman display it!
-        exStyle |= WS_EX_LAYERED;
-        SetWindowLong(this.Handle, GWL_EXSTYLE, exStyle);
-        SetLayeredWindowAttributes(this.Handle, 0, 255, LWA_ALPHA);
     }
 
     private void EnsureBehindDesktopIcons() {
@@ -12032,9 +12235,7 @@ public class HackerWallpaperForm : Form {
             }
         }
 
-        // On Windows 11 24H2, resizing a WS_EX_LAYERED OpenGL child or attaching before SHELLDLL_DefView finishes logon
-        // requires stripping WS_EX_LAYERED, resizing with SWP_FRAMECHANGED, and re-applying WS_EX_LAYERED + LWA_ALPHA.
-        if (layoutChanged || defViewJustAppeared || frameCount == 160 || frameCount == 320) {
+        if (layoutChanged || defViewJustAppeared) {
             AttachToDesktopWorkerW();
             return;
         }
@@ -12043,12 +12244,11 @@ public class HackerWallpaperForm : Form {
         if ((exStyle & WS_EX_LAYERED) == 0) {
             SetWindowLong(this.Handle, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
             SetLayeredWindowAttributes(this.Handle, 0, 255, LWA_ALPHA);
-            if (cachedDefView != IntPtr.Zero) {
-                SetWindowPos(this.Handle, cachedDefView, 0, 0, screenW, screenH, SWP_NOACTIVATE | SWP_SHOWWINDOW);
-            }
-        } else if ((frameCount <= 5 || frameCount == 25 || frameCount == 60) && cachedDefView != IntPtr.Zero) {
+        } else if (frameCount <= 5 || frameCount == 25 || frameCount == 60) {
             SetLayeredWindowAttributes(this.Handle, 0, 255, LWA_ALPHA);
-            SetWindowPos(this.Handle, cachedDefView, 0, 0, screenW, screenH, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        }
+        if (cachedDefView != IntPtr.Zero) {
+            SetWindowPos(this.Handle, cachedDefView, 0, 0, 0, 0, 0x0001 | 0x0002 | SWP_NOACTIVATE);
         }
     }
 
@@ -12137,7 +12337,39 @@ public class HackerWallpaperForm : Form {
                 }
             }
 
-            primaryMonitorOccluded = primOcc && brainSnapshotPath == null && DateTime.Now > brainForceVisibleUntil;
+            // Dynamic HUD Target Monitor: prefer the non-occluded monitor (Width >= 1000) containing the cursor,
+            // or primaryMonRect when visible, or the largest visible monitor (Width >= 1000, including M4 1080x1920) when M1 is covered!
+            Rectangle bestHudMon = primaryMonRect;
+            Point curClientPt = this.PointToClient(Control.MousePosition);
+            bool foundCursorMon = false;
+            for (int i = 0; i < monCount && i < monitorOccluded.Length; i++) {
+                if (!monitorOccluded[i] && monitorRects[i].Width >= 1000 && monitorRects[i].Contains(curClientPt)) {
+                    bestHudMon = monitorRects[i];
+                    foundCursorMon = true;
+                    break;
+                }
+            }
+            if (!foundCursorMon && primOcc && brainSnapshotPath == null && DateTime.Now > brainForceVisibleUntil) {
+                int bestArea = 0;
+                for (int i = 0; i < monCount && i < monitorOccluded.Length; i++) {
+                    if (!monitorOccluded[i] && monitorRects[i].Width >= 1000) {
+                        int area = monitorRects[i].Width * monitorRects[i].Height;
+                        if (area > bestArea) {
+                            bestArea = area;
+                            bestHudMon = monitorRects[i];
+                        }
+                    }
+                }
+            }
+            if (bestHudMon != hudMonRect) {
+                hudMonRect = bestHudMon;
+                hudTelemetryDirty = true;
+                hudRadarDirty = true;
+                hudConnectomeDirty = true;
+                hudBrain3DDirty = true;
+            }
+
+            primaryMonitorOccluded = (primOcc && hudMonRect == primaryMonRect) && brainSnapshotPath == null && DateTime.Now > brainForceVisibleUntil;
             anyMonitorOccluded = anyOcc;
             visibleMonitorCount = visCount;
             lastOcclusionDebug = dbg.ToString();
@@ -12154,6 +12386,14 @@ public class HackerWallpaperForm : Form {
         GetClassName(hWnd, occlusionClassSb, occlusionClassSb.Capacity);
         string cls = occlusionClassSb.ToString();
         return cls == "SysListView32" || cls == "SHELLDLL_DefView" || cls == "Progman" || cls == "WorkerW";
+    }
+
+    private bool IsTranslucentTerminalHandle(IntPtr hWnd) {
+        if (hWnd == IntPtr.Zero || terminalOpacityPct >= 95) return false;
+        occlusionClassSb.Length = 0;
+        GetClassName(hWnd, occlusionClassSb, occlusionClassSb.Capacity);
+        string cls = occlusionClassSb.ToString();
+        return cls == "CASCADIA_HOSTING_WINDOW_CLASS" || cls == "ConsoleWindowClass";
     }
 
     private void HandleBrain3DClick(Point pt, Rectangle brainRect) {
@@ -12247,6 +12487,7 @@ public class HackerWallpaperForm : Form {
             if (!IsDesktopWindowHandle(hHit)) return;
 
             Point pt = this.PointToClient(screenPt);
+            Rectangle clickMon = GetHudMonitorForPoint(pt);
 
             // Priority 1: If 3D Brain is in Fullscreen Mode on Primary Monitor, handle clicks on it first!
             if (!isGamerSuspended && Config.ShowPorygon && porygon != null && brain3DFullscreen && !brain3DCollapsed) {
@@ -12259,13 +12500,13 @@ public class HackerWallpaperForm : Form {
 
             int hudW = 584;
             int hudH = telemetryCollapsed ? 32 : 228;
-            int hudX = primaryMonRect.Right - hudW - 22;
-            int hudY = primaryMonRect.Top + 22;
+            int hudX = clickMon.Right - hudW - 22;
+            int hudY = clickMon.Top + 22;
 
             int radPanelW = 246;
             int radPanelH = radarCollapsed ? 32 : 228;
             int radPanelX = hudX - radPanelW - 14;
-            int radPanelY = primaryMonRect.Top + 22;
+            int radPanelY = clickMon.Top + 22;
 
             if (!isGamerSuspended && Config.ShowRadar) {
                 Rectangle radRect = new Rectangle(radPanelX, radPanelY, radPanelW, radPanelH);
@@ -12310,7 +12551,7 @@ public class HackerWallpaperForm : Form {
 
                 for (int mIdx = 0; mIdx < monitorRects.Count; mIdx++) {
                     Rectangle m = monitorRects[mIdx];
-                    if (m == primaryMonRect) continue;
+                    if (m == clickMon || m.Width >= 1000) continue;
                     int pw = Math.Min(520, m.Width - 180);
                     if (pw < 260) continue;
                     int ph = secondaryBarsCollapsed ? 24 : 46;
@@ -12328,8 +12569,8 @@ public class HackerWallpaperForm : Form {
             if (!isGamerSuspended && Config.ShowPorygon && porygon != null) {
                 int bw = 584;
                 int bh = connectomeCollapsed ? 32 : (78 + porygon.Agents.Count * 21);
-                int bx = primaryMonRect.Right - bw - 22;
-                int by = primaryMonRect.Bottom - bh - 54;
+                int bx = clickMon.Right - bw - 22;
+                int by = clickMon.Bottom - bh - 54;
                 Rectangle connRect = new Rectangle(bx, by, bw, bh);
                 if (connRect.Contains(pt)) {
                     int relX = pt.X - bx;
@@ -12616,15 +12857,15 @@ public class HackerWallpaperForm : Form {
         // Smart Adaptive Multi-Monitor GPU Governor (Target <= 10% GPU):
         // - Per-monitor occlusion culling (0 GPU/CPU work on any monitor covered by a maximized window)
         // - Complete 0.0% GPU pause when all 5 monitors are covered (AutoPauseMaximized) or external app > 90% GPU
-        // - 25 FPS (38ms) when Desktop is focused, 11-12 FPS (85-95ms) Eco Mode when working in an app or approaching 10% GPU budget
+        // - ~32-35 FPS (25ms) when Desktop or Translucent Terminal is focused, ~30 FPS (33ms) when working in another app
         if (frameCount <= 2 || frameCount % 10 == 0) {
             cachedWindowMaximized = UpdateMonitorOcclusionState();
             IntPtr fgWnd = GetForegroundWindow();
-            bool deskFocused = IsDesktopWindowHandle(fgWnd) || brain3DDragging || hudBrain3DDirty;
-            gpuEcoMode = !deskFocused || primaryMonitorOccluded || anyMonitorOccluded || gpuOverBudgetEco;
+            bool deskFocused = IsDesktopWindowHandle(fgWnd) || IsTranslucentTerminalHandle(fgWnd) || brain3DDragging || hudBrain3DDirty;
+            gpuEcoMode = gpuOverBudgetEco;
             int targetInterval = (Config.AutoPauseMaximized && cachedWindowMaximized)
                 ? 100
-                : (gpuOverBudgetEco ? 95 : (deskFocused ? 38 : (primaryMonitorOccluded ? 95 : 80)));
+                : (gpuOverBudgetEco ? 65 : (deskFocused ? 25 : 33));
             if (renderTimer.Interval != targetInterval) {
                 renderTimer.Interval = targetInterval;
             }
@@ -12652,7 +12893,7 @@ public class HackerWallpaperForm : Form {
         }
 
         // Frame-rate independent animation step
-        float dtScale = gpuEcoMode ? 1.05f : 0.78f;
+        float dtScale = gpuEcoMode ? 0.85f : 0.52f;
         sceneTimePhase += 0.032f * dtScale;
 
         if (Config.RainSpeed > 0) {
@@ -14272,6 +14513,8 @@ public class HackerWallpaperForm : Form {
         if (isGamerSuspended || !glEnabled || glHdc == IntPtr.Zero || glContext == IntPtr.Zero) return;
         frameSw.Restart();
         GpuGl.wglMakeCurrent(glHdc, glContext);
+        EnsureGlFramebuffer();
+        GpuGl.glBindFramebuffer(GpuGl.GL_FRAMEBUFFER, glFboId);
 
         GpuGl.CanvasW = screenW;
         GpuGl.CanvasH = screenH;
@@ -14288,12 +14531,20 @@ public class HackerWallpaperForm : Form {
         // Disable expensive fragment-level GL_LINE_SMOOTH during background grid & rain loops to cut GPU fill-rate by ~40%
         GpuGl.glDisable(GpuGl.GL_LINE_SMOOTH);
 
-        // 0. Draw 5-Monitor Matte Forest Obsidian Background from VRAM Texture on AMD Radeon RX 9060 XT (0% CPU copy)
+        // 0. Draw 5-Monitor Matte Forest Obsidian Background from VRAM Texture only on non-occluded monitors!
         if (bgTexDirty || bgTexId == 0) {
             GpuGl.UploadBitmapToTexture(bgBitmap, ref bgTexId, ref bgTexW, ref bgTexH);
             bgTexDirty = false;
         }
-        GpuGl.DrawTexturedQuad(bgTexId, 0, 0, screenW, screenH);
+        for (int mIdx = 0; mIdx < monitorRects.Count; mIdx++) {
+            if (IsMonitorOccluded(mIdx)) continue;
+            Rectangle m = monitorRects[mIdx];
+            float u0 = (float)m.Left / screenW;
+            float v0 = (float)m.Top / screenH;
+            float u1 = (float)m.Right / screenW;
+            float v1 = (float)m.Bottom / screenH;
+            GpuGl.DrawTexturedQuadUV(bgTexId, m.Left, m.Top, m.Width, m.Height, u0, v0, u1, v1);
+        }
 
         Color c1, c2, c3, headCol;
         GetThemeColors(out c1, out c2, out c3, out headCol);
@@ -14307,13 +14558,13 @@ public class HackerWallpaperForm : Form {
 
         int hudW = 584;
         int hudH = 228;
-        int hudX = primaryMonRect.Right - hudW - 22;
-        int hudY = primaryMonRect.Top + 22;
+        int hudX = hudMonRect.Right - hudW - 22;
+        int hudY = hudMonRect.Top + 22;
 
         int radPanelW = 246;
         int radPanelH = 228;
         int radPanelX = hudX - radPanelW - 14;
-        int radPanelY = primaryMonRect.Top + 22;
+        int radPanelY = hudMonRect.Top + 22;
 
         // 1. Multi-Plane 3D Parallax Vertical Log Rain across visible monitors (Single-Batch VRAM Font Atlas)
         if (Config.RainSpeed > 0) {
@@ -14389,7 +14640,7 @@ public class HackerWallpaperForm : Form {
             GpuGl.EndFontAtlasBatch();
         }
 
-        int hudCycle = gpuEcoMode ? 28 : 14;
+        int hudCycle = gpuEcoMode ? 12 : 6;
         int hudSlot = frameCount % hudCycle;
 
         // 2. Render Autonomous 3D Porygons on Hardware GPU + Collapsible Evolutionary Swarm HUD + 3D FlyWire Brain Card
@@ -14400,13 +14651,11 @@ public class HackerWallpaperForm : Form {
                 int bw = 584;
                 int fullBh = 78 + porygon.Agents.Count * 21;
                 int drawBh = connectomeCollapsed ? 32 : fullBh;
-                int bx = primaryMonRect.Right - bw - 22;
-                int by = primaryMonRect.Bottom - drawBh - 54;
                 if (hudConnectomeBmp == null || hudConnectomeBmp.Width != bw + 4 || hudConnectomeBmp.Height != fullBh + 4) {
                     if (hudConnectomeBmp != null) hudConnectomeBmp.Dispose();
                     hudConnectomeBmp = new Bitmap(bw + 4, fullBh + 4, PixelFormat.Format32bppArgb);
                 }
-                if (hudSlot == 8 || hudConnectomeTexId == 0 || hudConnectomeDirty) {
+                if (hudSlot == 2 || hudConnectomeTexId == 0 || hudConnectomeDirty) {
                     using (Graphics gHud = Graphics.FromImage(hudConnectomeBmp)) {
                         gHud.Clear(Color.FromArgb(0, 0, 0, 0));
                         gHud.SmoothingMode = SmoothingMode.AntiAlias;
@@ -14416,18 +14665,11 @@ public class HackerWallpaperForm : Form {
                     GpuGl.UploadBitmapToTexture(hudConnectomeBmp, ref hudConnectomeTexId, ref hudConnectomeTexW, ref hudConnectomeTexH);
                     hudConnectomeDirty = false;
                 }
-                GpuGl.DrawTexturedQuad(hudConnectomeTexId, bx - 2, by - 2, bw + 4, fullBh + 4);
 
-                // Render 3D FlyWire Drosophila Brain in Card Mode (Staggered on slot 0 to avoid GDI+ frame spikes!)
-                if (!brain3DFullscreen || brain3DCollapsed) {
-                    int brainW = 356;
-                    int fullBrainH = 246;
-                    int drawBrainH = brain3DCollapsed ? 32 : fullBrainH;
-                    int brainX = bx - brainW - 14;
-                    int brainY = primaryMonRect.Bottom - drawBrainH - 54;
-                    if (IsFlyWireReady() && !brain3DCollapsed) {
-                        DrawFlyWirePanelGL(new Rectangle(brainX, brainY, brainW, fullBrainH), false, c1, c2, c3);
-                    } else {
+                int brainW = 356;
+                int fullBrainH = 246;
+                int drawBrainH = brain3DCollapsed ? 32 : fullBrainH;
+                if (!IsFlyWireReady() || brain3DCollapsed) {
                     if (hudBrain3DBmp == null || hudBrain3DBmp.Width != brainW + 4 || hudBrain3DBmp.Height != fullBrainH + 4) {
                         if (hudBrain3DBmp != null) hudBrain3DBmp.Dispose();
                         hudBrain3DBmp = new Bitmap(brainW + 4, fullBrainH + 4, PixelFormat.Format32bppArgb);
@@ -14442,7 +14684,27 @@ public class HackerWallpaperForm : Form {
                         GpuGl.UploadBitmapToTexture(hudBrain3DBmp, ref hudBrain3DTexId, ref hudBrain3DTexW, ref hudBrain3DTexH);
                         hudBrain3DDirty = false;
                     }
-                    GpuGl.DrawTexturedQuad(hudBrain3DTexId, brainX - 2, brainY - 2, brainW + 4, fullBrainH + 4);
+                }
+
+                bool firstBrain = true;
+                for (int mIdx = 0; mIdx < monitorRects.Count; mIdx++) {
+                    if (IsMonitorOccluded(mIdx) && monitorRects[mIdx] != hudMonRect) continue;
+                    Rectangle m = monitorRects[mIdx];
+                    if (m.Width < 1000 && m != hudMonRect) continue;
+                    int bx = m.Right - bw - 22;
+                    int by = m.Bottom - drawBh - 54;
+                    GpuGl.DrawTexturedQuad(hudConnectomeTexId, bx - 2, by - 2, bw + 4, fullBh + 4);
+
+                    if (!brain3DFullscreen || brain3DCollapsed) {
+                        int brainX = bx - brainW - 14;
+                        int brainY = m.Bottom - drawBrainH - 54;
+                        if (IsFlyWireReady() && !brain3DCollapsed) {
+                            bool rebuildVbo = firstBrain && ((frameCount & 1) == 0 || hudBrain3DDirty);
+                            DrawFlyWirePanelGL(new Rectangle(brainX, brainY, brainW, fullBrainH), false, c1, c2, c3, rebuildVbo);
+                            firstBrain = false;
+                        } else {
+                            GpuGl.DrawTexturedQuad(hudBrain3DTexId, brainX - 2, brainY - 2, brainW + 4, fullBrainH + 4);
+                        }
                     }
                 }
             }
@@ -14465,7 +14727,15 @@ public class HackerWallpaperForm : Form {
                 GpuGl.UploadBitmapToTexture(hudRadarBmp, ref hudRadarTexId, ref hudRadarTexW, ref hudRadarTexH);
                 hudRadarDirty = false;
             }
-            GpuGl.DrawTexturedQuad(hudRadarTexId, radPanelX - 22, radPanelY - 2, rBmpW, rBmpH);
+            for (int mIdx = 0; mIdx < monitorRects.Count; mIdx++) {
+                if (IsMonitorOccluded(mIdx) && monitorRects[mIdx] != hudMonRect) continue;
+                Rectangle m = monitorRects[mIdx];
+                if (m.Width < 1000 && m != hudMonRect) continue;
+                int mHudX = m.Right - hudW - 22;
+                int mRadX = mHudX - radPanelW - 14;
+                int mRadY = m.Top + 22;
+                GpuGl.DrawTexturedQuad(hudRadarTexId, mRadX - 22, mRadY - 2, rBmpW, rBmpH);
+            }
         }
 
         // 4. Render Collapsible System Telemetry HUD (Cached in VRAM Texture) & Secondary Bars
@@ -14486,7 +14756,14 @@ public class HackerWallpaperForm : Form {
                     lastHudTheme = Config.ThemeIndex;
                     hudTelemetryDirty = false;
                 }
-                GpuGl.DrawTexturedQuad(hudTelemetryTexId, hudX - 2, hudY - 2, hudW + 4, hudH + 4);
+                for (int mIdx = 0; mIdx < monitorRects.Count; mIdx++) {
+                    if (IsMonitorOccluded(mIdx) && monitorRects[mIdx] != hudMonRect) continue;
+                    Rectangle m = monitorRects[mIdx];
+                    if (m.Width < 1000 && m != hudMonRect) continue;
+                    int mHudX = m.Right - hudW - 22;
+                    int mHudY = m.Top + 22;
+                    GpuGl.DrawTexturedQuad(hudTelemetryTexId, mHudX - 2, mHudY - 2, hudW + 4, hudH + 4);
+                }
             }
             DrawSecondaryMonitorTelemetryBarsOpenGL(c1, c2, c3);
         }
@@ -14515,17 +14792,25 @@ public class HackerWallpaperForm : Form {
             GpuGl.DrawTexturedQuad(hudBrain3DFullTexId, fullRect.X - 2, fullRect.Y - 2, fullRect.Width + 4, fullRect.Height + 4);
         }
 
+        ReadGlMonitorsFromFbo(false);
         frameSw.Stop();
         float elapsedMs = (float)frameSw.Elapsed.TotalMilliseconds;
         gpuFrameMs = gpuFrameMs * 0.82f + elapsedMs * 0.18f;
-        GpuGl.SwapBuffers(glHdc);
+        for (int mIdx = 0; mIdx < monitorRects.Count; mIdx++) {
+            if (IsMonitorOccluded(mIdx)) continue;
+            Rectangle m = monitorRects[mIdx];
+            if (frameCount > 5 && visibleMonitorCount > 1 && m != hudMonRect && ((frameCount + mIdx) & 1) != 0) continue;
+            this.Invalidate(m);
+        }
+        this.Update();
     }
 
     protected override void OnPaintBackground(PaintEventArgs e) { }
 
     protected override void OnPaint(PaintEventArgs e) {
         if (glEnabled) {
-            if (!isGamerSuspended) RenderOpenGLFrame();
+            if (!glFrameReady && !isGamerSuspended) RenderOpenGLFrame();
+            BlitOpenGLBuffersToHdc(e.Graphics);
             return;
         }
         Graphics g = e.Graphics;
@@ -14538,13 +14823,13 @@ public class HackerWallpaperForm : Form {
 
         int hudW = 584;
         int hudH = 228;
-        int hudX = primaryMonRect.Right - hudW - 22;
-        int hudY = primaryMonRect.Top + 22;
+        int hudX = hudMonRect.Right - hudW - 22;
+        int hudY = hudMonRect.Top + 22;
 
         int radPanelW = 246;
         int radPanelH = 228;
         int radPanelX = hudX - radPanelW - 14;
-        int radPanelY = primaryMonRect.Top + 22;
+        int radPanelY = hudMonRect.Top + 22;
 
         // 1. Falling Hacker Code Rain across all 5 monitors (100% Strictly Vertical Log Streams + 7 Semantic Log Colors!)
         if (Config.RainSpeed > 0) {
@@ -14584,11 +14869,11 @@ public class HackerWallpaperForm : Form {
             porygon.Render(g, Config.PorygonScale, c1, c2, fontHudSmall);
             DrawFlyBrainConnectomeHUD(g, c1, c2, c3);
             int bw = 584;
-            int bx = primaryMonRect.Right - bw - 22;
+            int bx = hudMonRect.Right - bw - 22;
             int brainW = 356;
             int drawBrainH = brain3DCollapsed ? 32 : 246;
             int brainX = bx - brainW - 14;
-            int brainY = primaryMonRect.Bottom - drawBrainH - 54;
+            int brainY = hudMonRect.Bottom - drawBrainH - 54;
             DrawFlyBrain3DCardAt(g, brainX, brainY, brainW, drawBrainH, c1, c2, c3);
         }
 
@@ -14618,7 +14903,7 @@ public class HackerWallpaperForm : Form {
         for (int mIdx = 0; mIdx < monitorRects.Count; mIdx++) {
             if (IsMonitorOccluded(mIdx)) continue;
             Rectangle m = monitorRects[mIdx];
-            if (m == primaryMonRect) continue;
+            if (m == hudMonRect || m.Width >= 1000) continue;
 
             int pw = Math.Min(520, m.Width - 180);
             if (pw < 260) continue;
@@ -14663,7 +14948,7 @@ public class HackerWallpaperForm : Form {
         using (SolidBrush txtB = new SolidBrush(Color.FromArgb(230, 226, 232, 240))) {
             for (int mIdx = 0; mIdx < monitorRects.Count; mIdx++) {
                 Rectangle m = monitorRects[mIdx];
-                if (m == primaryMonRect) continue;
+                if (m == hudMonRect) continue;
 
                 int pw = Math.Min(520, m.Width - 180);
                 if (pw < 260) continue;
@@ -14997,8 +15282,8 @@ public class HackerWallpaperForm : Form {
     private void DrawFlyBrainConnectomeHUD(Graphics g, Color c1, Color c2, Color c3) {
         int bw = 584;
         int bh = connectomeCollapsed ? 32 : (78 + porygon.Agents.Count * 21);
-        int bx = primaryMonRect.Right - bw - 22;
-        int by = primaryMonRect.Bottom - bh - 54;
+        int bx = hudMonRect.Right - bw - 22;
+        int by = hudMonRect.Bottom - bh - 54;
         DrawFlyBrainConnectomeHUDAt(g, bx, by, bw, bh, c1, c2, c3);
     }
 
@@ -15309,7 +15594,7 @@ public class HackerWallpaperForm : Form {
         GlText(s, x, y, fg);
     }
 
-    private void DrawFlyWirePanelGL(Rectangle r, bool isFull, Color c1, Color c2, Color c3) {
+    private void DrawFlyWirePanelGL(Rectangle r, bool isFull, Color c1, Color c2, Color c3, bool rebuildVbo = true) {
         int px = r.X, py = r.Y, pw = r.Width, ph = r.Height;
 
 
@@ -15355,8 +15640,8 @@ public class HackerWallpaperForm : Form {
         flyWire.SetupCamera(area, screenW, screenH, yaw, pitch, brain3DZoom, brain3DPanX, brain3DPanY);
         brain3DLastArea = area;
         bool hoverIn = brainHoverClientX >= area.X && brainHoverClientX < area.Right && brainHoverClientY >= area.Y && brainHoverClientY < area.Bottom && !brain3DDragging;
-        flyWire.Pick(brainHoverClientX, brainHoverClientY, hoverIn);
-        flyWire.RenderGL(area, screenW, screenH, isFull, gpuEcoMode, true);
+        if (rebuildVbo || hoverIn) flyWire.Pick(brainHoverClientX, brainHoverClientY, hoverIn);
+        flyWire.RenderGL(area, screenW, screenH, isFull, gpuEcoMode, rebuildVbo);
 
         // Anatomical neuropil labels anchored to real JRC2018U neuropil centroids
         if (isFull) {
